@@ -1,0 +1,36 @@
+[project]
+name = "dhbw-scraper"
+version = "0.2.0"
+description = "Incremental dual-site scraper + extractor for DHBW content (RAG stage 1)"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "trafilatura>=2.1.0",
+    # PyMuPDF4LLM converts PDF bytes -> Markdown. It is lightweight (no torch,
+    # no ML models) and pulls in pymupdf transitively.
+    "pymupdf4llm>=0.0.17",
+]
+
+[project.scripts]
+dhbw-scraper = "dhbw_scraper.cli:main"
+
+[project.optional-dependencies]
+# pre-commit drives the git hooks (lint/format on commit, Conventional-Commit
+# validation, tests on push) declared in .pre-commit-config.yaml.
+dev = ["pytest>=9.0", "maturin>=1.7,<2", "pre-commit>=4"]
+
+[build-system]
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
+
+[tool.maturin]
+# Mixed Rust/Python layout: the pure-Python package tree stays authoritative
+# under src/, and the compiled Rust crate is injected as the single submodule
+# dhbw_scraper._native.
+python-source = "src"
+module-name = "dhbw_scraper._native"
+manifest-path = "rust/Cargo.toml"
+features = ["pyo3/extension-module"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

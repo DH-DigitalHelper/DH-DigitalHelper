@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# uv
+# (uv.lock IS committed — do not ignore it)
+
+# Rust
+rust/target/
+# (Cargo.lock IS committed — this is a binary/app, not a library)
+
+# Nix / direnv
+.direnv/
+result
+result-*
+
+# Raw downloads: re-fetchable and can get large (PDFs). Gitignored by default.
+# To distribute the raw source alongside the processed data, delete the next line.
+data/raw/
+
+# SQLite database + WAL/SHM sidecar files (all state lives here; not committed).
+data/*.sqlite3
+data/*.sqlite3-wal
+data/*.sqlite3-shm
+
+# Agent/tooling scratch: SDD task briefs, reports, and review diffs.
+.superpowers/
+
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# Editor / IDE
+.idea/
+.vscode/
+*.swp

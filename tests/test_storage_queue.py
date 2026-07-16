@@ -1,0 +1,320 @@
+import sqlite3
+
+import pytest
+
+from dhbw_scraper import storage as st
+
+NOW = "2026-07-14T00:00:00"
+
+
+def test_retry_locked_retries_then_succeeds():
+    calls = {"n": 0}
+
+    def fn():
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise sqlite3.OperationalError("database is locked")
+        return "ok"
+
+    slept = []
+    assert st._retry_locked(fn, retries=5, sleep=slept.append) == "ok"
+    assert calls["n"] == 3
+    assert len(slept) == 2  # one sleep before each of the two retries
+
+
+def test_retry_locked_reraises_locked_after_exhausting_retries():
+    def fn():
+        raise sqlite3.OperationalError("database is locked")
+
+    with pytest.raises(sqlite3.OperationalError):
+        st._retry_locked(fn, retries=2, sleep=lambda _s: None)
+
+
+def test_retry_locked_does_not_retry_non_lock_errors():
+    calls = {"n": 0}
+
+    def fn():
+        calls["n"] += 1
+        raise sqlite3.OperationalError("no such table: queue")
+
+    with pytest.raises(sqlite3.OperationalError):
+        st._retry_locked(fn, retries=5, sleep=lambda _s: None)
+    assert calls["n"] == 1  # a real error surfaces immediately, no retry
+
+
+def test_requeue_url_flips_in_progress_back_to_pending():
+    conn = mem()
+    st.enqueue(conn, "https://x/a", "x", 0, None, NOW)
+    st.claim_pending_url(conn, "x")  # -> in_progress
+    st.requeue_url(conn, "https://x/a")
+    assert st.get_url_state(conn, "https://x/a")["work_state"] == "pending"
+    assert st.count_pending(conn) == 1
+
+
+def test_reset_site_deletes_only_target_site_and_keeps_raw_docs():
+    conn = mem()
+    # Two sites' rows across all four site-scoped tables (a.de is the target).
+    st.enqueue(conn, "https://a/1", "a.de", 0, None, NOW)
+    st.enqueue(conn, "https://a/2", "a.de", 1, None, NOW)
+    st.enqueue(conn, "https://b/1", "b.de", 0, None, NOW)
+    st.record_fetch(
+        conn, "run1", "https://a/1", "https://a/1", "a.de",
+        200, "text/html", "h1", 10, "html", "new", None, NOW,
+    )
+    st.record_fetch(
+        conn, "run1", "https://b/1", "https://b/1", "b.de",
+        200, "text/html", "h2", 10, "html", "new", None, NOW,
+    )
+    # Distinct texts so the corpus dedup doesn't collapse the two docs.
+    st.upsert_document(
+        conn, "https://a/1", "a.de", "html", "h1",
+        {"title": "A", "text": "alpha " * 60, "markdown": "mdA", "word_count": 60}, NOW,
+    )
+    st.upsert_document(
+        conn, "https://b/1", "b.de", "html", "h2",
+        {"title": "B", "text": "beta " * 60, "markdown": "mdB", "word_count": 60}, NOW,
+    )
+    with st.write_txn(conn):
+        conn.execute(
+            "INSERT INTO links (src_url, dst_url, site, in_domain, depth, first_seen_at)"
+            " VALUES (?,?,?,?,?,?)",
+            ("https://a/1", "https://a/2", "a.de", 1, 1, NOW),
+        )
+        conn.execute(
+            "INSERT INTO links (src_url, dst_url, site, in_domain, depth, first_seen_at)"
+            " VALUES (?,?,?,?,?,?)",
+            ("https://b/1", "https://b/2", "b.de", 1, 1, NOW),
+        )
+    # Content-addressed raw cache (NOT site-scoped) must survive the reset.
+    st.upsert_raw_doc(conn, "h1", "html", "/raw/h1.html", 10, NOW)
+
+    counts = st.reset_site(conn, "a.de")
+
+    assert counts == {"queue": 2, "crawl_log": 1, "documents": 1, "links": 1}
+    scalar = lambda q: conn.execute(q).fetchone()[0]
+    assert scalar("SELECT COUNT(*) FROM queue WHERE site='a.de'") == 0
+    assert scalar("SELECT COUNT(*) FROM queue WHERE site='b.de'") == 1
+    assert scalar("SELECT COUNT(*) FROM crawl_log WHERE site='b.de'") == 1
+    assert scalar("SELECT COUNT(*) FROM documents WHERE site='b.de'") == 1
+    assert scalar("SELECT COUNT(*) FROM links WHERE site='b.de'") == 1
+    assert scalar("SELECT COUNT(*) FROM raw_docs") == 1  # cache preserved
+
+
+def mem():
+    conn = st.connect(":memory:")
+    st.init_db(conn)
+    return conn
+
+
+def test_connect_uses_wal_friendly_pragmas():
+    # synchronous=NORMAL (1) drops the per-commit fsync under WAL, so the
+    # single write lock is released far sooner; a raised busy_timeout lets a
+    # busy moment wait rather than raising "database is locked".
+    conn = st.connect(":memory:")
+    assert conn.execute("PRAGMA synchronous").fetchone()[0] == 1
+    assert conn.execute("PRAGMA busy_timeout").fetchone()[0] >= 15000
+
+
+def test_enqueue_dedupes_by_url():
+    conn = mem()
+    assert st.enqueue(conn, "https://x/a", "x", 0, None, NOW) is True
+    assert st.enqueue(conn, "https://x/a", "x", 1, "https://x/b", NOW) is False
+    assert st.count_pending(conn) == 1
+
+
+def test_enqueue_many_inserts_all_and_dedupes():
+    # One executemany + one commit replaces the per-link enqueue()/commit storm
+    # that a link-rich page used to fire at the shared write lock.
+    conn = mem()
+    st.enqueue(conn, "https://x/a", "x", 0, None, NOW)  # pre-existing
+    rows = [
+        ("https://x/a", "x", 1, "https://x/seed", NOW),  # dup of existing
+        ("https://x/b", "x", 1, "https://x/seed", NOW),
+        ("https://x/c", "x", 1, "https://x/seed", NOW),
+        ("https://x/b", "x", 2, "https://x/seed", NOW),  # dup within batch
+    ]
+    added = st.enqueue_many(conn, rows)
+    assert added == 2  # only b and c are new
+    assert st.count_pending(conn) == 3  # a, b, c
+    assert st.get_url_state(conn, "https://x/a")["depth"] == 0  # IGNORE keeps original
+
+
+def test_write_txn_commits_all_writes_together():
+    conn = mem()
+    with st.write_txn(conn):
+        st._enqueue_many(conn, [("https://x/a", "x", 0, None, NOW)])
+        st._enqueue_many(conn, [("https://x/b", "x", 0, None, NOW)])
+    assert st.count_pending(conn) == 2
+
+
+def test_write_txn_rolls_back_all_writes_on_error():
+    conn = mem()
+    st.enqueue(conn, "https://x/a", "x", 0, None, NOW)
+    with pytest.raises(RuntimeError):
+        with st.write_txn(conn):
+            st._enqueue_many(conn, [("https://x/b", "x", 1, "https://x/a", NOW)])
+            raise RuntimeError("boom")
+    # Nothing from the aborted transaction persisted.
+    assert st.get_url_state(conn, "https://x/b") is None
+    assert st.count_pending(conn) == 1
+
+
+def test_claim_uses_composite_index_not_a_scan():
+    # claim_pending_url holds the IMMEDIATE write lock while running its SELECT;
+    # a covering index over (site, work_state, depth, url) turns that into a
+    # single index seek instead of a scan, so the lock is held for microseconds.
+    conn = mem()
+    plan = conn.execute(
+        "EXPLAIN QUERY PLAN SELECT * FROM queue "
+        "WHERE site = ? AND work_state = 'pending' ORDER BY depth, url LIMIT 1",
+        ("x",),
+    ).fetchall()
+    detail = " ".join(row["detail"] for row in plan)
+    assert "idx_queue_claim" in detail
+    assert "SCAN" not in detail
+
+
+def test_claim_pending_is_atomic_and_marks_in_progress():
+    conn = mem()
+    st.enqueue(conn, "https://x/a", "x", 0, None, NOW)
+    row = st.claim_pending_url(conn, "x")
+    assert row["url"] == "https://x/a"
+    # No longer claimable.
+    assert st.claim_pending_url(conn, "x") is None
+    assert st.count_pending(conn) == 0
+
+
+def test_reset_in_progress_requeues():
+    conn = mem()
+    st.enqueue(conn, "https://x/a", "x", 0, None, NOW)
+    st.claim_pending_url(conn, "x")
+    assert st.reset_in_progress(conn) == 1
+    assert st.count_pending(conn) == 1
+
+
+def test_set_sitemap_lastmod_requeues_on_advance():
+    conn = mem()
+    st.enqueue(conn, "https://x/a", "x", 0, None, NOW)
+    st.claim_pending_url(conn, "x")  # now in_progress
+    # Same lastmod -> stays put (still not pending).
+    st.set_sitemap_lastmod(conn, "https://x/a", "x", "2026-01-01", NOW)
+    assert st.count_pending(conn) == 0
+    # Advanced lastmod -> back to pending.
+    st.set_sitemap_lastmod(conn, "https://x/a", "x", "2026-02-01", NOW)
+    assert st.count_pending(conn) == 1
+    # Brand-new url via sitemap -> inserted pending.
+    st.set_sitemap_lastmod(conn, "https://x/b", "x", "2026-02-01", NOW)
+    assert st.count_pending(conn) == 2
+
+
+def test_set_sitemap_lastmod_none_does_not_erase_baseline():
+    conn = mem()
+    st.enqueue(conn, "https://x/a", "x", 0, None, NOW)
+    st.claim_pending_url(conn, "x")  # now in_progress
+    # First baseline recorded, no requeue.
+    st.set_sitemap_lastmod(conn, "https://x/a", "x", "2026-01-01", NOW)
+    assert st.count_pending(conn) == 0
+    row = st.get_url_state(conn, "https://x/a")
+    assert row["sitemap_lastmod"] == "2026-01-01"
+    # A later sitemap fetch with no <lastmod> must NOT clobber the baseline.
+    st.set_sitemap_lastmod(conn, "https://x/a", "x", None, NOW)
+    assert st.count_pending(conn) == 0
+    row = st.get_url_state(conn, "https://x/a")
+    assert row["sitemap_lastmod"] == "2026-01-01"
+    # A genuine later advance must still be detected.
+    st.set_sitemap_lastmod(conn, "https://x/a", "x", "2026-03-01", NOW)
+    assert st.count_pending(conn) == 1
+    row = st.get_url_state(conn, "https://x/a")
+    assert row["sitemap_lastmod"] == "2026-03-01"
+
+
+def test_requeue_present_urls_flips_only_present_done_rows():
+    conn = mem()
+    for u in ("a", "b", "c", "d"):
+        st.enqueue(conn, f"https://x/{u}", "x", 0, None, NOW)
+    # a: done + present -> should flip to pending
+    st.mark_url_checked(conn, "https://x/a", 200, None, None, "h1", False, True, NOW)
+    # b: claimed -> in_progress, must be left alone
+    claimed = st.claim_pending_url(conn, "x")
+    assert claimed["url"] == "https://x/b"
+    # c: error, must be left alone
+    st.mark_url_error(conn, "https://x/c", 500, NOW)
+    # d: done + removed (present=0), must be left alone
+    st.mark_url_removed(conn, "https://x/d", NOW)
+
+    count = st.requeue_present_urls(conn, "x")
+
+    assert count == 1
+    assert st.get_url_state(conn, "https://x/a")["work_state"] == "pending"
+    assert st.get_url_state(conn, "https://x/b")["work_state"] == "in_progress"
+    assert st.get_url_state(conn, "https://x/c")["work_state"] == "error"
+    assert st.get_url_state(conn, "https://x/d")["work_state"] == "done"
+
+
+def test_requeue_present_urls_only_affects_matching_site():
+    conn = mem()
+    st.enqueue(conn, "https://x/a", "x", 0, None, NOW)
+    st.enqueue(conn, "https://y/a", "y", 0, None, NOW)
+    st.mark_url_checked(conn, "https://x/a", 200, None, None, "h1", False, True, NOW)
+    st.mark_url_checked(conn, "https://y/a", 200, None, None, "h1", False, True, NOW)
+
+    count = st.requeue_present_urls(conn, "x")
+
+    assert count == 1
+    assert st.get_url_state(conn, "https://x/a")["work_state"] == "pending"
+    assert st.get_url_state(conn, "https://y/a")["work_state"] == "done"
+
+
+def test_set_sitemap_lastmod_lower_value_does_not_overwrite_or_requeue():
+    conn = mem()
+    st.enqueue(conn, "https://x/a", "x", 0, None, NOW)
+    st.claim_pending_url(conn, "x")  # now in_progress
+    st.set_sitemap_lastmod(conn, "https://x/a", "x", "2026-01-01", NOW)
+    assert st.count_pending(conn) == 0
+    # A lower/stale incoming value must not overwrite the stored baseline.
+    st.set_sitemap_lastmod(conn, "https://x/a", "x", "2025-06-01", NOW)
+    assert st.count_pending(conn) == 0
+    row = st.get_url_state(conn, "https://x/a")
+    assert row["sitemap_lastmod"] == "2026-01-01"
+
+
+def test_claim_only_new_skips_already_fetched_pending_rows():
+    conn = mem()
+    # `a` was fetched before and flipped back to pending (last_checked_at set).
+    st.enqueue(conn, "https://x/a", "x", 0, None, NOW)
+    conn.execute(
+        "UPDATE queue SET last_checked_at = ? WHERE url = ?", (NOW, "https://x/a")
+    )
+    conn.commit()
+    # `b` has never been fetched.
+    st.enqueue(conn, "https://x/b", "x", 0, None, NOW)
+
+    # only_new skips `a`, claims `b`.
+    row = st.claim_pending_url(conn, "x", only_new=True)
+    assert row["url"] == "https://x/b"
+    # Nothing else new to claim; `a` is left untouched.
+    assert st.claim_pending_url(conn, "x", only_new=True) is None
+    assert st.get_url_state(conn, "https://x/a")["work_state"] == "pending"
+
+
+def test_claim_default_still_claims_already_fetched_pending_rows():
+    conn = mem()
+    st.enqueue(conn, "https://x/a", "x", 0, None, NOW)
+    conn.execute(
+        "UPDATE queue SET last_checked_at = ? WHERE url = ?", (NOW, "https://x/a")
+    )
+    conn.commit()
+    assert st.claim_pending_url(conn, "x")["url"] == "https://x/a"
+
+
+def test_count_pending_only_new_counts_never_fetched():
+    conn = mem()
+    st.enqueue(conn, "https://x/a", "x", 0, None, NOW)
+    conn.execute(
+        "UPDATE queue SET last_checked_at = ? WHERE url = ?", (NOW, "https://x/a")
+    )
+    conn.commit()
+    st.enqueue(conn, "https://x/b", "x", 0, None, NOW)
+    assert st.count_pending(conn) == 2
+    assert st.count_pending(conn, only_new=True) == 1
+    assert st.count_pending(conn, "x", only_new=True) == 1

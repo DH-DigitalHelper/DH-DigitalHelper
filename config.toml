@@ -1,0 +1,84 @@
+[[sites]]
+name = "heidenheim"
+seed_url = "https://www.heidenheim.dhbw.de/startseite"
+allowed_domain = "heidenheim.dhbw.de"
+
+[[sites]]
+name = "dhbw"
+seed_url = "https://www.dhbw.de"
+allowed_domain = "www.dhbw.de"
+
+# The nine DHBW campus locations + the Center for Advanced Studies (CAS). Each is
+# crawled strictly in-domain (links leaving allowed_domain are recorded in the
+# links table, never followed). allowed_domain omits the "www." prefix on purpose:
+# in_domain() matches both the bare host and any subdomain of it (rust/src/links.rs),
+# so "mannheim.dhbw.de" covers www.mannheim.dhbw.de too. NOTE the three campuses that do NOT follow the
+# <location>.dhbw.de pattern: Stuttgart, Lörrach, and Villingen-Schwenningen.
+
+[[sites]]
+name = "mannheim"
+seed_url = "https://www.mannheim.dhbw.de"
+allowed_domain = "mannheim.dhbw.de"
+
+[[sites]]
+name = "stuttgart"
+seed_url = "https://www.dhbw-stuttgart.de"
+allowed_domain = "dhbw-stuttgart.de"
+
+[[sites]]
+name = "karlsruhe"
+seed_url = "https://www.karlsruhe.dhbw.de"
+allowed_domain = "karlsruhe.dhbw.de"
+
+[[sites]]
+name = "mosbach"
+seed_url = "https://www.mosbach.dhbw.de"
+allowed_domain = "mosbach.dhbw.de"
+
+[[sites]]
+name = "heilbronn"
+seed_url = "https://www.heilbronn.dhbw.de"
+allowed_domain = "heilbronn.dhbw.de"
+
+[[sites]]
+name = "ravensburg"
+seed_url = "https://www.ravensburg.dhbw.de/startseite"
+allowed_domain = "ravensburg.dhbw.de"
+
+[[sites]]
+name = "loerrach"
+seed_url = "https://dhbw-loerrach.de/home"
+allowed_domain = "dhbw-loerrach.de"
+
+[[sites]]
+name = "villingen_schwenningen"
+seed_url = "https://www.dhbw-vs.de"
+allowed_domain = "dhbw-vs.de"
+
+[[sites]]
+name = "cas"
+seed_url = "https://www.cas.dhbw.de"
+allowed_domain = "cas.dhbw.de"
+
+[crawl]
+use_sitemap = true
+max_pages = 0                              # per-site page budget (0 = unlimited)
+# Per-hostname page budget (0 = unlimited). Backstop against a single runaway
+# subdomain monopolizing a site's crawl, the way the buchen.dhbw-vs.de booking
+# trap once did. No legitimate campus host approaches this; a spider trap blows
+# straight past it and gets cut off. Known traps (buchen.*, moodle.*, ...) are
+# denylisted outright in rust/src/links.rs; this only catches unknown ones.
+max_pages_per_host = 50000
+request_delay_seconds = 0.0
+respect_robots = false
+workers_per_host = 16
+recheck = "changed-only"                       # "all" | "changed-only" | "new-only"
+user_agent = ""
+
+[extract]
+workers = 12
+min_words = 50
+
+[storage]
+db_file = "data/scraper.sqlite3"
+raw_dir = "data/raw"

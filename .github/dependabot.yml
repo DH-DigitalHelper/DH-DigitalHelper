@@ -1,0 +1,46 @@
+version: 2
+
+# NOTE: commit-message.prefix is required here — this repo enforces Conventional
+# Commits (see .github/workflows/ci.yml's commit-lint job), and Dependabot's default
+# "Bump X from A to B" subjects would fail it. `include: "scope"` yields subjects like
+# "chore(deps): bump …" / "ci(deps): bump …", which pass. Minor+patch bumps are grouped
+# into one PR per ecosystem to cut noise; majors still open individually.
+updates:
+  # ── Python dependencies (pyproject.toml + uv.lock) ──
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      python-minor-patch:
+        update-types: ["minor", "patch"]
+
+  # ── Rust crate (rust/Cargo.toml + rust/Cargo.lock) ──
+  - package-ecosystem: "cargo"
+    directory: "/rust"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      cargo-minor-patch:
+        update-types: ["minor", "patch"]
+
+  # ── GitHub Actions used in .github/workflows ──
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    groups:
+      actions-minor-patch:
+        update-types: ["minor", "patch"]

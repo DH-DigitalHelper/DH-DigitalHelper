@@ -1,0 +1,359 @@
+{
+  "communities": {
+    "0": [
+      "argumentparser",
+      "connection",
+      "dhbw_scraper_cli",
+      "dhbw_scraper_cli_add_crawl_args",
+      "dhbw_scraper_cli_build_parser",
+      "dhbw_scraper_cli_cmd_backfill_links",
+      "dhbw_scraper_cli_cmd_dedup",
+      "dhbw_scraper_cli_cmd_delta",
+      "dhbw_scraper_cli_cmd_extract",
+      "dhbw_scraper_cli_cmd_extract_html",
+      "dhbw_scraper_cli_cmd_extract_pdf",
+      "dhbw_scraper_cli_cmd_fetch",
+      "dhbw_scraper_cli_cmd_report",
+      "dhbw_scraper_cli_cmd_reset_site",
+      "dhbw_scraper_cli_cmd_run",
+      "dhbw_scraper_cli_cmd_stats",
+      "dhbw_scraper_cli_load",
+      "dhbw_scraper_cli_main",
+      "dhbw_scraper_cli_rationale_1",
+      "dhbw_scraper_cli_rationale_129",
+      "dhbw_scraper_cli_rationale_182",
+      "dhbw_scraper_cli_rationale_24",
+      "dhbw_scraper_cli_resolve_sites",
+      "dhbw_scraper_cli_run_extract",
+      "dhbw_scraper_cli_run_id",
+      "dhbw_scraper_main",
+      "dhbw_scraper_storage_connect",
+      "dhbw_scraper_storage_init_db",
+      "dhbw_scraper_storage_migrate",
+      "dhbw_scraper_storage_rationale_205"
+    ],
+    "1": [
+      "dhbw_scraper_extract",
+      "dhbw_scraper_extract_extract_one",
+      "dhbw_scraper_extract_handle_result",
+      "dhbw_scraper_extract_materialize",
+      "dhbw_scraper_extract_now",
+      "dhbw_scraper_extract_rationale_1",
+      "dhbw_scraper_extract_rationale_121",
+      "dhbw_scraper_extract_rationale_160",
+      "dhbw_scraper_extract_rationale_188",
+      "dhbw_scraper_extract_rationale_278",
+      "dhbw_scraper_extract_rationale_57",
+      "dhbw_scraper_extract_record_error",
+      "dhbw_scraper_extract_run_extract",
+      "dhbw_scraper_extract_run_pooled",
+      "dhbw_scraper_extract_run_threaded",
+      "dhbw_scraper_quality",
+      "dhbw_scraper_quality_dominant_boilerplate",
+      "dhbw_scraper_quality_evaluate",
+      "dhbw_scraper_quality_link_word_ratio",
+      "dhbw_scraper_quality_rationale_1",
+      "dhbw_scraper_quality_rationale_76",
+      "dhbw_scraper_quality_rationale_89",
+      "dhbw_scraper_storage_count_pending_raw",
+      "dhbw_scraper_storage_rationale_602",
+      "dhbw_scraper_storage_reset_extract_in_progress",
+      "dhbw_scraper_storage_urls_for_content"
+    ],
+    "2": [
+      "dhbw_scraper_crawl",
+      "dhbw_scraper_crawl_backfill_links",
+      "dhbw_scraper_crawl_native_config",
+      "dhbw_scraper_crawl_rationale_1",
+      "dhbw_scraper_crawl_rationale_20",
+      "dhbw_scraper_crawl_rationale_59",
+      "dhbw_scraper_crawl_rationale_72",
+      "dhbw_scraper_crawl_run_fetch",
+      "dhbw_scraper_init",
+      "dhbw_scraper_progress",
+      "dhbw_scraper_progress_fmt",
+      "dhbw_scraper_progress_progress",
+      "dhbw_scraper_progress_progress_build_lines",
+      "dhbw_scraper_progress_progress_erase_live",
+      "dhbw_scraper_progress_progress_header",
+      "dhbw_scraper_progress_progress_init",
+      "dhbw_scraper_progress_progress_maybe_paint",
+      "dhbw_scraper_progress_progress_note",
+      "dhbw_scraper_progress_progress_summary",
+      "dhbw_scraper_progress_progress_update",
+      "dhbw_scraper_progress_progress_update_rate",
+      "dhbw_scraper_progress_rationale_1"
+    ],
+    "3": [
+      "dhbw_scraper_dashboard",
+      "dhbw_scraper_dashboard_collect_analysis",
+      "dhbw_scraper_dashboard_esc",
+      "dhbw_scraper_dashboard_findings",
+      "dhbw_scraper_dashboard_fmt_bytes",
+      "dhbw_scraper_dashboard_host",
+      "dhbw_scraper_dashboard_link_graph_svg",
+      "dhbw_scraper_dashboard_now",
+      "dhbw_scraper_dashboard_percentiles",
+      "dhbw_scraper_dashboard_py_path",
+      "dhbw_scraper_dashboard_rationale_1",
+      "dhbw_scraper_dashboard_rationale_332",
+      "dhbw_scraper_dashboard_rationale_410",
+      "dhbw_scraper_dashboard_rationale_60",
+      "dhbw_scraper_dashboard_render_html",
+      "dhbw_scraper_dashboard_write_report"
+    ],
+    "4": [
+      "dhbw_scraper_storage",
+      "dhbw_scraper_storage_count_pending",
+      "dhbw_scraper_storage_delta",
+      "dhbw_scraper_storage_enqueue",
+      "dhbw_scraper_storage_mark_document_removed",
+      "dhbw_scraper_storage_mark_url_checked",
+      "dhbw_scraper_storage_mark_url_error",
+      "dhbw_scraper_storage_mark_url_removed",
+      "dhbw_scraper_storage_rationale_1",
+      "dhbw_scraper_storage_record_fetch",
+      "dhbw_scraper_storage_reset_in_progress",
+      "dhbw_scraper_storage_stats"
+    ],
+    "5": [
+      "dhbw_scraper_extract_extract_dispatch",
+      "dhbw_scraper_extract_rationale_43",
+      "dhbw_scraper_html_extract",
+      "dhbw_scraper_html_extract_extract_html",
+      "dhbw_scraper_html_extract_markdown_to_text",
+      "dhbw_scraper_html_extract_rationale_1",
+      "dhbw_scraper_html_extract_rationale_21",
+      "dhbw_scraper_pdf_extract",
+      "dhbw_scraper_pdf_extract_extract_pdf",
+      "dhbw_scraper_pdf_extract_rationale_1",
+      "dhbw_scraper_pdf_extract_to_markdown"
+    ],
+    "6": [
+      "dhbw_scraper_storage_canonical_key",
+      "dhbw_scraper_storage_doc_id",
+      "dhbw_scraper_storage_normalize_text",
+      "dhbw_scraper_storage_rationale_144",
+      "dhbw_scraper_storage_rationale_153",
+      "dhbw_scraper_storage_rationale_158",
+      "dhbw_scraper_storage_rationale_696",
+      "dhbw_scraper_storage_rationale_851",
+      "dhbw_scraper_storage_run_dedup",
+      "dhbw_scraper_storage_text_hash",
+      "dhbw_scraper_storage_upsert_document"
+    ],
+    "7": [
+      "dhbw_scraper_config",
+      "dhbw_scraper_config_config",
+      "dhbw_scraper_config_crawlconfig",
+      "dhbw_scraper_config_extractconfig",
+      "dhbw_scraper_config_find_config",
+      "dhbw_scraper_config_load_config",
+      "dhbw_scraper_config_py_path",
+      "dhbw_scraper_config_rationale_1",
+      "dhbw_scraper_config_site",
+      "dhbw_scraper_config_storageconfig"
+    ],
+    "8": [
+      "dhbw_scraper_fetch",
+      "dhbw_scraper_fetch_classify",
+      "dhbw_scraper_fetch_ext_for",
+      "dhbw_scraper_fetch_fetch",
+      "dhbw_scraper_fetch_fetchresult",
+      "dhbw_scraper_fetch_fetchresult_not_modified",
+      "dhbw_scraper_fetch_fetchresult_ok",
+      "dhbw_scraper_fetch_rationale_1",
+      "dhbw_scraper_fetch_rationale_19",
+      "dhbw_scraper_fetch_sanitize_url"
+    ],
+    "9": [
+      "baseexception",
+      "dhbw_scraper_storage_claim_pending_url",
+      "dhbw_scraper_storage_is_locked_error",
+      "dhbw_scraper_storage_rationale_166",
+      "dhbw_scraper_storage_rationale_175",
+      "dhbw_scraper_storage_rationale_392",
+      "dhbw_scraper_storage_requeue_url",
+      "dhbw_scraper_storage_retry_locked"
+    ],
+    "10": [
+      "dhbw_scraper_storage_py_path",
+      "dhbw_scraper_storage_rationale_432",
+      "dhbw_scraper_storage_rawcache",
+      "dhbw_scraper_storage_rawcache_has",
+      "dhbw_scraper_storage_rawcache_init",
+      "dhbw_scraper_storage_rawcache_path_for",
+      "dhbw_scraper_storage_rawcache_write",
+      "dhbw_scraper_storage_sha256_bytes"
+    ],
+    "11": [
+      "dhbw_scraper_storage_rationale_239",
+      "dhbw_scraper_storage_rationale_348",
+      "dhbw_scraper_storage_reset_site",
+      "dhbw_scraper_storage_write_txn"
+    ],
+    "12": [
+      "dhbw_scraper_storage_claim_pending_raw",
+      "dhbw_scraper_storage_get_url_state",
+      "row"
+    ],
+    "13": [
+      "dhbw_scraper_storage_enqueue_many",
+      "dhbw_scraper_storage_rationale_257"
+    ],
+    "14": [
+      "dhbw_scraper_storage_rationale_285",
+      "dhbw_scraper_storage_set_sitemap_lastmod"
+    ],
+    "15": [
+      "dhbw_scraper_storage_rationale_320",
+      "dhbw_scraper_storage_requeue_present_urls"
+    ],
+    "16": [
+      "dhbw_scraper_storage_rationale_554",
+      "dhbw_scraper_storage_upsert_raw_doc"
+    ],
+    "17": [
+      "dhbw_scraper_storage_rationale_592",
+      "dhbw_scraper_storage_requeue_extraction"
+    ],
+    "18": [
+      "dhbw_scraper_storage_rationale_644",
+      "dhbw_scraper_storage_save_extraction"
+    ]
+  },
+  "cohesion": {
+    "0": 0.15632183908045977,
+    "1": 0.11692307692307692,
+    "2": 0.1471861471861472,
+    "3": 0.21666666666666667,
+    "4": 0.16666666666666666,
+    "5": 0.21818181818181817,
+    "6": 0.2,
+    "7": 0.35555555555555557,
+    "8": 0.24444444444444444,
+    "9": 0.25,
+    "10": 0.35714285714285715,
+    "11": 0.5,
+    "12": 0.6666666666666666,
+    "13": 1.0,
+    "14": 1.0,
+    "15": 1.0,
+    "16": 1.0,
+    "17": 1.0,
+    "18": 1.0
+  },
+  "gods": [
+    {
+      "id": "dhbw_scraper_cli_build_parser",
+      "label": "build_parser()",
+      "degree": 15
+    },
+    {
+      "id": "dhbw_scraper_progress_progress",
+      "label": "Progress",
+      "degree": 15
+    },
+    {
+      "id": "dhbw_scraper_cli_load",
+      "label": "_load()",
+      "degree": 10
+    },
+    {
+      "id": "dhbw_scraper_config_load_config",
+      "label": "load_config()",
+      "degree": 10
+    },
+    {
+      "id": "dhbw_scraper_extract_run_extract",
+      "label": "run_extract()",
+      "degree": 9
+    },
+    {
+      "id": "dhbw_scraper_storage_connect",
+      "label": "connect()",
+      "degree": 9
+    },
+    {
+      "id": "dhbw_scraper_dashboard_collect_analysis",
+      "label": "collect_analysis()",
+      "degree": 8
+    },
+    {
+      "id": "dhbw_scraper_extract_run_pooled",
+      "label": "_run_pooled()",
+      "degree": 8
+    },
+    {
+      "id": "dhbw_scraper_storage_init_db",
+      "label": "init_db()",
+      "degree": 8
+    },
+    {
+      "id": "dhbw_scraper_storage_rawcache",
+      "label": "RawCache",
+      "degree": 8
+    }
+  ],
+  "surprises": [
+    {
+      "source": "_cmd_stats()",
+      "target": "stats()",
+      "source_files": [
+        "dhbw_scraper/cli.py",
+        "dhbw_scraper/storage.py"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "why": "bridges separate communities; peripheral node `stats()` unexpectedly reaches hub `_cmd_stats()`"
+    },
+    {
+      "source": "_cmd_delta()",
+      "target": "delta()",
+      "source_files": [
+        "dhbw_scraper/cli.py",
+        "dhbw_scraper/storage.py"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "why": "bridges separate communities; peripheral node `delta()` unexpectedly reaches hub `_cmd_delta()`"
+    },
+    {
+      "source": "_load()",
+      "target": "load_config()",
+      "source_files": [
+        "dhbw_scraper/cli.py",
+        "dhbw_scraper/config.py"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "why": "bridges separate communities"
+    },
+    {
+      "source": "_cmd_fetch()",
+      "target": "run_fetch()",
+      "source_files": [
+        "dhbw_scraper/cli.py",
+        "dhbw_scraper/crawl.py"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "why": "bridges separate communities"
+    },
+    {
+      "source": "_run_extract()",
+      "target": "run_extract()",
+      "source_files": [
+        "dhbw_scraper/cli.py",
+        "dhbw_scraper/extract.py"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "why": "bridges separate communities"
+    }
+  ],
+  "tokens": {
+    "input": 0,
+    "output": 0
+  }
+}

@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+# Cancel superseded runs on the same ref.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-test:
+    name: Lint & test (Linux)
+    runs-on: ubuntu-latest
+    env:
+      # The Rust test binaries link libpython — the crate omits `extension-module`
+      # on purpose so `cargo test` can link (see rust/Cargo.toml). Point pyo3 at the
+      # uv-managed interpreter; this is the Linux analog of scripts/dev-env.ps1.
+      PYO3_PYTHON: ${{ github.workspace }}/.venv/bin/python
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust toolchain (rustfmt + clippy)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8
+        with:
+          enable-cache: true
+
+      - name: Install Python 3.14
+        run: uv python install 3.14
+
+      - name: Sync deps (builds the Rust extension via maturin)
+        run: uv sync --extra dev
+
+      # ── Lint / format: non-mutating checks (fail if not already clean) ──
+      - name: Ruff lint
+        run: uv run ruff check .
+      - name: Ruff format check
+        run: uv run ruff format --check .
+      - name: rustfmt check
+        run: cargo fmt --manifest-path rust/Cargo.toml --check
+      - name: Clippy
+        run: cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings
+
+      # ── Tests ──
+      - name: Pytest
+        run: uv run pytest
+
+      - name: Cargo test
+        shell: bash
+        run: |
+          # Expose the interpreter's shared libpython so the test binaries load it.
+          PYLIB="$(.venv/bin/python -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))')"
+          LD_LIBRARY_PATH="$PYLIB:${LD_LIBRARY_PATH:-}" \
+            cargo test --manifest-path rust/Cargo.toml
+
+  commit-lint:
+    name: Conventional commits (PR)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Validate PR commit subjects
+        shell: bash
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # Conventional Commits subject line: type(scope)!: description
+          pattern='^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([^)]+\))?!?: .+'
+          fail=0
+          # --no-merges: merge commits are exempt from the convention.
+          while IFS= read -r subject; do
+            [ -z "$subject" ] && continue
+            if ! printf '%s' "$subject" | grep -Eq "$pattern"; then
+              echo "::error::Non-conventional commit subject: $subject"
+              fail=1
+            fi
+          done < <(git log --no-merges --format=%s "$BASE..$HEAD")
+          if [ "$fail" -ne 0 ]; then
+            echo "Commit subjects must follow Conventional Commits (feat:, fix:, chore: …)."
+            exit 1
+          fi
+          echo "All commit subjects follow Conventional Commits."

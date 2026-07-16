@@ -1,0 +1,67 @@
+{
+  "dhbw_scraper/__init__.py": {
+    "mtime": 1784031968.0,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
+  },
+  "dhbw_scraper/__main__.py": {
+    "mtime": 1784031974.0,
+    "ast_hash": "3a7af0b9c2d88b6e1527b7a273baef84",
+    "semantic_hash": "3a7af0b9c2d88b6e1527b7a273baef84"
+  },
+  "dhbw_scraper/cli.py": {
+    "mtime": 1784226374.58195,
+    "ast_hash": "6bf97cd9cb2ecccbc024ef4b299dc4d4",
+    "semantic_hash": "6bf97cd9cb2ecccbc024ef4b299dc4d4"
+  },
+  "dhbw_scraper/config.py": {
+    "mtime": 1784220011.0301254,
+    "ast_hash": "74c3ce8fcc52638b6b5dd04e63ec2f6f",
+    "semantic_hash": "74c3ce8fcc52638b6b5dd04e63ec2f6f"
+  },
+  "dhbw_scraper/crawl.py": {
+    "mtime": 1784226113.6720414,
+    "ast_hash": "2483e211f9c4cde92a028534524a15d1",
+    "semantic_hash": "2483e211f9c4cde92a028534524a15d1"
+  },
+  "dhbw_scraper/dashboard.py": {
+    "mtime": 1784229174.8613727,
+    "ast_hash": "835d215b85b57f56dc4d3c9fdac0d3f1",
+    "semantic_hash": "835d215b85b57f56dc4d3c9fdac0d3f1"
+  },
+  "dhbw_scraper/extract.py": {
+    "mtime": 1784198833.7479556,
+    "ast_hash": "1bcd27dedd27cdcb5cc4e747f281a750",
+    "semantic_hash": "1bcd27dedd27cdcb5cc4e747f281a750"
+  },
+  "dhbw_scraper/fetch.py": {
+    "mtime": 1784107434.0,
+    "ast_hash": "998a9f8a108a04f8f635620c1b6cb91e",
+    "semantic_hash": "998a9f8a108a04f8f635620c1b6cb91e"
+  },
+  "dhbw_scraper/html_extract.py": {
+    "mtime": 1784198441.212686,
+    "ast_hash": "c0c89ae74e12fde7be83dafc6fd6bc54",
+    "semantic_hash": "c0c89ae74e12fde7be83dafc6fd6bc54"
+  },
+  "dhbw_scraper/pdf_extract.py": {
+    "mtime": 1784201072.4227748,
+    "ast_hash": "9eda378130fe8a7e3cfae11c0d3f7772",
+    "semantic_hash": "9eda378130fe8a7e3cfae11c0d3f7772"
+  },
+  "dhbw_scraper/progress.py": {
+    "mtime": 1784138949.0,
+    "ast_hash": "a3b656aac2f8b338464fc2ced6503f67",
+    "semantic_hash": "a3b656aac2f8b338464fc2ced6503f67"
+  },
+  "dhbw_scraper/quality.py": {
+    "mtime": 1784215512.6329265,
+    "ast_hash": "110efedfaa8532964dcb17bf86d58e89",
+    "semantic_hash": "110efedfaa8532964dcb17bf86d58e89"
+  },
+  "dhbw_scraper/storage.py": {
+    "mtime": 1784219518.7752247,
+    "ast_hash": "776e088fd215884eb996c4933e72a868",
+    "semantic_hash": "776e088fd215884eb996c4933e72a868"
+  }
+}
