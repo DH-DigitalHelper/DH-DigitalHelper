@@ -22,6 +22,8 @@ Two settings keep this fast on the corpus of DHBW regulation/handbook PDFs
 
 from __future__ import annotations
 
+from . import markdown as md
+
 _layout_disabled = False
 
 
@@ -51,8 +53,11 @@ def extract_pdf(data: bytes, to_markdown=None) -> dict | None:
     if not markdown:
         return None
 
-    # PyMuPDF4LLM markdown is already plain-text friendly; use it for both fields.
-    text = markdown
+    # Strip the markdown syntax the same way the HTML path does. Using the raw
+    # markdown as `text` made len(text.split()) count `#`, `|`, `---`, `-` and `>`
+    # as words, so the shared min_words gate was reading two different notions of
+    # "word" and a heading/table-heavy PDF passed it on punctuation alone.
+    text = md.to_text(markdown)
     title = None
     for line in markdown.splitlines():
         if line.startswith("# "):

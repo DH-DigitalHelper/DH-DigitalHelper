@@ -2,40 +2,14 @@
 
 from __future__ import annotations
 
-import re
+from . import markdown as md
 
-# Applied in order to turn trafilatura markdown into plain text. trafilatura
-# prunes its parse tree in place during extraction, so a second extract() call
-# on the same tree is unsafe -- deriving text from the one markdown pass instead
-# of running a second full extraction halves the per-document HTML cost.
-_IMAGE = re.compile(r"!\[[^\]]*\]\([^)]*\)")  # images: drop entirely
-_LINK = re.compile(r"\[([^\]]*)\]\([^)]*\)")  # links: keep the anchor text
-_EMPHASIS = re.compile(r"(\*\*|\*|__|_|`)")  # bold/italic/inline-code markers
-_HEADING = re.compile(r"^\s{0,3}#{1,6}\s+", re.MULTILINE)  # "### " prefixes
-_BLOCKQUOTE = re.compile(r"^\s{0,3}>\s?", re.MULTILINE)  # "> " prefixes
-_LIST_MARKER = re.compile(r"^\s*(?:[-*+]|\d+\.)\s+", re.MULTILINE)  # bullets/numbers
-_HRULE = re.compile(r"^\s*(?:[-*_]\s*){3,}$", re.MULTILINE)  # --- *** ___
-
-
-def _markdown_to_text(markdown: str) -> str:
-    """Strip markdown formatting to plain text for indexing / word counting.
-
-    Only the *presentation* syntax is removed; the words themselves (headings,
-    link anchors, table cells) are preserved so ``word_count`` and full-text
-    search stay faithful to the content."""
-    text = markdown
-    text = _HRULE.sub("", text)
-    text = _IMAGE.sub("", text)
-    text = _LINK.sub(r"\1", text)
-    text = _HEADING.sub("", text)
-    text = _BLOCKQUOTE.sub("", text)
-    text = _LIST_MARKER.sub("", text)
-    text = _EMPHASIS.sub("", text)
-    text = text.replace("|", " ")  # table cell separators -> whitespace
-    # Collapse runs of blank lines but keep paragraph breaks readable.
-    text = re.sub(r"[ \t]+", " ", text)
-    text = re.sub(r"\n{3,}", "\n\n", text)
-    return text.strip()
+# Text is derived from the one markdown pass rather than a second extraction:
+# trafilatura prunes its parse tree in place during extract(), so calling it
+# again on the same tree is unsafe -- and this halves the per-document cost.
+# The stripping itself lives in `markdown.to_text`, shared with the PDF path so
+# both produce the same notion of "word" for the min_words gate.
+_markdown_to_text = md.to_text
 
 
 def extract_html(html: str | bytes, url: str | None = None) -> dict | None:
