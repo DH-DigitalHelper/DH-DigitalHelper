@@ -467,8 +467,17 @@ pub fn mark_url_error(
 }
 
 pub fn mark_url_removed(conn: &Connection, url: &str, now: &str) -> rusqlite::Result<()> {
+    // Clearing the validators is load-bearing, not tidiness. Keeping them let a
+    // removed page that a sitemap <lastmod> advance re-pended still send
+    // If-None-Match and get a 304 -- and the 304 branch marks present:true while
+    // touching neither documents nor raw_docs, so the row ended up present=1
+    // against documents.present=0: "present" yet missing from the corpus, and
+    // never re-materialized. With no validator the next fetch must be a full GET,
+    // which lands on the 2xx path where `!present` makes content_outcome report
+    // `changed`, re-emitting the raw-doc hand-off and resurrecting the document.
     conn.execute(
         "UPDATE queue SET work_state='done', present=0, http_status=404,
+             etag=NULL, last_modified=NULL,
              last_checked_at=?, last_changed_at=? WHERE url=?",
         params![now, now, url],
     )?;
@@ -735,6 +744,37 @@ mod tests {
             Some("Mon, 01 Jan 2026 00:00:00 GMT"),
             "stored Last-Modified must survive"
         );
+    }
+
+    /// A removed page must not be able to 304 its way back to present=1.
+    ///
+    /// mark_url_removed kept the validators, so a removed page re-pended by a
+    /// sitemap <lastmod> advance could still send If-None-Match and get a 304 --
+    /// and the 304 branch hardcodes present:true while touching neither documents
+    /// nor raw_docs. The result was queue.present=1 against documents.present=0:
+    /// "present" yet absent from the corpus, and never re-materialized, because
+    /// the resurrection logic only lives on the full-body 2xx path.
+    #[test]
+    fn mark_url_removed_clears_validators_so_the_page_cannot_304() {
+        let conn = Connection::open_in_memory().unwrap();
+        seed_checked_row(&conn);
+
+        mark_url_removed(&conn, "https://x.de/p", "2026-07-17T00:00:00").unwrap();
+
+        let (etag, lm) = validators(&conn);
+        assert_eq!(
+            etag, None,
+            "a removed page must not keep a conditional-GET validator"
+        );
+        assert_eq!(lm, None);
+        let present: i64 = conn
+            .query_row(
+                "SELECT present FROM queue WHERE url = 'https://x.de/p'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(present, 0, "it is still marked removed");
     }
 
     /// A DB created before `text_sha256` existed must still open. `CREATE TABLE IF
