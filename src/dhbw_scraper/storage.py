@@ -952,9 +952,9 @@ def run_dedup(conn, batch_size: int = 500, vacuum: bool = True, now: str | None 
     if vacuum and deleted:
         # VACUUM cannot run inside a transaction; every write_txn above has
         # already committed, so the connection is in autocommit here. Retiring is
-        # a soft delete, so this reclaims little -- it only defragments after the
-        # backfill's UPDATE churn. `--no-vacuum` remains the escape hatch on a
-        # large corpus.
+        # now a soft delete, so unlike the old hard DELETE this frees no pages --
+        # it only defragments the UPDATE churn, and `deleted` is just the "this
+        # pass churned the table" signal. `--no-vacuum` skips it on a large corpus.
         conn.execute("VACUUM")
 
     after = conn.execute(
