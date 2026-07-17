@@ -62,3 +62,13 @@ def test_friedrichshafen_and_bad_mergentheim_satellites():
         )
         == "mosbach-bad-mergentheim"
     )
+
+
+def test_stuttgart_horbach_page_is_not_horb_satellite():
+    # "/horbach" must NOT trigger the Horb satellite (segment-bounded match)
+    assert (
+        classify.classify_standort(
+            "https://www.dhbw-stuttgart.de/horbach/x", "dhbw-stuttgart.de"
+        )
+        == "stuttgart"
+    )

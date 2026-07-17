@@ -62,12 +62,8 @@ SITE_TO_STANDORT: dict[str, str] = {
 # (satellite_slug, url_substrings, parent_slug). Applied only when the doc's base
 # standort == parent_slug, so "horb" never mis-tags a non-Stuttgart page.
 SATELLITE_RULES: list[tuple[str, tuple[str, ...], str]] = [
-    ("stuttgart-horb", ("/horb", "horb.", ".horb"), "stuttgart"),
-    (
-        "ravensburg-friedrichshafen",
-        ("friedrichshafen", "/fn/", "fn."),
-        "ravensburg",
-    ),
+    ("stuttgart-horb", ("/horb/", "/horb-", "horb."), "stuttgart"),
+    ("ravensburg-friedrichshafen", ("friedrichshafen", "/fn/", "/fn-"), "ravensburg"),
     ("mosbach-bad-mergentheim", ("bad-mergentheim", "mergentheim"), "mosbach"),
 ]
 
@@ -86,6 +82,8 @@ DEPARTMENT_URL_RULES: list[tuple[str, str]] = [
     ("mechatronik", "technik"),
     ("fakultaet-technik", "technik"),
     ("fakultaet-wirtschaft", "wirtschaft"),
+    ("fakultaet-gesundheit", "gesundheit"),
+    ("fakultaet-sozialwesen", "sozialwesen"),
     ("betriebswirtschaft", "wirtschaft"),
 ]
 
@@ -120,6 +118,6 @@ STUDY_PROGRAMS: list[tuple[str, str, str, tuple[str, ...]]] = [
         "angewandte-gesundheitswissenschaften",
         "Angewandte Gesundheitswissenschaften",
         "gesundheit",
-        ("angewandte-gesundheitswissenschaften", "gesundheitswissenschaften"),
+        ("angewandte-gesundheitswissenschaften",),
     ),
 ]

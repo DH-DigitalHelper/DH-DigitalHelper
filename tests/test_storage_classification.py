@@ -98,3 +98,19 @@ def test_stats_reports_department_and_standort_breakdown():
     assert s["by_department"].get("wirtschaft") == 1
     assert s["by_standort"].get("stuttgart") == 1
     assert s["unclassified"] == 0
+
+
+def test_stats_unclassified_ignores_legitimately_null_standort():
+    conn = mem()
+    url = "https://unmapped.example/a"
+    st.enqueue(conn, url, "unmapped.example", 0, None, NOW)
+    st.mark_url_checked(conn, url, 200, None, None, "c1", True, True, NOW)
+    st.upsert_document(conn, url, "unmapped.example", "html", "c1", doc(), NOW)
+    row = conn.execute(
+        "SELECT standort_id, department_id, classify_meta FROM documents WHERE url=?",
+        (url,),
+    ).fetchone()
+    assert row["standort_id"] is None  # unmapped site -> null standort (legitimate)
+    assert row["department_id"] is not None  # 'unknown' still resolves
+    assert row["classify_meta"] is not None
+    assert st.stats(conn)["unclassified"] == 0  # NOT counted as unclassified

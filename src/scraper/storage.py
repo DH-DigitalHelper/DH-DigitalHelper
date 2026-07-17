@@ -965,7 +965,7 @@ def stats(conn) -> dict:
     ).fetchall()
     unclassified = scalar(
         "SELECT COUNT(*) FROM documents "
-        "WHERE present=1 AND (standort_id IS NULL OR department_id IS NULL)"
+        "WHERE present=1 AND (department_id IS NULL OR classify_meta IS NULL)"
     )
     return {
         "queue_pending": scalar(
