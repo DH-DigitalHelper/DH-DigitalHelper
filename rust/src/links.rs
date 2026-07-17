@@ -100,6 +100,18 @@ pub fn is_trap_url(url: &str) -> bool {
     })
 }
 
+/// The value of the `name` attribute, matched case-insensitively as HTML requires.
+/// `tl`'s own `get()` compares the raw bytes, so it misses `HREF` / `Href`.
+fn attr_ignore_case<'a>(
+    attrs: &'a tl::Attributes<'a>,
+    name: &str,
+) -> Option<std::borrow::Cow<'a, str>> {
+    attrs
+        .iter()
+        .find(|(key, _)| key.eq_ignore_ascii_case(name))
+        .and_then(|(_, value)| value)
+}
+
 /// Every `<a href>` target on the page as an absolute, fragment-stripped http(s)
 /// URL, deduped in first-seen order. Drops `mailto:`/`tel:`/`javascript:` and any
 /// href that fails to resolve to an http(s) URL. No domain/trap filtering — this
@@ -117,11 +129,15 @@ pub fn discover_all_links(html: &str, base_url: &str) -> Vec<String> {
     let mut seen: HashSet<String> = HashSet::new();
     for node in dom.nodes() {
         let Some(tag) = node.as_tag() else { continue };
-        if tag.name().as_bytes() != b"a" {
+        // Tag and attribute names are case-insensitive in HTML, but `tl` returns
+        // them exactly as written and folds nothing -- so comparing literally
+        // silently dropped `<A>` / `HREF=` anchors, losing both the edge and the
+        // follow target.
+        if !tag.name().as_utf8_str().eq_ignore_ascii_case("a") {
             continue;
         }
-        let href = match tag.attributes().get("href").flatten() {
-            Some(bytes) => bytes.as_utf8_str(),
+        let href = match attr_ignore_case(tag.attributes(), "href") {
+            Some(value) => value,
             None => continue,
         };
         let href = href.trim();

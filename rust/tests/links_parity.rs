@@ -39,6 +39,29 @@ fn discover_links_filters_and_absolutizes() {
     assert!(got.iter().all(|u| !u.starts_with("mailto:")));
 }
 
+/// HTML tag and attribute names are case-insensitive, but `tl` hands them back
+/// exactly as written and does no folding. Comparing them literally therefore
+/// dropped `<A HREF=...>`-style anchors outright -- losing both the edge and the
+/// follow target, so whole pages could go uncrawled.
+#[test]
+fn discover_links_is_case_insensitive_about_tags_and_attributes() {
+    let html = r#"
+    <A href="/upper-tag">uppercase tag</A>
+    <a HREF="/upper-attr">uppercase attr</a>
+    <a Href="/mixed-attr">mixed attr</a>
+    <A HREF="/both-upper">both</A>
+    "#;
+    let got = discover_links(html, "https://www.dhbw.de/home", "www.dhbw.de");
+    for expected in [
+        "https://www.dhbw.de/upper-tag",
+        "https://www.dhbw.de/upper-attr",
+        "https://www.dhbw.de/mixed-attr",
+        "https://www.dhbw.de/both-upper",
+    ] {
+        assert!(has(&got, expected), "{expected} was dropped; got {got:?}");
+    }
+}
+
 #[test]
 fn discover_links_survives_malformed_html() {
     assert_eq!(
