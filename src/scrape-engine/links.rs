@@ -83,10 +83,10 @@ pub fn is_trap_url(url: &str) -> bool {
         Ok(u) => u,
         Err(_) => return false,
     };
-    if let Some(host) = parsed.host_str() {
-        if host_is_trap(host) {
-            return true;
-        }
+    if let Some(host) = parsed.host_str()
+        && host_is_trap(host)
+    {
+        return true;
     }
     let path = parsed.path().to_ascii_lowercase();
     if TRAP_PATH_FRAGMENTS.iter().any(|frag| path.contains(frag)) {

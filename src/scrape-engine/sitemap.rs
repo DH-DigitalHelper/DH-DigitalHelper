@@ -262,8 +262,8 @@ mod tests {
 
     #[test]
     fn decode_xml_inflates_a_gzip_member_and_passes_plain_text_through() {
-        use flate2::write::GzEncoder;
         use flate2::Compression;
+        use flate2::write::GzEncoder;
         use std::io::Write;
 
         let plain = "<urlset><url><loc>https://a.de/x</loc></url></urlset>";

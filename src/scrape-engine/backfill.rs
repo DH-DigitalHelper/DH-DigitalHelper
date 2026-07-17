@@ -23,7 +23,7 @@ use crate::config::RunConfig;
 use crate::fetch::ext_for;
 use crate::links::{discover_all_links, in_domain};
 use crate::progress::ProgressSink;
-use crate::storage::{self, now_iso, LinkEdge, RawCache};
+use crate::storage::{self, LinkEdge, RawCache, now_iso};
 
 /// Result of one backfill pass.
 #[derive(Debug, Default, Clone, Copy)]

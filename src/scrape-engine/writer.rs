@@ -236,13 +236,12 @@ impl SiteState {
         if let ClaimResult::Give(item) = returned {
             self.in_flight = self.in_flight.saturating_sub(1);
             self.given -= 1;
-            if self.max_pages_per_host > 0 {
-                if let Some(n) = self
+            if self.max_pages_per_host > 0
+                && let Some(n) = self
                     .host_given
                     .get_mut(&host_of(&item.url).unwrap_or_default())
-                {
-                    *n -= 1;
-                }
+            {
+                *n -= 1;
             }
             self.heap.push(HeapItem(item));
         }
@@ -449,12 +448,11 @@ impl Coordinator {
 
     fn maybe_emit_progress(&mut self, force: bool) {
         let now = std::time::Instant::now();
-        if !force {
-            if let Some(last) = self.last_paint {
-                if now.duration_since(last).as_millis() < PROGRESS_INTERVAL_MS {
-                    return;
-                }
-            }
+        if !force
+            && let Some(last) = self.last_paint
+            && now.duration_since(last).as_millis() < PROGRESS_INTERVAL_MS
+        {
+            return;
         }
         self.last_paint = Some(now);
         let updates: Vec<crate::progress::SiteUpdate> = self

@@ -87,14 +87,16 @@ async fn off_domain_index_child_not_followed() {
     let pairs = sitemap::discover("https://www.dhbw.de", "www.dhbw.de", &client, "ua").await;
     assert!(pairs.is_empty());
     let calls = client.calls.lock().unwrap();
-    assert!(!calls
-        .iter()
-        .any(|u| u == "https://evil.example/sitemap-x.xml"));
+    assert!(
+        !calls
+            .iter()
+            .any(|u| u == "https://evil.example/sitemap-x.xml")
+    );
 }
 
 fn gzipped(data: &[u8]) -> Vec<u8> {
-    use flate2::write::GzEncoder;
     use flate2::Compression;
+    use flate2::write::GzEncoder;
     use std::io::Write;
     let mut enc = GzEncoder::new(Vec::new(), Compression::default());
     enc.write_all(data).unwrap();

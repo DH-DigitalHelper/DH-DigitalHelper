@@ -10,11 +10,11 @@ use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::oneshot;
 
 use crate::config::RunConfig;
-use crate::fetch::{classify, ext_for, FetchRequest, FetchResult, HttpClient, ReqwestClient};
+use crate::fetch::{FetchRequest, FetchResult, HttpClient, ReqwestClient, classify, ext_for};
 use crate::links::{discover_all_links, in_domain, is_trap_url};
-use crate::outcome::{content_outcome, Outcome};
+use crate::outcome::{Outcome, content_outcome};
 use crate::progress::ProgressSink;
-use crate::storage::{self, now_iso, FrontierItem, LinkEdge, RawCache};
+use crate::storage::{self, FrontierItem, LinkEdge, RawCache, now_iso};
 use crate::writer::{
     ClaimResult, Coordinator, Counts, CrawlLogRow, FollowCandidate, PageBatch, RawDocUpsert,
     SiteInit, UrlMark, WriterMsg,
