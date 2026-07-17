@@ -16,8 +16,11 @@ dhbw-scraper = "scraper.cli:main"
 
 [project.optional-dependencies]
 # pre-commit drives the git hooks (lint/format on commit, Conventional-Commit
-# validation, tests on push) declared in .pre-commit-config.yaml.
-dev = ["pytest>=9.0", "maturin>=1.7,<2", "pre-commit>=4"]
+# validation, tests on push) declared in .pre-commit-config.yaml. `ruff` is pinned
+# here too so CI's `uv run ruff …` steps resolve the SAME version the
+# `ruff-pre-commit` hook manages (rev v0.8.6) — bump both in lockstep or the two
+# ruffs can format the corpus differently.
+dev = ["pytest>=9.0", "maturin>=1.7,<2", "pre-commit>=4", "ruff==0.8.6"]
 
 [build-system]
 requires = ["maturin>=1.7,<2"]
@@ -32,6 +35,24 @@ build-backend = "maturin"
 python-source = "src"
 module-name = "scraper._engine"
 features = ["pyo3/extension-module"]
+
+# Ruff's formatter (and linter) auto-discover this section from pyproject.toml no
+# matter how ruff is invoked — the pre-commit `ruff-format` hook, CI's
+# `ruff format --check`, or a bare `ruff format` — so every entry point produces
+# byte-for-byte identical output. Every value below equals ruff's current default;
+# they are pinned so an upstream default change can never silently reflow the corpus.
+[tool.ruff]
+line-length = 88
+# target-version is deliberately unset: ruff infers it from the single source of
+# truth, project.requires-python (>=3.14). Pinning it here would add a second
+# Python-version knob that could drift out of sync with requires-python.
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"          # per-file detection — friendly to the Windows + NixOS split
+skip-magic-trailing-comma = false
+docstring-code-format = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
