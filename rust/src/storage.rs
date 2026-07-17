@@ -107,9 +107,11 @@ CREATE TABLE IF NOT EXISTS documents (
 CREATE INDEX IF NOT EXISTS idx_documents_site ON documents(site);
 CREATE INDEX IF NOT EXISTS idx_documents_updated ON documents(updated_at);
 CREATE INDEX IF NOT EXISTS idx_documents_present ON documents(present);
--- Composite so the dedup lookup `text_sha256=? AND present=1` is a seek, not a
--- table scan via the low-selectivity present index (see storage.py::_migrate).
-CREATE INDEX IF NOT EXISTS idx_documents_text_sha256 ON documents(text_sha256, present);
+-- idx_documents_text_sha256 is created by migrate(), not here: on a DB that
+-- predates the dedup column, `CREATE TABLE IF NOT EXISTS documents` is a no-op
+-- and leaves text_sha256 absent, so a CREATE INDEX in this batch would fail with
+-- "no such column" -- and take every statement after it down with it. Mirrors
+-- the same reasoning in storage.py::SCHEMA.
 
 -- Outbound link graph: every <a href> a crawled page emits, in-domain and
 -- external alike. Following stays in-domain (in_domain=1 marks a follow
@@ -224,7 +226,39 @@ pub fn connect(db_file: &str) -> rusqlite::Result<Connection> {
 }
 
 pub fn init_db(conn: &Connection) -> rusqlite::Result<()> {
-    conn.execute_batch(SCHEMA)
+    conn.execute_batch(SCHEMA)?;
+    migrate(conn)
+}
+
+/// Forward-only, idempotent migrations for a DB that predates a column, mirroring
+/// `storage.py::_migrate` so either side can open what the other created.
+///
+/// Column presence is introspected rather than tracked via `user_version`, so this
+/// is a no-op whether the column arrived via `SCHEMA` (fresh DB) or an earlier
+/// ALTER. `ALTER TABLE ADD COLUMN` with a NULL default is an O(1) metadata-only
+/// change in SQLite -- instant even on a multi-GB file.
+fn migrate(conn: &Connection) -> rusqlite::Result<()> {
+    if !has_column(conn, "documents", "text_sha256")? {
+        conn.execute_batch("ALTER TABLE documents ADD COLUMN text_sha256 TEXT")?;
+    }
+    // Only safe once the column is guaranteed to exist. Composite so the dedup
+    // lookup `text_sha256=? AND present=1` is a seek rather than a scan via the
+    // low-selectivity present index (see storage.py::_migrate).
+    conn.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_documents_text_sha256
+             ON documents(text_sha256, present)",
+    )
+}
+
+fn has_column(conn: &Connection, table: &str, column: &str) -> rusqlite::Result<bool> {
+    let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
+    let mut rows = stmt.query([])?;
+    while let Some(row) = rows.next()? {
+        if row.get::<_, String>(1)? == column {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 /// Checkpoint the WAL into the main DB and leave it truncated, so the Python
@@ -701,6 +735,53 @@ mod tests {
             Some("Mon, 01 Jan 2026 00:00:00 GMT"),
             "stored Last-Modified must survive"
         );
+    }
+
+    /// A DB created before `text_sha256` existed must still open. `CREATE TABLE IF
+    /// NOT EXISTS` is a no-op on an existing table, so the column never appears by
+    /// itself -- Python survives this via `_migrate`'s ALTER, and Rust has to match
+    /// or Phase 1 dies on startup against a DB Phase 2 opens happily.
+    #[test]
+    fn init_db_migrates_a_pre_text_sha256_documents_table() {
+        let conn = Connection::open_in_memory().unwrap();
+        // The `documents` table exactly as it looked before the dedup column.
+        conn.execute_batch(
+            "CREATE TABLE documents (
+                 id               TEXT PRIMARY KEY,
+                 url              TEXT NOT NULL UNIQUE,
+                 final_url        TEXT,
+                 site             TEXT NOT NULL,
+                 source_type      TEXT NOT NULL,
+                 content_sha256   TEXT NOT NULL,
+                 title            TEXT,
+                 text             TEXT NOT NULL,
+                 markdown         TEXT NOT NULL,
+                 lang             TEXT,
+                 word_count       INTEGER NOT NULL,
+                 metadata         TEXT,
+                 present          INTEGER NOT NULL DEFAULT 1,
+                 revision         INTEGER NOT NULL DEFAULT 1,
+                 first_indexed_at TEXT NOT NULL,
+                 updated_at       TEXT NOT NULL
+             );",
+        )
+        .unwrap();
+
+        init_db(&conn).expect("init_db must migrate an old DB, not fail on it");
+
+        let cols: Vec<String> = conn
+            .prepare("PRAGMA table_info(documents)")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
+        assert!(
+            cols.iter().any(|c| c == "text_sha256"),
+            "migrate must add text_sha256; columns = {cols:?}"
+        );
+        // And it stays idempotent on a second open.
+        init_db(&conn).expect("init_db must be idempotent");
     }
 
     /// The flip side: a response that *does* carry validators still refreshes them,
