@@ -385,6 +385,17 @@ impl Coordinator {
         }
     }
 
+    /// Apply up to `BATCH_MAX` finished pages in ONE transaction.
+    ///
+    /// A write error here aborts the whole batch and the whole run, and that is
+    /// deliberate. The realistic faults are `SQLITE_FULL`/`SQLITE_IOERR`, on which
+    /// SQLite invalidates the entire transaction anyway -- per-page SAVEPOINTs
+    /// could not rescue the siblings, and continuing to write on a full or failing
+    /// disk is not something to paper over. Transient `SQLITE_BUSY` is already
+    /// absorbed by the 15s `busy_timeout` set in `storage::connect`, and there is
+    /// only one writer, so contention needs another process to even arise.
+    /// Per-page commits would fix nothing here and would cost both throughput and
+    /// the post-commit frontier-consistency invariant below.
     // The `Box` is deliberate and not redundant indirection: these values arrive
     // already boxed as `WriterMsg::Complete(Box<PageBatch>)` — which keeps the
     // channel message small — and are pushed straight into this Vec. Taking
