@@ -91,7 +91,10 @@ def test_reset_site_deletes_only_target_site_and_keeps_raw_docs():
     counts = st.reset_site(conn, "a.de")
 
     assert counts == {"queue": 2, "crawl_log": 1, "documents": 1, "links": 1}
-    scalar = lambda q: conn.execute(q).fetchone()[0]
+
+    def scalar(q):
+        return conn.execute(q).fetchone()[0]
+
     assert scalar("SELECT COUNT(*) FROM queue WHERE site='a.de'") == 0
     assert scalar("SELECT COUNT(*) FROM queue WHERE site='b.de'") == 1
     assert scalar("SELECT COUNT(*) FROM crawl_log WHERE site='b.de'") == 1

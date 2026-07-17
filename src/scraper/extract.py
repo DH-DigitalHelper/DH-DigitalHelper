@@ -26,13 +26,13 @@ from concurrent.futures import (
 from concurrent.futures.process import BrokenProcessPool
 from pathlib import Path
 
-# Recycle each pool worker after this many blobs so a slow memory creep in the
-# native PDF/HTML libraries cannot accumulate across a large backlog.
-_MAX_TASKS_PER_CHILD = 200
-
 from . import fetch as fetchmod
 from . import html_extract, pdf_extract, quality, storage
 from .progress import Progress
+
+# Recycle each pool worker after this many blobs so a slow memory creep in the
+# native PDF/HTML libraries cannot accumulate across a large backlog.
+_MAX_TASKS_PER_CHILD = 200
 
 
 def _now() -> str:
