@@ -9,6 +9,9 @@ dependencies = [
     # PyMuPDF4LLM converts PDF bytes -> Markdown. It is lightweight (no torch,
     # no ML models) and pulls in pymupdf transitively.
     "pymupdf4llm>=0.3.4",
+    # Deterministic, offline language identification (ISO-639-1) over already-
+    # extracted text. Pure-Python + numpy; used by scraper.lang for both extractors.
+    "py3langid>=0.3",
 ]
 
 [project.scripts]
