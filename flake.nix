@@ -31,6 +31,11 @@
             # .pre-commit-config.yaml — the single source of truth shared with the
             # Windows/uv workflow. Nix just provides the runner here.
             pkgs.pre-commit
+            # Secret scanning is a local pre-commit hook (language: system) that
+            # shells out to this binary — provide it so Nix contributors get the
+            # hook for free. Windows installs it separately (see
+            # .pre-commit-config.yaml).
+            pkgs.trufflehog
           ];
 
           # uv-managed venv; tell uv to use the Nix Python and not download its own.
