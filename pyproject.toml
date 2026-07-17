@@ -24,12 +24,13 @@ requires = ["maturin>=1.7,<2"]
 build-backend = "maturin"
 
 [tool.maturin]
-# Mixed Rust/Python layout: the pure-Python package tree stays authoritative
-# under src/, and the compiled Rust crate is injected as the single submodule
-# dhbw_scraper._native.
+# Mixed Rust/Python layout, one source root: the pure-Python package tree stays
+# authoritative under src/dhbw_scraper/, and the Rust crate at src/scrape-engine/
+# is injected as the single submodule dhbw_scraper._native. The Rust is a SIBLING
+# of the package, not nested inside it — anything under the package dir is the
+# wheel payload and would ship .rs files into site-packages.
 python-source = "src"
 module-name = "dhbw_scraper._native"
-manifest-path = "rust/Cargo.toml"
 features = ["pyo3/extension-module"]
 
 [tool.pytest.ini_options]

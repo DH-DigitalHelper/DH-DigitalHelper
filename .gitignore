@@ -1,6 +1,7 @@
 # Python
 __pycache__/
 *.py[cod]
+*.pdb
 .venv/
 *.egg-info/
 .pytest_cache/
@@ -11,7 +12,7 @@ __pycache__/
 # (uv.lock IS committed — do not ignore it)
 
 # Rust
-rust/target/
+/target/
 # (Cargo.lock IS committed — this is a binary/app, not a library)
 
 # Nix / direnv

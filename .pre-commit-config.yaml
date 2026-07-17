@@ -49,7 +49,7 @@ repos:
       # Formatting does not compile, so this is MSVC-free and safe on every commit.
       - id: rustfmt
         name: rustfmt
-        entry: cargo fmt --manifest-path rust/Cargo.toml --
+        entry: cargo fmt --
         language: system
         types: [rust]
         pass_filenames: false
@@ -68,7 +68,7 @@ repos:
       # so they need the MSVC env on Windows — see the header note).
       - id: clippy
         name: clippy
-        entry: cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings
+        entry: cargo clippy --all-targets -- -D warnings
         language: system
         types: [rust]
         pass_filenames: false
@@ -76,7 +76,7 @@ repos:
 
       - id: cargo-test
         name: cargo test
-        entry: cargo test --manifest-path rust/Cargo.toml
+        entry: cargo test
         language: system
         types: [rust]
         pass_filenames: false

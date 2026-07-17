@@ -3,10 +3,31 @@ name = "dhbw_scraper_native"
 version = "0.3.0"
 edition = "2021"
 publish = false
+# Integration tests live in tests/scrape-engine/, which Cargo's autodiscovery
+# (tests/*.rs, tests/*/main.rs) does not match — they are declared explicitly
+# below. tests/ is shared with pytest; cargo ignores the .py files.
+autotests = false
 
 [lib]
 name = "_native"
+path = "src/scrape-engine/lib.rs"
 crate-type = ["cdylib", "rlib"]
+
+[[test]]
+name = "backfill"
+path = "tests/scrape-engine/backfill.rs"
+
+[[test]]
+name = "links_parity"
+path = "tests/scrape-engine/links_parity.rs"
+
+[[test]]
+name = "orchestration"
+path = "tests/scrape-engine/orchestration.rs"
+
+[[test]]
+name = "sitemap_parity"
+path = "tests/scrape-engine/sitemap_parity.rs"
 
 [dependencies]
 # NOTE: `extension-module` is intentionally NOT enabled here. It tells pyo3 not
