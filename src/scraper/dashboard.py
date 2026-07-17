@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import html
 import json
-import math
 import time
 from collections import Counter, defaultdict, deque
 from pathlib import Path
@@ -584,90 +583,163 @@ def _esc(x) -> str:
     return html.escape(str(x))
 
 
-def _link_graph_svg(g: dict) -> str:
-    """Render the host-level link graph as a self-contained inline SVG.
+_VENDOR = Path(__file__).parent / "vendor"
 
-    Deterministic circular layout (no randomness, no external libs): ``site`` hosts
-    are clustered before ``external`` ones and placed evenly on a ring; cross-host
-    edges are drawn as centre-bundled Bezier curves whose width tracks their weight.
-    Colours are CSS custom properties, so the graph re-themes with the page toggle.
-    Falls back to a warning box when there is nothing (cross-host) to draw.
-    """
-    nodes, edges = g["nodes"], g["edges"]
-    if not nodes or not edges:
-        return (
-            '<p class="warnbox">No cross-host links to graph yet — re-run the '
-            "crawl (<code>fetch</code>) to rebuild the edge list from stored "
-            "HTML, then regenerate this report.</p>"
-        )
 
-    w, h = 820, 560
-    cx, cy, r_ring = w / 2, h / 2, 195
-    n = len(nodes)
-    # Cluster site hosts before external, each group by descending degree.
-    order = sorted(
-        range(n), key=lambda i: (nodes[i]["kind"] != "site", -nodes[i]["deg"])
+def _vendored(name: str) -> str:
+    """Read a vendored, offline JS asset and inline it into the report so the file
+    stays self-contained. ``</script`` is neutralised so the blob can live inside a
+    ``<script>`` element without closing it early."""
+    return (
+        (_VENDOR / name).read_text(encoding="utf-8").replace("</script", "<\\/script")
     )
-    pos: dict[int, tuple[float, float, float]] = {}
-    for slot, i in enumerate(order):
-        ang = 2 * math.pi * slot / n - math.pi / 2
-        pos[i] = (cx + r_ring * math.cos(ang), cy + r_ring * math.sin(ang), ang)
 
-    max_w = max(e["w"] for e in edges)
-    max_deg = max(nd["deg"] for nd in nodes) or 1
-    ln_max_w = math.log1p(max_w) or 1.0
 
-    edge_svg = []
-    for e in edges:
-        x1, y1, _ = pos[e["s"]]
-        x2, y2, _ = pos[e["t"]]
-        mx, my = (x1 + x2) / 2, (y1 + y2) / 2
-        qx, qy = mx + (cx - mx) * 0.35, my + (cy - my) * 0.35  # bundle toward centre
-        sw = 0.6 + 3.4 * math.log1p(e["w"]) / ln_max_w
-        edge_svg.append(
-            f'<path d="M{x1:.1f},{y1:.1f} Q{qx:.1f},{qy:.1f} {x2:.1f},{y2:.1f}" '
-            f'fill="none" stroke="var(--bar)" stroke-width="{sw:.2f}" '
-            f'stroke-opacity="0.3" marker-end="url(#lg-arrow)"/>'
-        )
+def _discovery_section(disc: dict) -> str:
+    """Markup for the interactive per-site crawl-discovery tree.
 
-    node_svg, label_svg = [], []
-    for i, nd in enumerate(nodes):
-        x, y, ang = pos[i]
-        rad = 4 + 11 * math.sqrt(nd["deg"] / max_deg)
-        fill = "var(--accent)" if nd["kind"] == "site" else "var(--muted)"
-        tip = (
-            f'{nd["host"]} — {nd["out"]:,} out · {nd["in"]:,} in · '
-            f'{nd["self"]:,} internal'
+    Emits a campus ``<select>``, an ``<svg>`` mount and a legend; the tree itself is
+    drawn client-side by :data:`_TREE_JS` from the ``#report-data`` JSON island. No
+    scraped text is interpolated here (only config-supplied site names, escaped),
+    preserving the injection guarantee. Degrades to a warning box when nothing has
+    been crawled yet.
+    """
+    sites = disc.get("sites", [])
+    if not sites:
+        return (
+            '<p class="warnbox">No crawled URLs yet — run a <code>fetch</code> '
+            "first, then regenerate this report.</p>"
         )
-        node_svg.append(
-            f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{rad:.1f}" fill="{fill}" '
-            f'fill-opacity="0.9" stroke="var(--card)" stroke-width="1.5">'
-            f"<title>{_esc(tip)}</title></circle>"
-        )
-        lx = cx + (r_ring + 14) * math.cos(ang)
-        ly = cy + (r_ring + 14) * math.sin(ang)
-        anchor = "start" if math.cos(ang) >= 0 else "end"
-        label = nd["host"] if len(nd["host"]) <= 22 else nd["host"][:21] + "…"
-        label_svg.append(
-            f'<text x="{lx:.1f}" y="{ly:.1f}" text-anchor="{anchor}" '
-            f'dominant-baseline="middle" font-size="10" fill="var(--muted)">'
-            f"{_esc(label)}</text>"
-        )
-
-    defs = (
-        '<defs><marker id="lg-arrow" viewBox="0 0 10 10" refX="9" refY="5" '
-        'markerWidth="6" markerHeight="6" orient="auto-start-reverse">'
-        '<path d="M0,0 L10,5 L0,10 z" fill="var(--bar)" fill-opacity="0.55"/>'
-        "</marker></defs>"
+    default = disc.get("default", 0)
+    opts = "".join(
+        f'<option value="{i}"{" selected" if i == default else ""}>'
+        f'{_esc(s["name"])} · {s["total"]:,} pages'
+        f'{" · truncated" if s.get("truncated") else ""}</option>'
+        for i, s in enumerate(sites)
     )
     return (
-        f'<svg class="linkgraph" viewBox="0 0 {w} {h}" width="100%" '
-        f'role="img" aria-label="Host-level link graph">{defs}'
-        f'{"".join(edge_svg)}{"".join(node_svg)}{"".join(label_svg)}</svg>'
+        '<div class="disc-controls">'
+        '<label for="disc-site">Campus</label> '
+        f'<select id="disc-site" class="toggle">{opts}</select>'
+        '<span class="disc-hint">click a node to expand · scroll to zoom · '
+        "drag to pan</span></div>"
+        '<div class="graph-legend">'
+        '<span><i class="sw site"></i>page</span>'
+        '<span><i class="sw collapsed"></i>collapsed — click to expand</span>'
+        "<span>root → leaf = crawl discovery path</span></div>"
+        '<svg id="disc-svg" class="disctree" role="img" '
+        'aria-label="Crawl discovery tree"></svg>'
     )
 
 
-def render_html(d: dict) -> str:
+# Client-side collapsible tree. Reads the #report-data island, builds a d3
+# hierarchy per site from the flat (parent-index) node arrays, collapses below the
+# first two levels, and wires click-to-expand + zoom/pan. Static code -- no crawled
+# text reaches the DOM through here (labels/tooltips come from the JSON island).
+_TREE_JS = r"""
+(function () {
+  var el = document.getElementById("disc-svg");
+  if (!el || typeof d3 === "undefined") return;
+  var island = document.getElementById("report-data");
+  var data;
+  try { data = JSON.parse(island.textContent); } catch (e) { return; }
+  var disc = (data && data.discovery) || { sites: [] };
+  if (!disc.sites.length) return;
+
+  var sel = document.getElementById("disc-site");
+  var svg = d3.select("#disc-svg");
+  // Match the SVG user space to the element's real pixel box so the tree fills the
+  // full-screen height instead of being letterboxed by a fixed viewBox.
+  var rect = el.getBoundingClientRect();
+  var W = Math.round(rect.width) || 1000, H = Math.round(rect.height) || 620;
+  svg.attr("viewBox", "0 0 " + W + " " + H).attr("width", "100%");
+  var gAll = svg.append("g");
+  var gLink = gAll.append("g").attr("class", "disc-links");
+  var gNode = gAll.append("g").attr("class", "disc-nodes");
+  var zoom = d3.zoom().scaleExtent([0.04, 3]).on("zoom", function (ev) {
+    gAll.attr("transform", ev.transform);
+  });
+  svg.call(zoom);
+
+  var dx = 16, dy = 210, host = "", root = null;
+
+  disc.sites.forEach(function (s) {
+    (s.nodes || []).forEach(function (n, i) { n.__i = i; });
+  });
+
+  function seg(u) {
+    var p = u.split("?")[0].replace(/\/+$/, "");
+    var s = p.substring(p.lastIndexOf("/") + 1);
+    return s || "(home)";
+  }
+  function label(d) {
+    var n = d.data;
+    if (n.st === "root") return host || "/";
+    if (n.st === "more") return n.u;
+    return seg(n.u);
+  }
+  function tip(d) {
+    var n = d.data;
+    if (n.st === "root") return host;
+    if (n.st === "more") return n.u + " (collapsed subtree)";
+    return "https://" + (n.h || host) + n.u + "  ·  " + n.st;
+  }
+  function key(d) {
+    return d.ancestors().map(function (a) { return a.data.__i; }).join(".");
+  }
+
+  function show(site) {
+    host = site.host || "";
+    var nodes = site.nodes || [];
+    nodes.forEach(function (n) { n.__c = []; });
+    nodes.forEach(function (n) { if (n.p >= 0) nodes[n.p].__c.push(n); });
+    root = d3.hierarchy(nodes[0], function (n) { return n.__c; });
+    root.descendants().forEach(function (d) {
+      if (d.depth >= 2 && d.children) { d._children = d.children; d.children = null; }
+    });
+    render();
+    svg.call(zoom.transform, d3.zoomIdentity.translate(80, H / 2));
+  }
+
+  function toggle(ev, d) {
+    if (d.children) { d._children = d.children; d.children = null; }
+    else { d.children = d._children; d._children = null; }
+    render();
+  }
+
+  function render() {
+    d3.tree().nodeSize([dx, dy])(root);
+    var link = d3.linkHorizontal().x(function (d) { return d.y; }).y(function (d) { return d.x; });
+    gLink.selectAll("path").data(root.links(), function (l) { return key(l.target); })
+      .join("path").attr("class", "disc-link").attr("d", link);
+    var node = gNode.selectAll("g.disc-node").data(root.descendants(), key)
+      .join(function (enter) {
+        var g = enter.append("g").attr("class", "disc-node").on("click", toggle);
+        g.append("circle").attr("r", 3.6);
+        g.append("title");
+        g.append("text").attr("dy", "0.32em");
+        return g;
+      });
+    node.attr("transform", function (d) { return "translate(" + d.y + "," + d.x + ")"; });
+    node.select("circle").attr("class", function (d) {
+      if (d.data.st === "more") return "more";
+      if (d._children) return "collapsed";
+      return d.data.st === "root" ? "root" : "leaf";
+    });
+    node.select("title").text(tip);
+    node.select("text")
+      .attr("x", function (d) { return (d.children || d._children) ? -8 : 8; })
+      .attr("text-anchor", function (d) { return (d.children || d._children) ? "end" : "start"; })
+      .text(label);
+  }
+
+  if (sel) sel.addEventListener("change", function () { show(disc.sites[+sel.value]); });
+  show(disc.sites[disc.default || 0]);
+})();
+"""
+
+
+def render_html(d: dict, *, graph_href: str = "discovery.html") -> str:
     m = d["meta"]
     t = d["totals"]
 
@@ -823,24 +895,24 @@ def render_html(d: dict) -> str:
             'the link graph is effectively unpopulated and should not be trusted yet.</p>'
         )
 
-    # Host-level link graph (static SVG) + its caption/legend.
-    g = lk["graph"]
-    graph_svg = _link_graph_svg(g)
-    if g["nodes"] and g["edges"]:
-        graph_caption = (
-            f'<div class="sub" style="margin:2px 0 10px">Host-level view · '
-            f'{g["n_hosts"]:,} hosts total, showing the {len(g["nodes"])} most-connected · '
-            f'{g["n_edges_shown"]:,} of {g["n_edges_total"]:,} cross-host links drawn.</div>'
-        )
-        graph_legend = (
-            '<div class="graph-legend">'
-            '<span><i class="sw site"></i>crawled host</span>'
-            '<span><i class="sw ext"></i>external host</span>'
-            "<span>node size = degree</span>"
-            "<span>edge width = link count</span></div>"
+    # The interactive discovery tree lives on its own full-screen page
+    # (render_graph_html) so it has room to breathe; the report just links to it.
+    # The heavy per-URL `discovery` payload and the vendored d3 are NOT inlined here.
+    disc = d["discovery"]
+    n_sites = len(disc["sites"])
+    n_pages = sum(s["total"] for s in disc["sites"])
+    if n_sites:
+        disc_link = (
+            f'<p class="sub" style="margin:2px 0 0">{n_pages:,} crawled pages across '
+            f'{n_sites} campus {"tree" if n_sites == 1 else "trees"}. '
+            f'<a class="treelink" href="{_esc(graph_href)}">'
+            "Open the interactive discovery tree →</a> (full-screen, its own page).</p>"
         )
     else:
-        graph_caption = graph_legend = ""
+        disc_link = (
+            '<p class="warnbox">No crawled URLs yet — run a <code>fetch</code> '
+            "first, then regenerate this report.</p>"
+        )
 
     fr = d["freshness"]
     # `</` is neutralised before this lands inside <script>...</script>. json.dumps
@@ -849,8 +921,13 @@ def render_html(d: dict) -> str:
     # whatever a scraped page contained. A single `</script>` substring would close
     # the element early and turn the rest of the payload into live DOM in the
     # operator's browser. `<\/` is the same string to a JSON parser, so the data
-    # survives intact; every visible sink already goes through _esc().
-    payload = json.dumps(d, ensure_ascii=False, indent=0).replace("</", "<\\/")
+    # survives intact; every visible sink already goes through _esc(). The heavy
+    # per-URL `discovery` tree is dropped here -- only the graph page needs it.
+    payload = json.dumps(
+        {k: v for k, v in d.items() if k != "discovery"},
+        ensure_ascii=False,
+        indent=0,
+    ).replace("</", "<\\/")
 
     return f"""<title>DHBW corpus report</title>
 <style>
@@ -911,14 +988,8 @@ td.mono, .mono {{ font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospa
 .barcell {{ width:45%; }}
 .warnbox {{ background:color-mix(in srgb,var(--warn) 12%,transparent); border:1px solid var(--warn);
   border-radius:8px; padding:10px 12px; font-size:13px; }}
-.graph-legend {{ display:flex; flex-wrap:wrap; gap:14px; margin:0 0 10px; color:var(--muted);
-  font-size:11.5px; align-items:center; }}
-.graph-legend .sw {{ display:inline-block; width:10px; height:10px; border-radius:50%;
-  margin-right:5px; vertical-align:-1px; }}
-.graph-legend .sw.site {{ background:var(--accent); }}
-.graph-legend .sw.ext {{ background:var(--muted); }}
-svg.linkgraph {{ display:block; width:100%; max-width:820px; height:auto; margin:0 auto;
-  background:var(--card); border:1px solid var(--line); border-radius:10px; }}
+.treelink {{ color:var(--accent); font-weight:600; text-decoration:none; }}
+.treelink:hover {{ text-decoration:underline; }}
 .toggle {{ cursor:pointer; background:var(--card); border:1px solid var(--line); color:var(--ink);
   border-radius:6px; padding:5px 10px; font-size:12px; }}
 footer {{ margin-top:40px; color:var(--muted); font-size:12px; border-top:1px solid var(--line); padding-top:14px; }}
@@ -960,13 +1031,11 @@ footer {{ margin-top:40px; color:var(--muted); font-size:12px; border-top:1px so
   {simple_table("Top crawl errors", clerr_rows, ["Error", "Count"])}
   {simple_table("Errors by site (work_state=error)", errsite_rows, ["Site", "Errors", "By HTTP status"])}
 
-  <section><h2>Link graph</h2>
+  <section><h2>Crawl discovery tree</h2>
     {links_warn}
-    <div class="sub">{lk['total']:,} edges · {lk['in_domain']:,} in-domain · {lk['external']:,} external ·
+    <div class="sub">{lk['total']:,} link edges · {lk['in_domain']:,} in-domain · {lk['external']:,} external ·
       {lk['distinct_src']:,} distinct sources · {lk['distinct_dst']:,} distinct targets</div>
-    {graph_caption}
-    {graph_legend}
-    {graph_svg}
+    {disc_link}
   </section>
   {simple_table("Top external link targets", ext_rows, ["Host", "Links"])}
 
@@ -982,8 +1051,99 @@ footer {{ margin-top:40px; color:var(--muted); font-size:12px; border-top:1px so
 """
 
 
-def write_report(conn, *, sites, min_words: int, db_path: Path, out_path: Path) -> Path:
+def render_graph_html(d: dict, *, report_href: str = "analysis.html") -> str:
+    """Standalone full-screen page for the interactive crawl-discovery tree.
+
+    A slim header (back-link to the report + campus ``<select>`` + theme toggle) over
+    an ``<svg>`` that fills the viewport, so the tree has far more room than the boxed
+    report section. Self-contained: its own theme CSS, its own ``#report-data`` island
+    carrying only ``{"discovery": ...}``, and the vendored d3 + tree script inlined.
+    """
+    disc = d["discovery"]
+    section = _discovery_section(disc)
+    # Only the discovery slice travels to this page (not the whole analysis dict).
+    # `</` is neutralised so scraped URL paths cannot close the <script> island early.
+    payload = json.dumps({"discovery": disc}, ensure_ascii=False).replace("</", "<\\/")
+    scripts = (
+        f'<script>{_vendored("d3.v7.min.js")}</script>\n<script>{_TREE_JS}</script>'
+    )
+    return f"""<title>DHBW crawl discovery tree</title>
+<style>
+:root {{ --bg:#f6f7f9; --card:#fff; --ink:#1a1d21; --muted:#6b7280; --line:#e5e7eb;
+  --accent:#2563eb; --warn:#d97706; --ok:#059669; }}
+@media (prefers-color-scheme: dark) {{
+  :root {{ --bg:#0d1117; --card:#161b22; --ink:#e6edf3; --muted:#8b949e; --line:#30363d;
+          --accent:#58a6ff; }} }}
+:root[data-theme="dark"] {{ --bg:#0d1117; --card:#161b22; --ink:#e6edf3; --muted:#8b949e;
+  --line:#30363d; --accent:#58a6ff; }}
+:root[data-theme="light"] {{ --bg:#f6f7f9; --card:#fff; --ink:#1a1d21; --muted:#6b7280;
+  --line:#e5e7eb; --accent:#2563eb; }}
+* {{ box-sizing:border-box; }}
+body {{ margin:0; background:var(--bg); color:var(--ink);
+  font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }}
+.ghead {{ display:flex; flex-wrap:wrap; align-items:center; gap:14px; padding:12px 18px;
+  border-bottom:1px solid var(--line); }}
+.ghead h1 {{ font-size:16px; margin:0; }}
+.ghead a.back {{ color:var(--accent); text-decoration:none; font-weight:600; font-size:13px; }}
+.ghead a.back:hover {{ text-decoration:underline; }}
+.gwrap {{ padding:12px 18px; }}
+.sub {{ color:var(--muted); font-size:12.5px; }}
+.warnbox {{ background:color-mix(in srgb,var(--warn) 12%,transparent); border:1px solid var(--warn);
+  border-radius:8px; padding:10px 12px; font-size:13px; margin:18px; }}
+.disc-controls {{ display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin:0 0 10px; }}
+.disc-controls label {{ color:var(--muted); font-size:12px; }}
+.disc-hint {{ color:var(--muted); font-size:11.5px; }}
+.graph-legend {{ display:flex; flex-wrap:wrap; gap:14px; margin:0 0 10px; color:var(--muted);
+  font-size:11.5px; align-items:center; }}
+.graph-legend .sw {{ display:inline-block; width:10px; height:10px; border-radius:50%;
+  margin-right:5px; vertical-align:-1px; }}
+.graph-legend .sw.site {{ background:var(--accent); }}
+.graph-legend .sw.collapsed {{ background:var(--warn); }}
+svg.disctree {{ display:block; width:100%; height:calc(100vh - 150px); min-height:420px;
+  background:var(--card); border:1px solid var(--line); border-radius:10px; touch-action:none; }}
+.disc-node {{ cursor:pointer; }}
+.disc-node text {{ font-size:11px; fill:var(--ink); paint-order:stroke;
+  stroke:var(--card); stroke-width:3px; stroke-linejoin:round; }}
+.disc-node circle {{ stroke:var(--card); stroke-width:1.5px; }}
+.disc-node circle.leaf {{ fill:var(--accent); }}
+.disc-node circle.root {{ fill:var(--ok); }}
+.disc-node circle.collapsed {{ fill:var(--warn); }}
+.disc-node circle.more {{ fill:var(--muted); }}
+.disc-link {{ fill:none; stroke:var(--line); stroke-width:1.2px; }}
+.toggle {{ cursor:pointer; background:var(--card); border:1px solid var(--line); color:var(--ink);
+  border-radius:6px; padding:5px 10px; font-size:12px; }}
+</style>
+<div class="ghead">
+  <a class="back" href="{_esc(report_href)}">← Back to report</a>
+  <h1>DHBW crawl discovery tree</h1>
+  <button class="toggle" onclick="var r=document.documentElement;r.dataset.theme=r.dataset.theme==='dark'?'light':'dark'">◐ theme</button>
+</div>
+<div class="gwrap">
+{section}
+</div>
+<script id="report-data" type="application/json">{payload}</script>
+{scripts}
+"""
+
+
+def write_report(
+    conn, *, sites, min_words: int, db_path: Path, out_path: Path
+) -> tuple[Path, Path]:
+    """Write the report and its sibling discovery-tree page. Returns both paths.
+
+    The tree lives on its own full-screen page (``discovery.html`` next to the
+    report) so it isn't cramped in the report layout; the two cross-link by
+    basename, which resolves over ``file://``.
+    """
     data = collect_analysis(conn, sites=sites, min_words=min_words, db_path=db_path)
+    graph_path = out_path.with_name("discovery.html")
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text("<!doctype html>\n" + render_html(data), encoding="utf-8")
-    return out_path
+    out_path.write_text(
+        "<!doctype html>\n" + render_html(data, graph_href=graph_path.name),
+        encoding="utf-8",
+    )
+    graph_path.write_text(
+        "<!doctype html>\n" + render_graph_html(data, report_href=out_path.name),
+        encoding="utf-8",
+    )
+    return out_path, graph_path

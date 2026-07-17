@@ -406,7 +406,8 @@ src/scraper/         Phase 2 + CLI (pure Python)
   quality.py       moderate quality gate (min words, nav ratio, login/cookie/error filters)
   extract.py       phase 2: extract, quality-gate, materialize documents
   progress.py      stderr progress reporting (TTY status line / plain log lines)
-  dashboard.py     self-contained read-only HTML analysis report (backs `report`)
+  dashboard.py     self-contained read-only HTML analysis report (backs `report`);
+                   KPIs + an interactive per-site crawl-discovery tree (inlined d3)
   cli.py           `fetch` / `extract` / `run` / `stats` / `delta` entrypoints
   __main__.py      `python -m scraper` entry point -> cli.main
   _engine.pyd      built Rust extension (scraper._engine), gitignored

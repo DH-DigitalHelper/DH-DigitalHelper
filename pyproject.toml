@@ -38,6 +38,10 @@ build-backend = "maturin"
 python-source = "src"
 module-name = "scraper._engine"
 features = ["pyo3/extension-module"]
+# Ship vendored, inlined browser assets (d3 for the report's discovery tree) in the
+# wheel. dashboard.py reads them at runtime via __file__; the editable dev install
+# resolves that to the source tree, but a built wheel needs them declared here.
+include = ["src/scraper/vendor/*.js"]
 
 # Ruff's formatter (and linter) auto-discover this section from pyproject.toml no
 # matter how ruff is invoked — the pre-commit `ruff-format` hook, CI's

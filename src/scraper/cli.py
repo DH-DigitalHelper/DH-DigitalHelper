@@ -139,7 +139,7 @@ def _cmd_report(args) -> int:
     out = Path(args.output) if args.output else db.parent / "analysis.html"
     conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
     try:
-        dashboard.write_report(
+        out, graph = dashboard.write_report(
             conn,
             sites=config.sites,
             min_words=config.extract.min_words,
@@ -149,6 +149,7 @@ def _cmd_report(args) -> int:
     finally:
         conn.close()
     print(f"wrote {out}")
+    print(f"wrote {graph} (interactive crawl discovery tree, linked from the report)")
     print("open it in a browser; to refresh, re-run this command and reload the page.")
     if args.open:
         webbrowser.open(out.resolve().as_uri())

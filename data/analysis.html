@@ -58,14 +58,8 @@ td.mono, .mono { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospac
 .barcell { width:45%; }
 .warnbox { background:color-mix(in srgb,var(--warn) 12%,transparent); border:1px solid var(--warn);
   border-radius:8px; padding:10px 12px; font-size:13px; }
-.graph-legend { display:flex; flex-wrap:wrap; gap:14px; margin:0 0 10px; color:var(--muted);
-  font-size:11.5px; align-items:center; }
-.graph-legend .sw { display:inline-block; width:10px; height:10px; border-radius:50%;
-  margin-right:5px; vertical-align:-1px; }
-.graph-legend .sw.site { background:var(--accent); }
-.graph-legend .sw.ext { background:var(--muted); }
-svg.linkgraph { display:block; width:100%; max-width:820px; height:auto; margin:0 auto;
-  background:var(--card); border:1px solid var(--line); border-radius:10px; }
+.treelink { color:var(--accent); font-weight:600; text-decoration:none; }
+.treelink:hover { text-decoration:underline; }
 .toggle { cursor:pointer; background:var(--card); border:1px solid var(--line); color:var(--ink);
   border-radius:6px; padding:5px 10px; font-size:12px; }
 footer { margin-top:40px; color:var(--muted); font-size:12px; border-top:1px solid var(--line); padding-top:14px; }
@@ -75,68 +69,66 @@ footer { margin-top:40px; color:var(--muted); font-size:12px; border-top:1px sol
   <header>
     <div>
       <h1>DHBW corpus — scrape &amp; extract report</h1>
-      <div class="sub">Generated 2026-07-17 16:24:12 UTC · DB 3.8 GB
-        (modified 2026-07-17 16:22:10) · gate <code>min_words=50</code></div>
+      <div class="sub">Generated 2026-07-17 22:04:50 UTC · DB 3.8 GB
+        (modified 2026-07-17 20:53:38) · gate <code>min_words=50</code></div>
     </div>
     <button class="toggle" onclick="var r=document.documentElement;r.dataset.theme=r.dataset.theme==='dark'?'light':'dark'">◐ theme</button>
   </header>
 
   <div class="sub" style="margin-top:8px">To refresh: re-run <code>uv run dhbw-scraper report</code> and reload this page.</div>
 
-  <div class="kpis"><div class="kpi"><div class="kpi-val">46,389</div><div class="kpi-label">Documents</div><div class="kpi-sub">present, deduplicated</div></div><div class="kpi"><div class="kpi-val">35.3 M</div><div class="kpi-label">Total words</div><div class="kpi-sub">HTML 10.3M · PDF 25.0M</div></div><div class="kpi"><div class="kpi-val">100,285</div><div class="kpi-label">Raw blobs</div><div class="kpi-sub">27.7 GB cached</div></div><div class="kpi"><div class="kpi-val">98.0%</div><div class="kpi-label">Extraction pass</div><div class="kpi-sub">1,967 rejected · 54 errored</div></div><div class="kpi"><div class="kpi-val">112,826</div><div class="kpi-label">URLs crawled</div><div class="kpi-sub">106,648 done · 6,178 error</div></div><div class="kpi"><div class="kpi-val">50%</div><div class="kpi-label">Text-dedup</div><div class="kpi-sub">92,105 candidates → 46,389 unique</div></div></div>
+  <div class="kpis"><div class="kpi"><div class="kpi-val">46,423</div><div class="kpi-label">Documents</div><div class="kpi-sub">present, deduplicated</div></div><div class="kpi"><div class="kpi-val">35.8 M</div><div class="kpi-label">Total words</div><div class="kpi-sub">HTML 10.3M · PDF 25.6M</div></div><div class="kpi"><div class="kpi-val">100,905</div><div class="kpi-label">Raw blobs</div><div class="kpi-sub">28.0 GB cached</div></div><div class="kpi"><div class="kpi-val">97.5%</div><div class="kpi-label">Extraction pass</div><div class="kpi-sub">1,933 rejected · 20 errored</div></div><div class="kpi"><div class="kpi-val">114,845</div><div class="kpi-label">URLs crawled</div><div class="kpi-sub">107,264 done · 6,186 error</div></div><div class="kpi"><div class="kpi-val">50%</div><div class="kpi-label">Text-dedup</div><div class="kpi-sub">92,144 candidates → 46,423 unique</div></div></div>
 
-  <section><h2>Findings</h2><div class="finding crit"><span class="badge crit">CRITICAL</span><div><div class="f-title">villingen_schwenningen is under-covered</div><div class="f-detail">121 documents vs a per-site median of 3,377; queue shows 414 errors (66% of fetch attempts).</div></div></div><div class="finding warn"><span class="badge warn">WARNING</span><div><div class="f-title">8,366 documents below min_words=50</div><div class="f-detail">18% of the corpus is thinner than the current quality gate (min 10 words) -- legacy rows from an extract pass with a looser threshold. A full re-extract would normalize them.</div></div></div><div class="finding info"><span class="badge info">INFO</span><div><div class="f-title">stuttgart has elevated fetch errors</div><div class="f-detail">4,004 errored URLs (18% of attempts) -- mostly connection refused/timeout, worth one gentle retry.</div></div></div><div class="finding info"><span class="badge info">INFO</span><div><div class="f-title">karlsruhe has elevated fetch errors</div><div class="f-detail">1,660 errored URLs (22% of attempts) -- mostly connection refused/timeout, worth one gentle retry.</div></div></div></section>
+  <section><h2>Findings</h2><div class="finding crit"><span class="badge crit">CRITICAL</span><div><div class="f-title">villingen_schwenningen is under-covered</div><div class="f-detail">121 documents vs a per-site median of 3,406; queue shows 414 errors (66% of fetch attempts).</div></div></div><div class="finding warn"><span class="badge warn">WARNING</span><div><div class="f-title">8,366 documents below min_words=50</div><div class="f-detail">18% of the corpus is thinner than the current quality gate (min 10 words) -- legacy rows from an extract pass with a looser threshold. A full re-extract would normalize them.</div></div></div><div class="finding info"><span class="badge info">INFO</span><div><div class="f-title">stuttgart has elevated fetch errors</div><div class="f-detail">4,006 errored URLs (18% of attempts) -- mostly connection refused/timeout, worth one gentle retry.</div></div></div><div class="finding info"><span class="badge info">INFO</span><div><div class="f-title">karlsruhe has elevated fetch errors</div><div class="f-detail">1,660 errored URLs (22% of attempts) -- mostly connection refused/timeout, worth one gentle retry.</div></div></div></section>
 
   <section><h2>Per-site coverage</h2>
     <table><thead><tr><th>Site</th><th class="num">Documents</th><th class="num">Avg words</th>
       <th class="num">Fetched</th><th class="num">Errors</th><th class="num">Error rate</th></tr></thead>
-      <tbody><tr><td class="mono">heidenheim</td><td class="num">3,704<div class="minibar"><span style="width:30.6%"></span></div></td><td class="num">492</td><td class="num">6,511</td><td class="num ">5</td><td class="num ">0.1%</td></tr><tr><td class="mono">dhbw</td><td class="num">3,377<div class="minibar"><span style="width:27.9%"></span></div></td><td class="num">3,818</td><td class="num">5,560</td><td class="num ">0</td><td class="num ">0.0%</td></tr><tr><td class="mono">mannheim</td><td class="num">9,124<div class="minibar"><span style="width:75.5%"></span></div></td><td class="num">449</td><td class="num">18,337</td><td class="num ">5</td><td class="num ">0.0%</td></tr><tr><td class="mono">stuttgart</td><td class="num">12,087<div class="minibar"><span style="width:100.0%"></span></div></td><td class="num">629</td><td class="num">18,295</td><td class="num hot">4,004</td><td class="num hot">18.0%</td></tr><tr><td class="mono">karlsruhe</td><td class="num">2,599<div class="minibar"><span style="width:21.5%"></span></div></td><td class="num">483</td><td class="num">6,029</td><td class="num hot">1,660</td><td class="num hot">21.6%</td></tr><tr><td class="mono">mosbach</td><td class="num">5,414<div class="minibar"><span style="width:44.8%"></span></div></td><td class="num">473</td><td class="num">24,173</td><td class="num ">45</td><td class="num ">0.2%</td></tr><tr><td class="mono">heilbronn</td><td class="num">2,372<div class="minibar"><span style="width:19.6%"></span></div></td><td class="num">351</td><td class="num">10,388</td><td class="num ">23</td><td class="num ">0.2%</td></tr><tr><td class="mono">ravensburg</td><td class="num">4,328<div class="minibar"><span style="width:35.8%"></span></div></td><td class="num">553</td><td class="num">9,148</td><td class="num ">6</td><td class="num ">0.1%</td></tr><tr><td class="mono">loerrach</td><td class="num">2,054<div class="minibar"><span style="width:17.0%"></span></div></td><td class="num">348</td><td class="num">6,535</td><td class="num ">15</td><td class="num ">0.2%</td></tr><tr><td class="mono">villingen_schwenningen</td><td class="num">121<div class="minibar"><span style="width:1.0%"></span></div></td><td class="num">335</td><td class="num">216</td><td class="num hot">414</td><td class="num hot">65.7%</td></tr><tr><td class="mono">cas</td><td class="num">1,209<div class="minibar"><span style="width:10.0%"></span></div></td><td class="num">888</td><td class="num">1,456</td><td class="num ">1</td><td class="num ">0.1%</td></tr></tbody></table></section>
+      <tbody><tr><td class="mono">heidenheim</td><td class="num">3,709<div class="minibar"><span style="width:30.7%"></span></div></td><td class="num">493</td><td class="num">6,510</td><td class="num ">5</td><td class="num ">0.1%</td></tr><tr><td class="mono">dhbw</td><td class="num">3,406<div class="minibar"><span style="width:28.2%"></span></div></td><td class="num">3,948</td><td class="num">5,559</td><td class="num ">0</td><td class="num ">0.0%</td></tr><tr><td class="mono">mannheim</td><td class="num">9,124<div class="minibar"><span style="width:75.5%"></span></div></td><td class="num">449</td><td class="num">18,333</td><td class="num ">5</td><td class="num ">0.0%</td></tr><tr><td class="mono">stuttgart</td><td class="num">12,087<div class="minibar"><span style="width:100.0%"></span></div></td><td class="num">629</td><td class="num">18,750</td><td class="num hot">4,006</td><td class="num hot">17.6%</td></tr><tr><td class="mono">karlsruhe</td><td class="num">2,599<div class="minibar"><span style="width:21.5%"></span></div></td><td class="num">483</td><td class="num">6,029</td><td class="num hot">1,660</td><td class="num hot">21.6%</td></tr><tr><td class="mono">mosbach</td><td class="num">5,414<div class="minibar"><span style="width:44.8%"></span></div></td><td class="num">473</td><td class="num">24,172</td><td class="num ">45</td><td class="num ">0.2%</td></tr><tr><td class="mono">heilbronn</td><td class="num">2,372<div class="minibar"><span style="width:19.6%"></span></div></td><td class="num">351</td><td class="num">10,385</td><td class="num ">23</td><td class="num ">0.2%</td></tr><tr><td class="mono">ravensburg</td><td class="num">4,328<div class="minibar"><span style="width:35.8%"></span></div></td><td class="num">553</td><td class="num">9,144</td><td class="num ">6</td><td class="num ">0.1%</td></tr><tr><td class="mono">loerrach</td><td class="num">2,054<div class="minibar"><span style="width:17.0%"></span></div></td><td class="num">348</td><td class="num">6,535</td><td class="num ">15</td><td class="num ">0.2%</td></tr><tr><td class="mono">villingen_schwenningen</td><td class="num">121<div class="minibar"><span style="width:1.0%"></span></div></td><td class="num">335</td><td class="num">216</td><td class="num hot">414</td><td class="num hot">65.7%</td></tr><tr><td class="mono">cas</td><td class="num">1,209<div class="minibar"><span style="width:10.0%"></span></div></td><td class="num">888</td><td class="num">1,631</td><td class="num ">7</td><td class="num ">0.4%</td></tr></tbody></table></section>
 
   <section><h2>Word-count distribution</h2>
-    <div class="sub" style="margin-bottom:8px">min 10 · p10 30 · p25 66 · median 217 · p75 381 · p90 727 · p99 17,316 · max 172,048</div>
+    <div class="sub" style="margin-bottom:8px">min 10 · p10 30 · p25 66 · median 217 · p75 382 · p90 732 · p99 17,800 · max 172,048</div>
     <table><thead><tr><th>Words</th><th class="num">Docs</th><th></th></tr></thead>
-      <tbody><tr><td class="mono">0-50</td><td class="num">8,366</td><td class="barcell"><div class="minibar wide"><span style="width:58.2%"></span></div></td></tr><tr><td class="mono">50-100</td><td class="num">6,603</td><td class="barcell"><div class="minibar wide"><span style="width:45.9%"></span></div></td></tr><tr><td class="mono">100-250</td><td class="num">9,976</td><td class="barcell"><div class="minibar wide"><span style="width:69.3%"></span></div></td></tr><tr><td class="mono">250-500</td><td class="num">14,386</td><td class="barcell"><div class="minibar wide"><span style="width:100.0%"></span></div></td></tr><tr><td class="mono">500-1,000</td><td class="num">3,684</td><td class="barcell"><div class="minibar wide"><span style="width:25.6%"></span></div></td></tr><tr><td class="mono">1,000-2,500</td><td class="num">1,803</td><td class="barcell"><div class="minibar wide"><span style="width:12.5%"></span></div></td></tr><tr><td class="mono">2,500-5,000</td><td class="num">535</td><td class="barcell"><div class="minibar wide"><span style="width:3.7%"></span></div></td></tr><tr><td class="mono">5,000+</td><td class="num">1,036</td><td class="barcell"><div class="minibar wide"><span style="width:7.2%"></span></div></td></tr></tbody></table></section>
+      <tbody><tr><td class="mono">0-50</td><td class="num">8,366</td><td class="barcell"><div class="minibar wide"><span style="width:58.2%"></span></div></td></tr><tr><td class="mono">50-100</td><td class="num">6,603</td><td class="barcell"><div class="minibar wide"><span style="width:45.9%"></span></div></td></tr><tr><td class="mono">100-250</td><td class="num">9,976</td><td class="barcell"><div class="minibar wide"><span style="width:69.3%"></span></div></td></tr><tr><td class="mono">250-500</td><td class="num">14,386</td><td class="barcell"><div class="minibar wide"><span style="width:100.0%"></span></div></td></tr><tr><td class="mono">500-1,000</td><td class="num">3,685</td><td class="barcell"><div class="minibar wide"><span style="width:25.6%"></span></div></td></tr><tr><td class="mono">1,000-2,500</td><td class="num">1,807</td><td class="barcell"><div class="minibar wide"><span style="width:12.6%"></span></div></td></tr><tr><td class="mono">2,500-5,000</td><td class="num">535</td><td class="barcell"><div class="minibar wide"><span style="width:3.7%"></span></div></td></tr><tr><td class="mono">5,000+</td><td class="num">1,065</td><td class="barcell"><div class="minibar wide"><span style="width:7.4%"></span></div></td></tr></tbody></table></section>
 
   <div class="grid2">
     <section><h2>Quality-gate rejects</h2><table><thead><tr><th>Reason</th><th>Count</th></tr></thead><tbody><tr><td class="mono">empty</td><td class="num">1,590</td></tr><tr><td class="mono">too short: 3 words</td><td class="num">71</td></tr><tr><td class="mono">too short: 9 words</td><td class="num">32</td></tr><tr><td class="mono">too short: 8 words</td><td class="num">30</td></tr><tr><td class="mono">too short: 4 words</td><td class="num">26</td></tr><tr><td class="mono">too short: 2 words</td><td class="num">20</td></tr><tr><td class="mono">too short: 15 words</td><td class="num">20</td></tr><tr><td class="mono">too short: 6 words</td><td class="num">18</td></tr><tr><td class="mono">too short: 7 words</td><td class="num">12</td></tr><tr><td class="mono">too short: 5 words</td><td class="num">9</td></tr><tr><td class="mono">too short: 1 words</td><td class="num">9</td></tr><tr><td class="mono">too short: 38 words</td><td class="num">6</td></tr></tbody></table></section>
-    <section><h2>Extraction errors</h2><table><thead><tr><th>Error</th><th>Count</th></tr></thead><tbody><tr><td class="mono">&#x27;NoneType&#x27; object has no attribute &#x27;h_lines&#x27;</td><td class="num">26</td></tr><tr><td class="mono">cannot initialize - document still encrypted</td><td class="num">20</td></tr><tr><td class="mono">A process in the process pool was terminated abruptly while the future was running or pending.</td><td class="num">8</td></tr></tbody></table></section>
-    <section><h2>Crawl outcomes</h2><table><thead><tr><th>Outcome</th><th>Count</th></tr></thead><tbody><tr><td class="mono">new</td><td class="num">1,059,464</td></tr><tr><td class="mono">error</td><td class="num">12,419</td></tr><tr><td class="mono">skipped</td><td class="num">11,749</td></tr><tr><td class="mono">unchanged</td><td class="num">7,359</td></tr><tr><td class="mono">removed</td><td class="num">977</td></tr><tr><td class="mono">changed</td><td class="num">43</td></tr></tbody></table></section>
-    <section><h2>HTTP status</h2><table><thead><tr><th>Status</th><th>Count</th></tr></thead><tbody><tr><td class="mono">200</td><td class="num">1,078,139</td></tr><tr><td class="mono">0</td><td class="num">12,187</td></tr><tr><td class="mono">404</td><td class="num">974</td></tr><tr><td class="mono">304</td><td class="num">477</td></tr><tr><td class="mono">429</td><td class="num">119</td></tr><tr><td class="mono">400</td><td class="num">49</td></tr><tr><td class="mono">500</td><td class="num">35</td></tr><tr><td class="mono">401</td><td class="num">14</td></tr><tr><td class="mono">302</td><td class="num">7</td></tr><tr><td class="mono">403</td><td class="num">5</td></tr><tr><td class="mono">410</td><td class="num">3</td></tr><tr><td class="mono">301</td><td class="num">2</td></tr></tbody></table></section>
+    <section><h2>Extraction errors</h2><table><thead><tr><th>Error</th><th>Count</th></tr></thead><tbody><tr><td class="mono">cannot initialize - document still encrypted</td><td class="num">20</td></tr></tbody></table></section>
+    <section><h2>Crawl outcomes</h2><table><thead><tr><th>Outcome</th><th>Count</th></tr></thead><tbody><tr><td class="mono">new</td><td class="num">1,060,084</td></tr><tr><td class="mono">error</td><td class="num">12,427</td></tr><tr><td class="mono">skipped</td><td class="num">11,749</td></tr><tr><td class="mono">unchanged</td><td class="num">7,359</td></tr><tr><td class="mono">removed</td><td class="num">987</td></tr><tr><td class="mono">changed</td><td class="num">43</td></tr></tbody></table></section>
+    <section><h2>HTTP status</h2><table><thead><tr><th>Status</th><th>Count</th></tr></thead><tbody><tr><td class="mono">200</td><td class="num">1,078,759</td></tr><tr><td class="mono">0</td><td class="num">12,193</td></tr><tr><td class="mono">404</td><td class="num">984</td></tr><tr><td class="mono">304</td><td class="num">477</td></tr><tr><td class="mono">429</td><td class="num">119</td></tr><tr><td class="mono">400</td><td class="num">49</td></tr><tr><td class="mono">500</td><td class="num">37</td></tr><tr><td class="mono">401</td><td class="num">14</td></tr><tr><td class="mono">302</td><td class="num">7</td></tr><tr><td class="mono">403</td><td class="num">5</td></tr><tr><td class="mono">410</td><td class="num">3</td></tr><tr><td class="mono">301</td><td class="num">2</td></tr></tbody></table></section>
   </div>
 
-  <section><h2>Top crawl errors</h2><table><thead><tr><th>Error</th><th>Count</th></tr></thead><tbody><tr><td class="mono">&lt;urlopen error [Errno 111] Connection refused&gt;</td><td class="num">4,874</td></tr><tr><td class="mono">The read operation timed out</td><td class="num">993</td></tr><tr><td class="mono">HTTP 404</td><td class="num">974</td></tr><tr><td class="mono">HTTP 429</td><td class="num">119</td></tr><tr><td class="mono">&lt;urlopen error _ssl.c:993: The handshake operation timed out&gt;</td><td class="num">108</td></tr><tr><td class="mono">&lt;urlopen error timed out&gt;</td><td class="num">93</td></tr><tr><td class="mono">HTTP 400</td><td class="num">49</td></tr><tr><td class="mono">HTTP 500</td><td class="num">35</td></tr><tr><td class="mono">HTTP 401</td><td class="num">14</td></tr><tr><td class="mono">&lt;urlopen error [Errno -2] Name or service not known&gt;</td><td class="num">11</td></tr></tbody></table></section>
-  <section><h2>Errors by site (work_state=error)</h2><table><thead><tr><th>Site</th><th>Errors</th><th>By HTTP status</th></tr></thead><tbody><tr><td class="mono">stuttgart</td><td class="num">4,004</td><td class="mono small">0:3989, 500:7, 401:6, 403:2</td></tr><tr><td class="mono">karlsruhe</td><td class="num">1,660</td><td class="mono small">0:1659, 200:1</td></tr><tr><td class="mono">villingen_schwenningen</td><td class="num">414</td><td class="mono small">0:414</td></tr><tr><td class="mono">mosbach</td><td class="num">45</td><td class="mono small">429:26, 400:16, 0:2, 401:1</td></tr><tr><td class="mono">heilbronn</td><td class="num">23</td><td class="mono small">429:22, 0:1</td></tr><tr><td class="mono">loerrach</td><td class="num">15</td><td class="mono small">0:6, 400:4, 500:4, 403:1</td></tr><tr><td class="mono">ravensburg</td><td class="num">6</td><td class="mono small">400:4, 0:2</td></tr><tr><td class="mono">heidenheim</td><td class="num">5</td><td class="mono small">0:5</td></tr><tr><td class="mono">mannheim</td><td class="num">5</td><td class="mono small">429:5</td></tr><tr><td class="mono">cas</td><td class="num">1</td><td class="mono small">0:1</td></tr></tbody></table></section>
+  <section><h2>Top crawl errors</h2><table><thead><tr><th>Error</th><th>Count</th></tr></thead><tbody><tr><td class="mono">&lt;urlopen error [Errno 111] Connection refused&gt;</td><td class="num">4,874</td></tr><tr><td class="mono">The read operation timed out</td><td class="num">993</td></tr><tr><td class="mono">HTTP 404</td><td class="num">984</td></tr><tr><td class="mono">HTTP 429</td><td class="num">119</td></tr><tr><td class="mono">&lt;urlopen error _ssl.c:993: The handshake operation timed out&gt;</td><td class="num">108</td></tr><tr><td class="mono">&lt;urlopen error timed out&gt;</td><td class="num">93</td></tr><tr><td class="mono">HTTP 400</td><td class="num">49</td></tr><tr><td class="mono">HTTP 500</td><td class="num">37</td></tr><tr><td class="mono">HTTP 401</td><td class="num">14</td></tr><tr><td class="mono">&lt;urlopen error [Errno -2] Name or service not known&gt;</td><td class="num">11</td></tr></tbody></table></section>
+  <section><h2>Errors by site (work_state=error)</h2><table><thead><tr><th>Site</th><th>Errors</th><th>By HTTP status</th></tr></thead><tbody><tr><td class="mono">stuttgart</td><td class="num">4,006</td><td class="mono small">0:3989, 500:9, 401:6, 403:2</td></tr><tr><td class="mono">karlsruhe</td><td class="num">1,660</td><td class="mono small">0:1659, 200:1</td></tr><tr><td class="mono">villingen_schwenningen</td><td class="num">414</td><td class="mono small">0:414</td></tr><tr><td class="mono">mosbach</td><td class="num">45</td><td class="mono small">429:26, 400:16, 0:2, 401:1</td></tr><tr><td class="mono">heilbronn</td><td class="num">23</td><td class="mono small">429:22, 0:1</td></tr><tr><td class="mono">loerrach</td><td class="num">15</td><td class="mono small">0:6, 400:4, 500:4, 403:1</td></tr><tr><td class="mono">cas</td><td class="num">7</td><td class="mono small">0:7</td></tr><tr><td class="mono">ravensburg</td><td class="num">6</td><td class="mono small">400:4, 0:2</td></tr><tr><td class="mono">heidenheim</td><td class="num">5</td><td class="mono small">0:5</td></tr><tr><td class="mono">mannheim</td><td class="num">5</td><td class="mono small">429:5</td></tr></tbody></table></section>
 
-  <section><h2>Link graph</h2>
+  <section><h2>Crawl discovery tree</h2>
 
-    <div class="sub">15,087,174 edges · 13,662,926 in-domain · 1,424,248 external ·
-      80,560 distinct sources · 147,692 distinct targets</div>
-    <div class="sub" style="margin:2px 0 10px">Host-level view · 8,098 hosts total, showing the 24 most-connected · 627,875 of 1,552,157 cross-host links drawn.</div>
-    <div class="graph-legend"><span><i class="sw site"></i>crawled host</span><span><i class="sw ext"></i>external host</span><span>node size = degree</span><span>edge width = link count</span></div>
-    <svg class="linkgraph" viewBox="0 0 820 560" width="100%" role="img" aria-label="Host-level link graph"><defs><marker id="lg-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--bar)" fill-opacity="0.55"/></marker></defs><path d="M547.9,142.1 Q391.4,235.2 215.0,280.0" fill="none" stroke="var(--bar)" stroke-width="4.00" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M410.0,85.0 Q454.8,261.4 547.9,417.9" fill="none" stroke="var(--bar)" stroke-width="3.95" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M410.0,85.0 Q473.4,216.6 605.0,280.0" fill="none" stroke="var(--bar)" stroke-width="3.94" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M507.5,111.1 Q386.8,193.4 241.1,182.5" fill="none" stroke="var(--bar)" stroke-width="3.92" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M460.5,91.6 Q365.2,202.4 221.6,229.5" fill="none" stroke="var(--bar)" stroke-width="3.90" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M460.5,91.6 Q426.4,282.2 410.0,475.0" fill="none" stroke="var(--bar)" stroke-width="3.90" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M460.5,91.6 Q442.8,280.0 460.5,468.4" fill="none" stroke="var(--bar)" stroke-width="3.90" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M460.5,91.6 Q458.1,273.7 507.5,448.9" fill="none" stroke="var(--bar)" stroke-width="3.90" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M460.5,91.6 Q394.7,273.7 312.5,448.9" fill="none" stroke="var(--bar)" stroke-width="3.90" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M460.5,91.6 Q371.5,250.5 241.1,377.5" fill="none" stroke="var(--bar)" stroke-width="3.90" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M460.5,91.6 Q381.6,174.0 272.1,142.1" fill="none" stroke="var(--bar)" stroke-width="3.90" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,142.1 Q423.1,180.3 312.5,111.1" fill="none" stroke="var(--bar)" stroke-width="3.87" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M507.5,111.1 Q441.7,288.5 410.0,475.0" fill="none" stroke="var(--bar)" stroke-width="3.80" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M507.5,111.1 Q425.3,286.3 359.5,468.4" fill="none" stroke="var(--bar)" stroke-width="3.80" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M507.5,111.1 Q458.1,286.3 460.5,468.4" fill="none" stroke="var(--bar)" stroke-width="3.80" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M507.5,111.1 Q380.5,241.5 221.6,330.5" fill="none" stroke="var(--bar)" stroke-width="3.80" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M507.5,111.1 Q396.9,269.9 272.1,417.9" fill="none" stroke="var(--bar)" stroke-width="3.80" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M410.0,85.0 Q393.6,277.8 359.5,468.4" fill="none" stroke="var(--bar)" stroke-width="3.71" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M410.0,85.0 Q410.0,280.0 410.0,475.0" fill="none" stroke="var(--bar)" stroke-width="3.71" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M410.0,85.0 Q378.3,271.5 312.5,448.9" fill="none" stroke="var(--bar)" stroke-width="3.70" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M410.0,85.0 Q426.4,277.8 460.5,468.4" fill="none" stroke="var(--bar)" stroke-width="3.70" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M410.0,85.0 Q464.9,184.9 578.9,182.5" fill="none" stroke="var(--bar)" stroke-width="3.70" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M410.0,85.0 Q365.2,261.4 272.1,417.9" fill="none" stroke="var(--bar)" stroke-width="3.70" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M507.5,111.1 Q486.5,269.9 547.9,417.9" fill="none" stroke="var(--bar)" stroke-width="3.67" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,142.1 Q499.6,280.0 547.9,417.9" fill="none" stroke="var(--bar)" stroke-width="3.64" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,142.1 Q438.4,296.4 359.5,468.4" fill="none" stroke="var(--bar)" stroke-width="3.64" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,142.1 Q518.2,235.2 605.0,280.0" fill="none" stroke="var(--bar)" stroke-width="3.64" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,142.1 Q454.8,298.6 410.0,475.0" fill="none" stroke="var(--bar)" stroke-width="3.64" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,142.1 Q423.1,290.1 312.5,448.9" fill="none" stroke="var(--bar)" stroke-width="3.64" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,142.1 Q471.2,296.4 460.5,468.4" fill="none" stroke="var(--bar)" stroke-width="3.64" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,142.1 Q399.9,266.9 241.1,377.5" fill="none" stroke="var(--bar)" stroke-width="3.64" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M598.4,330.5 Q516.0,341.2 547.9,417.9" fill="none" stroke="var(--bar)" stroke-width="3.50" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M578.9,182.5 Q448.5,309.5 359.5,468.4" fill="none" stroke="var(--bar)" stroke-width="3.50" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M578.9,182.5 Q464.9,311.7 410.0,475.0" fill="none" stroke="var(--bar)" stroke-width="3.50" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M578.9,182.5 Q481.3,309.5 460.5,468.4" fill="none" stroke="var(--bar)" stroke-width="3.50" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M578.9,182.5 Q448.5,187.1 359.5,91.6" fill="none" stroke="var(--bar)" stroke-width="3.50" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M578.9,182.5 Q403.7,264.7 221.6,330.5" fill="none" stroke="var(--bar)" stroke-width="3.50" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M598.4,330.5 Q487.6,357.6 460.5,468.4" fill="none" stroke="var(--bar)" stroke-width="3.50" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M598.4,330.5 Q454.8,357.6 359.5,468.4" fill="none" stroke="var(--bar)" stroke-width="3.50" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M598.4,330.5 Q454.8,235.2 359.5,91.6" fill="none" stroke="var(--bar)" stroke-width="3.50" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M598.4,330.5 Q426.4,341.2 272.1,417.9" fill="none" stroke="var(--bar)" stroke-width="3.50" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M598.4,330.5 Q416.3,328.1 241.1,377.5" fill="none" stroke="var(--bar)" stroke-width="3.50" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M598.4,330.5 Q410.0,312.8 221.6,330.5" fill="none" stroke="var(--bar)" stroke-width="3.50" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M598.4,229.5 Q487.6,324.8 460.5,468.4" fill="none" stroke="var(--bar)" stroke-width="3.49" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M578.9,377.5 Q464.9,375.1 410.0,475.0" fill="none" stroke="var(--bar)" stroke-width="3.30" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M578.9,377.5 Q481.3,372.9 460.5,468.4" fill="none" stroke="var(--bar)" stroke-width="3.30" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M578.9,377.5 Q448.5,372.9 359.5,468.4" fill="none" stroke="var(--bar)" stroke-width="3.30" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M578.9,377.5 Q403.7,328.1 221.6,330.5" fill="none" stroke="var(--bar)" stroke-width="3.29" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M578.9,377.5 Q448.5,250.5 359.5,91.6" fill="none" stroke="var(--bar)" stroke-width="3.29" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M578.9,377.5 Q420.1,356.5 272.1,417.9" fill="none" stroke="var(--bar)" stroke-width="3.29" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M598.4,229.5 Q410.0,247.2 221.6,229.5" fill="none" stroke="var(--bar)" stroke-width="3.29" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M598.4,229.5 Q471.2,327.0 410.0,475.0" fill="none" stroke="var(--bar)" stroke-width="3.27" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M598.4,229.5 Q439.5,318.5 312.5,448.9" fill="none" stroke="var(--bar)" stroke-width="3.27" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M598.4,229.5 Q454.8,324.8 359.5,468.4" fill="none" stroke="var(--bar)" stroke-width="3.26" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M598.4,229.5 Q426.4,308.4 272.1,417.9" fill="none" stroke="var(--bar)" stroke-width="3.26" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M598.4,229.5 Q416.3,295.3 241.1,377.5" fill="none" stroke="var(--bar)" stroke-width="3.26" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M605.0,280.0 Q518.2,324.8 547.9,417.9" fill="none" stroke="var(--bar)" stroke-width="3.19" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M598.4,229.5 Q516.0,308.4 547.9,417.9" fill="none" stroke="var(--bar)" stroke-width="3.05" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M605.0,280.0 Q428.6,324.8 272.1,417.9" fill="none" stroke="var(--bar)" stroke-width="2.97" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M605.0,280.0 Q457.0,341.2 359.5,468.4" fill="none" stroke="var(--bar)" stroke-width="2.97" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M605.0,280.0 Q473.4,343.4 410.0,475.0" fill="none" stroke="var(--bar)" stroke-width="2.96" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M605.0,280.0 Q489.8,341.2 460.5,468.4" fill="none" stroke="var(--bar)" stroke-width="2.96" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,417.9 Q454.8,388.2 410.0,475.0" fill="none" stroke="var(--bar)" stroke-width="2.95" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,417.9 Q438.4,386.0 359.5,468.4" fill="none" stroke="var(--bar)" stroke-width="2.95" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,417.9 Q471.2,386.0 460.5,468.4" fill="none" stroke="var(--bar)" stroke-width="2.94" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,417.9 Q454.8,261.4 410.0,85.0" fill="none" stroke="var(--bar)" stroke-width="2.64" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M578.9,377.5 Q509.7,356.5 547.9,417.9" fill="none" stroke="var(--bar)" stroke-width="2.59" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,417.9 Q486.5,269.9 507.5,111.1" fill="none" stroke="var(--bar)" stroke-width="2.53" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M578.9,182.5 Q509.7,293.1 547.9,417.9" fill="none" stroke="var(--bar)" stroke-width="2.51" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,417.9 Q471.2,263.6 460.5,91.6" fill="none" stroke="var(--bar)" stroke-width="2.47" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M578.9,182.5 Q528.3,248.3 605.0,280.0" fill="none" stroke="var(--bar)" stroke-width="2.43" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,417.9 Q516.0,308.4 598.4,229.5" fill="none" stroke="var(--bar)" stroke-width="2.42" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,417.9 Q509.7,356.5 578.9,377.5" fill="none" stroke="var(--bar)" stroke-width="2.39" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,417.9 Q516.0,341.2 598.4,330.5" fill="none" stroke="var(--bar)" stroke-width="2.38" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M460.5,91.6 Q471.2,263.6 547.9,417.9" fill="none" stroke="var(--bar)" stroke-width="2.37" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,417.9 Q518.2,324.8 605.0,280.0" fill="none" stroke="var(--bar)" stroke-width="2.37" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,417.9 Q499.6,280.0 547.9,142.1" fill="none" stroke="var(--bar)" stroke-width="2.23" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M460.5,91.6 Q489.8,218.8 605.0,280.0" fill="none" stroke="var(--bar)" stroke-width="2.20" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M598.4,229.5 Q534.6,263.6 605.0,280.0" fill="none" stroke="var(--bar)" stroke-width="2.16" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M578.9,377.5 Q528.3,311.7 605.0,280.0" fill="none" stroke="var(--bar)" stroke-width="2.14" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M598.4,330.5 Q426.4,251.6 272.1,142.1" fill="none" stroke="var(--bar)" stroke-width="2.11" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,417.9 Q509.7,293.1 578.9,182.5" fill="none" stroke="var(--bar)" stroke-width="2.10" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M507.5,111.1 Q505.1,225.1 605.0,280.0" fill="none" stroke="var(--bar)" stroke-width="2.04" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M598.4,330.5 Q534.6,296.4 605.0,280.0" fill="none" stroke="var(--bar)" stroke-width="1.95" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M578.9,377.5 Q403.7,295.3 221.6,229.5" fill="none" stroke="var(--bar)" stroke-width="1.91" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,142.1 Q509.7,266.9 578.9,377.5" fill="none" stroke="var(--bar)" stroke-width="1.86" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,417.9 Q399.9,356.5 241.1,377.5" fill="none" stroke="var(--bar)" stroke-width="1.85" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,142.1 Q516.0,218.8 598.4,229.5" fill="none" stroke="var(--bar)" stroke-width="1.81" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M460.5,91.6 Q381.6,263.6 272.1,417.9" fill="none" stroke="var(--bar)" stroke-width="1.80" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M598.4,229.5 Q487.6,202.4 460.5,91.6" fill="none" stroke="var(--bar)" stroke-width="1.76" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M578.9,377.5 Q433.2,366.6 312.5,448.9" fill="none" stroke="var(--bar)" stroke-width="1.72" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,417.9 Q410.0,369.6 272.1,417.9" fill="none" stroke="var(--bar)" stroke-width="1.68" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M598.4,330.5 Q471.2,359.8 410.0,475.0" fill="none" stroke="var(--bar)" stroke-width="1.67" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,417.9 Q393.6,308.4 221.6,229.5" fill="none" stroke="var(--bar)" stroke-width="1.62" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M460.5,91.6 Q487.6,202.4 598.4,229.5" fill="none" stroke="var(--bar)" stroke-width="1.62" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,417.9 Q423.1,379.7 312.5,448.9" fill="none" stroke="var(--bar)" stroke-width="1.61" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M507.5,448.9 Q458.1,273.7 460.5,91.6" fill="none" stroke="var(--bar)" stroke-width="1.58" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M507.5,111.1 Q458.1,163.9 460.5,91.6" fill="none" stroke="var(--bar)" stroke-width="1.54" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M578.9,377.5 Q481.3,250.5 460.5,91.6" fill="none" stroke="var(--bar)" stroke-width="1.54" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M410.0,85.0 Q441.7,161.7 507.5,111.1" fill="none" stroke="var(--bar)" stroke-width="1.50" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M578.9,377.5 Q464.9,248.3 410.0,85.0" fill="none" stroke="var(--bar)" stroke-width="1.50" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M578.9,182.5 Q433.2,303.2 312.5,448.9" fill="none" stroke="var(--bar)" stroke-width="1.47" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M410.0,85.0 Q426.4,155.4 460.5,91.6" fill="none" stroke="var(--bar)" stroke-width="1.47" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,142.1 Q471.2,174.0 460.5,91.6" fill="none" stroke="var(--bar)" stroke-width="1.47" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M598.4,229.5 Q471.2,200.2 410.0,85.0" fill="none" stroke="var(--bar)" stroke-width="1.45" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M507.5,111.1 Q441.7,161.7 410.0,85.0" fill="none" stroke="var(--bar)" stroke-width="1.45" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M507.5,111.1 Q502.9,208.7 598.4,229.5" fill="none" stroke="var(--bar)" stroke-width="1.42" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,417.9 Q410.0,280.0 272.1,142.1" fill="none" stroke="var(--bar)" stroke-width="1.42" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,417.9 Q391.4,324.8 215.0,280.0" fill="none" stroke="var(--bar)" stroke-width="1.42" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M598.4,330.5 Q471.2,233.0 410.0,85.0" fill="none" stroke="var(--bar)" stroke-width="1.39" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M460.5,91.6 Q410.0,280.0 359.5,468.4" fill="none" stroke="var(--bar)" stroke-width="1.39" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M578.9,182.5 Q403.7,231.9 221.6,229.5" fill="none" stroke="var(--bar)" stroke-width="1.36" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M578.9,377.5 Q496.6,256.8 507.5,111.1" fill="none" stroke="var(--bar)" stroke-width="1.36" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M598.4,229.5 Q502.9,208.7 507.5,111.1" fill="none" stroke="var(--bar)" stroke-width="1.36" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M507.5,111.1 Q410.0,280.0 312.5,448.9" fill="none" stroke="var(--bar)" stroke-width="1.36" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M460.5,91.6 Q426.4,155.4 410.0,85.0" fill="none" stroke="var(--bar)" stroke-width="1.36" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,417.9 Q438.4,263.6 359.5,91.6" fill="none" stroke="var(--bar)" stroke-width="1.36" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M605.0,280.0 Q518.2,235.2 547.9,142.1" fill="none" stroke="var(--bar)" stroke-width="1.33" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M605.0,280.0 Q534.6,263.6 598.4,229.5" fill="none" stroke="var(--bar)" stroke-width="1.33" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,142.1 Q509.7,203.5 578.9,182.5" fill="none" stroke="var(--bar)" stroke-width="1.33" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M598.4,229.5 Q516.0,218.8 547.9,142.1" fill="none" stroke="var(--bar)" stroke-width="1.33" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M598.4,330.5 Q439.5,351.3 312.5,448.9" fill="none" stroke="var(--bar)" stroke-width="1.33" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M605.0,280.0 Q528.3,248.3 578.9,182.5" fill="none" stroke="var(--bar)" stroke-width="1.29" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M605.0,280.0 Q441.7,334.9 312.5,448.9" fill="none" stroke="var(--bar)" stroke-width="1.29" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M605.0,280.0 Q410.0,280.0 215.0,280.0" fill="none" stroke="var(--bar)" stroke-width="1.29" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,142.1 Q454.8,171.8 410.0,85.0" fill="none" stroke="var(--bar)" stroke-width="1.29" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M605.0,280.0 Q473.4,216.6 410.0,85.0" fill="none" stroke="var(--bar)" stroke-width="1.25" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,142.1 Q410.0,280.0 272.1,417.9" fill="none" stroke="var(--bar)" stroke-width="1.25" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,417.9 Q423.1,269.9 312.5,111.1" fill="none" stroke="var(--bar)" stroke-width="1.25" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M598.4,330.5 Q410.0,280.0 221.6,229.5" fill="none" stroke="var(--bar)" stroke-width="1.19" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M410.0,85.0 Q471.2,200.2 598.4,229.5" fill="none" stroke="var(--bar)" stroke-width="1.19" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M605.0,280.0 Q489.8,218.8 460.5,91.6" fill="none" stroke="var(--bar)" stroke-width="1.13" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M578.9,182.5 Q464.9,184.9 410.0,85.0" fill="none" stroke="var(--bar)" stroke-width="1.13" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M578.9,182.5 Q526.1,231.9 598.4,229.5" fill="none" stroke="var(--bar)" stroke-width="1.13" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M578.9,377.5 Q509.7,266.9 547.9,142.1" fill="none" stroke="var(--bar)" stroke-width="1.13" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M507.5,111.1 Q496.6,256.8 578.9,377.5" fill="none" stroke="var(--bar)" stroke-width="1.13" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M507.5,111.1 Q380.5,208.7 221.6,229.5" fill="none" stroke="var(--bar)" stroke-width="1.13" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M598.4,330.5 Q526.1,328.1 578.9,377.5" fill="none" stroke="var(--bar)" stroke-width="1.13" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M598.4,330.5 Q526.1,264.7 578.9,182.5" fill="none" stroke="var(--bar)" stroke-width="1.13" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,417.9 Q399.9,293.1 241.1,182.5" fill="none" stroke="var(--bar)" stroke-width="1.13" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M605.0,280.0 Q528.3,311.7 578.9,377.5" fill="none" stroke="var(--bar)" stroke-width="1.06" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M605.0,280.0 Q534.6,296.4 598.4,330.5" fill="none" stroke="var(--bar)" stroke-width="1.06" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M578.9,377.5 Q410.0,343.4 241.1,377.5" fill="none" stroke="var(--bar)" stroke-width="1.06" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,142.1 Q486.5,180.3 507.5,111.1" fill="none" stroke="var(--bar)" stroke-width="1.06" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,142.1 Q516.0,251.6 598.4,330.5" fill="none" stroke="var(--bar)" stroke-width="1.06" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M598.4,229.5 Q532.4,280.0 598.4,330.5" fill="none" stroke="var(--bar)" stroke-width="1.06" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M507.5,111.1 Q502.9,241.5 598.4,330.5" fill="none" stroke="var(--bar)" stroke-width="1.06" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M460.5,91.6 Q458.1,163.9 507.5,111.1" fill="none" stroke="var(--bar)" stroke-width="1.06" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M460.5,91.6 Q481.3,187.1 578.9,182.5" fill="none" stroke="var(--bar)" stroke-width="1.06" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M460.5,91.6 Q487.6,235.2 598.4,330.5" fill="none" stroke="var(--bar)" stroke-width="1.06" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M598.4,330.5 Q487.6,235.2 460.5,91.6" fill="none" stroke="var(--bar)" stroke-width="1.06" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,417.9 Q393.6,341.2 221.6,330.5" fill="none" stroke="var(--bar)" stroke-width="1.06" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M605.0,280.0 Q505.1,225.1 507.5,111.1" fill="none" stroke="var(--bar)" stroke-width="0.96" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M410.0,85.0 Q471.2,233.0 598.4,330.5" fill="none" stroke="var(--bar)" stroke-width="0.96" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M578.9,377.5 Q526.1,328.1 598.4,330.5" fill="none" stroke="var(--bar)" stroke-width="0.96" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M578.9,377.5 Q526.1,295.3 598.4,229.5" fill="none" stroke="var(--bar)" stroke-width="0.96" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,142.1 Q393.6,218.8 221.6,229.5" fill="none" stroke="var(--bar)" stroke-width="0.96" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M598.4,229.5 Q526.1,231.9 578.9,182.5" fill="none" stroke="var(--bar)" stroke-width="0.96" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M598.4,229.5 Q426.4,218.8 272.1,142.1" fill="none" stroke="var(--bar)" stroke-width="0.96" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M507.5,111.1 Q486.5,180.3 547.9,142.1" fill="none" stroke="var(--bar)" stroke-width="0.96" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M507.5,111.1 Q496.6,193.4 578.9,182.5" fill="none" stroke="var(--bar)" stroke-width="0.96" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M460.5,91.6 Q481.3,250.5 578.9,377.5" fill="none" stroke="var(--bar)" stroke-width="0.96" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M547.9,417.9 Q486.5,379.7 507.5,448.9" fill="none" stroke="var(--bar)" stroke-width="0.96" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M598.4,330.5 Q516.0,251.6 547.9,142.1" fill="none" stroke="var(--bar)" stroke-width="0.83" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M605.0,280.0 Q418.5,311.7 241.1,377.5" fill="none" stroke="var(--bar)" stroke-width="0.83" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M605.0,280.0 Q457.0,218.8 359.5,91.6" fill="none" stroke="var(--bar)" stroke-width="0.83" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M410.0,85.0 Q365.2,171.8 272.1,142.1" fill="none" stroke="var(--bar)" stroke-width="0.83" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M410.0,85.0 Q464.9,248.3 578.9,377.5" fill="none" stroke="var(--bar)" stroke-width="0.83" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M410.0,85.0 Q348.8,200.2 221.6,229.5" fill="none" stroke="var(--bar)" stroke-width="0.83" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M578.9,377.5 Q420.1,266.9 272.1,142.1" fill="none" stroke="var(--bar)" stroke-width="0.83" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M578.9,377.5 Q401.5,311.7 215.0,280.0" fill="none" stroke="var(--bar)" stroke-width="0.83" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M598.4,229.5 Q439.5,208.7 312.5,111.1" fill="none" stroke="var(--bar)" stroke-width="0.83" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M598.4,229.5 Q526.1,295.3 578.9,377.5" fill="none" stroke="var(--bar)" stroke-width="0.83" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M598.4,229.5 Q407.8,263.6 215.0,280.0" fill="none" stroke="var(--bar)" stroke-width="0.83" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M507.5,111.1 Q396.9,180.3 272.1,142.1" fill="none" stroke="var(--bar)" stroke-width="0.83" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M460.5,91.6 Q471.2,174.0 547.9,142.1" fill="none" stroke="var(--bar)" stroke-width="0.83" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M598.4,330.5 Q532.4,280.0 598.4,229.5" fill="none" stroke="var(--bar)" stroke-width="0.83" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M598.4,330.5 Q502.9,241.5 507.5,111.1" fill="none" stroke="var(--bar)" stroke-width="0.83" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><path d="M598.4,330.5 Q407.8,296.4 215.0,280.0" fill="none" stroke="var(--bar)" stroke-width="0.83" stroke-opacity="0.3" marker-end="url(#lg-arrow)"/><circle cx="410.0" cy="85.0" r="15.0" fill="var(--accent)" fill-opacity="0.9" stroke="var(--card)" stroke-width="1.5"><title>www.dhbw-stuttgart.de — 229,730 out · 1,339 in · 6,002,816 internal</title></circle><circle cx="460.5" cy="91.6" r="12.5" fill="var(--accent)" fill-opacity="0.9" stroke="var(--card)" stroke-width="1.5"><title>www.mosbach.dhbw.de — 796,731 out · 421 in · 2,892,493 internal</title></circle><circle cx="507.5" cy="111.1" r="11.3" fill="var(--accent)" fill-opacity="0.9" stroke="var(--card)" stroke-width="1.5"><title>www.mannheim.dhbw.de — 158,552 out · 396 in · 2,565,375 internal</title></circle><circle cx="547.9" cy="142.1" r="7.7" fill="var(--accent)" fill-opacity="0.9" stroke="var(--card)" stroke-width="1.5"><title>www.heilbronn.dhbw.de — 136,686 out · 217 in · 553,644 internal</title></circle><circle cx="578.9" cy="182.5" r="7.0" fill="var(--accent)" fill-opacity="0.9" stroke="var(--card)" stroke-width="1.5"><title>dhbw-loerrach.de — 60,669 out · 11,808 in · 391,762 internal</title></circle><circle cx="598.4" cy="229.5" r="6.8" fill="var(--accent)" fill-opacity="0.9" stroke="var(--card)" stroke-width="1.5"><title>www.karlsruhe.dhbw.de — 45,771 out · 336 in · 358,132 internal</title></circle><circle cx="605.0" cy="280.0" r="6.5" fill="var(--accent)" fill-opacity="0.9" stroke="var(--card)" stroke-width="1.5"><title>www.cas.dhbw.de — 17,628 out · 34,238 in · 270,898 internal</title></circle><circle cx="598.4" cy="330.5" r="6.5" fill="var(--accent)" fill-opacity="0.9" stroke="var(--card)" stroke-width="1.5"><title>www.ravensburg.dhbw.de — 61,628 out · 233 in · 255,317 internal</title></circle><circle cx="578.9" cy="377.5" r="6.0" fill="var(--accent)" fill-opacity="0.9" stroke="var(--card)" stroke-width="1.5"><title>www.heidenheim.dhbw.de — 32,391 out · 300 in · 171,417 internal</title></circle><circle cx="547.9" cy="417.9" r="5.5" fill="var(--accent)" fill-opacity="0.9" stroke="var(--card)" stroke-width="1.5"><title>www.dhbw.de — 7,359 out · 56,471 in · 53,309 internal</title></circle><circle cx="460.5" cy="468.4" r="5.3" fill="var(--muted)" fill-opacity="0.9" stroke="var(--card)" stroke-width="1.5"><title>www.instagram.com — 0 out · 82,371 in · 0 internal</title></circle><circle cx="410.0" cy="475.0" r="5.2" fill="var(--muted)" fill-opacity="0.9" stroke="var(--card)" stroke-width="1.5"><title>www.youtube.com — 0 out · 73,306 in · 0 internal</title></circle><circle cx="359.5" cy="468.4" r="5.1" fill="var(--muted)" fill-opacity="0.9" stroke="var(--card)" stroke-width="1.5"><title>www.linkedin.com — 0 out · 58,500 in · 0 internal</title></circle><circle cx="312.5" cy="448.9" r="4.9" fill="var(--muted)" fill-opacity="0.9" stroke="var(--card)" stroke-width="1.5"><title>www.facebook.com — 0 out · 45,669 in · 0 internal</title></circle><circle cx="272.1" cy="417.9" r="4.9" fill="var(--muted)" fill-opacity="0.9" stroke="var(--card)" stroke-width="1.5"><title>dualis.dhbw.de — 0 out · 41,005 in · 0 internal</title></circle><circle cx="241.1" cy="377.5" r="4.9" fill="var(--muted)" fill-opacity="0.9" stroke="var(--card)" stroke-width="1.5"><title>portal.dhbw.de — 0 out · 39,837 in · 0 internal</title></circle><circle cx="221.6" cy="330.5" r="4.8" fill="var(--muted)" fill-opacity="0.9" stroke="var(--card)" stroke-width="1.5"><title>www.tiktok.com — 0 out · 31,235 in · 0 internal</title></circle><circle cx="215.0" cy="280.0" r="4.7" fill="var(--muted)" fill-opacity="0.9" stroke="var(--card)" stroke-width="1.5"><title>bildungscampus.hn — 0 out · 28,489 in · 0 internal</title></circle><circle cx="221.6" cy="229.5" r="4.7" fill="var(--muted)" fill-opacity="0.9" stroke="var(--card)" stroke-width="1.5"><title>moodle.dhbw.de — 0 out · 24,518 in · 0 internal</title></circle><circle cx="241.1" cy="182.5" r="4.7" fill="var(--muted)" fill-opacity="0.9" stroke="var(--card)" stroke-width="1.5"><title>studyup.mannheim.dhbw.de — 0 out · 22,401 in · 0 internal</title></circle><circle cx="272.1" cy="142.1" r="4.6" fill="var(--muted)" fill-opacity="0.9" stroke="var(--card)" stroke-width="1.5"><title>de.linkedin.com — 0 out · 21,150 in · 0 internal</title></circle><circle cx="507.5" cy="448.9" r="4.6" fill="var(--accent)" fill-opacity="0.9" stroke="var(--card)" stroke-width="1.5"><title>www.intern.mosbach.dhbw.de — 36 out · 21,053 in · 12 internal</title></circle><circle cx="312.5" cy="111.1" r="4.6" fill="var(--muted)" fill-opacity="0.9" stroke="var(--card)" stroke-width="1.5"><title>bewerbungsportal.heilbronn.dhbw.de — 0 out · 18,969 in · 0 internal</title></circle><circle cx="359.5" cy="91.6" r="4.6" fill="var(--muted)" fill-opacity="0.9" stroke="var(--card)" stroke-width="1.5"><title>de-de.facebook.com — 0 out · 15,864 in · 0 internal</title></circle><text x="410.0" y="71.0" text-anchor="start" dominant-baseline="middle" font-size="10" fill="var(--muted)">www.dhbw-stuttgart.de</text><text x="464.1" y="78.1" text-anchor="start" dominant-baseline="middle" font-size="10" fill="var(--muted)">www.mosbach.dhbw.de</text><text x="514.5" y="99.0" text-anchor="start" dominant-baseline="middle" font-size="10" fill="var(--muted)">www.mannheim.dhbw.de</text><text x="557.8" y="132.2" text-anchor="start" dominant-baseline="middle" font-size="10" fill="var(--muted)">www.heilbronn.dhbw.de</text><text x="591.0" y="175.5" text-anchor="start" dominant-baseline="middle" font-size="10" fill="var(--muted)">dhbw-loerrach.de</text><text x="611.9" y="225.9" text-anchor="start" dominant-baseline="middle" font-size="10" fill="var(--muted)">www.karlsruhe.dhbw.de</text><text x="619.0" y="280.0" text-anchor="start" dominant-baseline="middle" font-size="10" fill="var(--muted)">www.cas.dhbw.de</text><text x="611.9" y="334.1" text-anchor="start" dominant-baseline="middle" font-size="10" fill="var(--muted)">www.ravensburg.dhbw.de</text><text x="591.0" y="384.5" text-anchor="start" dominant-baseline="middle" font-size="10" fill="var(--muted)">www.heidenheim.dhbw.de</text><text x="557.8" y="427.8" text-anchor="start" dominant-baseline="middle" font-size="10" fill="var(--muted)">www.dhbw.de</text><text x="464.1" y="481.9" text-anchor="start" dominant-baseline="middle" font-size="10" fill="var(--muted)">www.instagram.com</text><text x="410.0" y="489.0" text-anchor="start" dominant-baseline="middle" font-size="10" fill="var(--muted)">www.youtube.com</text><text x="355.9" y="481.9" text-anchor="end" dominant-baseline="middle" font-size="10" fill="var(--muted)">www.linkedin.com</text><text x="305.5" y="461.0" text-anchor="end" dominant-baseline="middle" font-size="10" fill="var(--muted)">www.facebook.com</text><text x="262.2" y="427.8" text-anchor="end" dominant-baseline="middle" font-size="10" fill="var(--muted)">dualis.dhbw.de</text><text x="229.0" y="384.5" text-anchor="end" dominant-baseline="middle" font-size="10" fill="var(--muted)">portal.dhbw.de</text><text x="208.1" y="334.1" text-anchor="end" dominant-baseline="middle" font-size="10" fill="var(--muted)">www.tiktok.com</text><text x="201.0" y="280.0" text-anchor="end" dominant-baseline="middle" font-size="10" fill="var(--muted)">bildungscampus.hn</text><text x="208.1" y="225.9" text-anchor="end" dominant-baseline="middle" font-size="10" fill="var(--muted)">moodle.dhbw.de</text><text x="229.0" y="175.5" text-anchor="end" dominant-baseline="middle" font-size="10" fill="var(--muted)">studyup.mannheim.dhbw…</text><text x="262.2" y="132.2" text-anchor="end" dominant-baseline="middle" font-size="10" fill="var(--muted)">de.linkedin.com</text><text x="514.5" y="461.0" text-anchor="start" dominant-baseline="middle" font-size="10" fill="var(--muted)">www.intern.mosbach.dh…</text><text x="305.5" y="99.0" text-anchor="end" dominant-baseline="middle" font-size="10" fill="var(--muted)">bewerbungsportal.heil…</text><text x="355.9" y="78.1" text-anchor="end" dominant-baseline="middle" font-size="10" fill="var(--muted)">de-de.facebook.com</text></svg>
+    <div class="sub">15,217,211 link edges · 13,787,008 in-domain · 1,430,203 external ·
+      81,119 distinct sources · 149,510 distinct targets</div>
+    <p class="sub" style="margin:2px 0 0">107,273 crawled pages across 11 campus trees. <a class="treelink" href="discovery.html">Open the interactive discovery tree →</a> (full-screen, its own page).</p>
   </section>
-  <section><h2>Top external link targets</h2><table><thead><tr><th>Host</th><th>Links</th></tr></thead><tbody><tr><td class="mono">www.instagram.com</td><td class="num">82,371</td></tr><tr><td class="mono">www.youtube.com</td><td class="num">73,306</td></tr><tr><td class="mono">www.linkedin.com</td><td class="num">58,500</td></tr><tr><td class="mono">www.dhbw.de</td><td class="num">56,471</td></tr><tr><td class="mono">www.facebook.com</td><td class="num">45,669</td></tr><tr><td class="mono">dualis.dhbw.de</td><td class="num">41,005</td></tr><tr><td class="mono">portal.dhbw.de</td><td class="num">39,837</td></tr><tr><td class="mono">www.cas.dhbw.de</td><td class="num">34,238</td></tr><tr><td class="mono">www.tiktok.com</td><td class="num">31,235</td></tr><tr><td class="mono">bildungscampus.hn</td><td class="num">28,489</td></tr><tr><td class="mono">moodle.dhbw.de</td><td class="num">24,518</td></tr><tr><td class="mono">de.linkedin.com</td><td class="num">21,150</td></tr><tr><td class="mono">de-de.facebook.com</td><td class="num">15,864</td></tr><tr><td class="mono">moodle.dhbw-mannheim.de</td><td class="num">15,327</td></tr><tr><td class="mono">intranet.dhbw-mannheim.de</td><td class="num">15,306</td></tr><tr><td class="mono">events.dhbw-mannheim.de</td><td class="num">15,306</td></tr><tr><td class="mono">www.weiterbildung.dhbw.de</td><td class="num">12,876</td></tr><tr><td class="mono">dhbw-loerrach.de</td><td class="num">11,760</td></tr><tr><td class="mono">www.studierendenwerk-stuttgart.de</td><td class="num">11,557</td></tr><tr><td class="mono">www.accenture.com</td><td class="num">11,488</td></tr></tbody></table></section>
+  <section><h2>Top external link targets</h2><table><thead><tr><th>Host</th><th>Links</th></tr></thead><tbody><tr><td class="mono">www.instagram.com</td><td class="num">82,854</td></tr><tr><td class="mono">www.youtube.com</td><td class="num">73,790</td></tr><tr><td class="mono">www.linkedin.com</td><td class="num">58,984</td></tr><tr><td class="mono">www.dhbw.de</td><td class="num">57,477</td></tr><tr><td class="mono">www.facebook.com</td><td class="num">46,041</td></tr><tr><td class="mono">dualis.dhbw.de</td><td class="num">41,487</td></tr><tr><td class="mono">portal.dhbw.de</td><td class="num">39,837</td></tr><tr><td class="mono">www.cas.dhbw.de</td><td class="num">35,003</td></tr><tr><td class="mono">www.tiktok.com</td><td class="num">31,235</td></tr><tr><td class="mono">bildungscampus.hn</td><td class="num">28,489</td></tr><tr><td class="mono">moodle.dhbw.de</td><td class="num">24,518</td></tr><tr><td class="mono">de.linkedin.com</td><td class="num">21,150</td></tr><tr><td class="mono">de-de.facebook.com</td><td class="num">15,864</td></tr><tr><td class="mono">moodle.dhbw-mannheim.de</td><td class="num">15,327</td></tr><tr><td class="mono">intranet.dhbw-mannheim.de</td><td class="num">15,306</td></tr><tr><td class="mono">events.dhbw-mannheim.de</td><td class="num">15,306</td></tr><tr><td class="mono">www.weiterbildung.dhbw.de</td><td class="num">13,369</td></tr><tr><td class="mono">dhbw-loerrach.de</td><td class="num">12,131</td></tr><tr><td class="mono">www.studierendenwerk-stuttgart.de</td><td class="num">11,558</td></tr><tr><td class="mono">www.accenture.com</td><td class="num">11,488</td></tr></tbody></table></section>
 
-  <section><h2>Per-host URL distribution (spider-trap view)</h2><table><thead><tr><th>Host</th><th>URLs</th><th>Done</th><th>Error</th><th>Pending</th></tr></thead><tbody><tr><td class="mono">www.mosbach.dhbw.de</td><td class="num">24,103</td><td class="num">24,103</td><td class="num ">0</td><td class="num">0</td></tr><tr><td class="mono">www.dhbw-stuttgart.de</td><td class="num">20,051</td><td class="num">17,870</td><td class="num ">2,181</td><td class="num">0</td></tr><tr><td class="mono">www.mannheim.dhbw.de</td><td class="num">16,781</td><td class="num">16,781</td><td class="num ">0</td><td class="num">0</td></tr><tr><td class="mono">www.heilbronn.dhbw.de</td><td class="num">10,332</td><td class="num">10,332</td><td class="num ">0</td><td class="num">0</td></tr><tr><td class="mono">www.ravensburg.dhbw.de</td><td class="num">9,154</td><td class="num">9,148</td><td class="num ">6</td><td class="num">0</td></tr><tr><td class="mono">www.karlsruhe.dhbw.de</td><td class="num">7,663</td><td class="num">6,004</td><td class="num ">1,659</td><td class="num">0</td></tr><tr><td class="mono">www.heidenheim.dhbw.de</td><td class="num">6,506</td><td class="num">6,506</td><td class="num ">0</td><td class="num">0</td></tr><tr><td class="mono">dhbw-loerrach.de</td><td class="num">6,473</td><td class="num">6,473</td><td class="num ">0</td><td class="num">0</td></tr><tr><td class="mono">www.dhbw.de</td><td class="num">5,560</td><td class="num">5,560</td><td class="num ">0</td><td class="num">0</td></tr><tr><td class="mono">wwwlehre.dhbw-stuttgart.de</td><td class="num">1,917</td><td class="num">273</td><td class="num hot">1,644</td><td class="num">0</td></tr><tr><td class="mono">studyup.mannheim.dhbw.de</td><td class="num">1,512</td><td class="num">1,512</td><td class="num ">0</td><td class="num">0</td></tr><tr><td class="mono">www.cas.dhbw.de</td><td class="num">1,446</td><td class="num">1,446</td><td class="num ">0</td><td class="num">0</td></tr><tr><td class="mono">www.dhbw-vs.de</td><td class="num">440</td><td class="num">35</td><td class="num hot">405</td><td class="num">0</td></tr><tr><td class="mono">zms.dhbw-stuttgart.de</td><td class="num">222</td><td class="num">89</td><td class="num hot">133</td><td class="num">0</td></tr><tr><td class="mono">blog.dhbw-vs.de</td><td class="num">118</td><td class="num">118</td><td class="num ">0</td><td class="num">0</td></tr><tr><td class="mono">events.heilbronn.dhbw.de</td><td class="num">75</td><td class="num">53</td><td class="num ">22</td><td class="num">0</td></tr><tr><td class="mono">events.mosbach.dhbw.de</td><td class="num">56</td><td class="num">30</td><td class="num hot">26</td><td class="num">0</td></tr><tr><td class="mono">events.mannheim.dhbw.de</td><td class="num">48</td><td class="num">43</td><td class="num ">5</td><td class="num">0</td></tr><tr><td class="mono">umfragen.dhbw-vs.de</td><td class="num">38</td><td class="num">38</td><td class="num ">0</td><td class="num">0</td></tr><tr><td class="mono">nextcloud.dhbw-stuttgart.de</td><td class="num">30</td><td class="num">20</td><td class="num hot">10</td><td class="num">0</td></tr><tr><td class="mono">campusweb.dhbw-loerrach.de</td><td class="num">28</td><td class="num">27</td><td class="num ">1</td><td class="num">0</td></tr><tr><td class="mono">bewerberboerse.karlsruhe.dhbw.de</td><td class="num">25</td><td class="num">25</td><td class="num ">0</td><td class="num">0</td></tr><tr><td class="mono">login.mosbach.dhbw.de</td><td class="num">18</td><td class="num">2</td><td class="num hot">16</td><td class="num">0</td></tr><tr><td class="mono">bewerberboerse.mosbach.dhbw.de</td><td class="num">16</td><td class="num">16</td><td class="num ">0</td><td class="num">0</td></tr><tr><td class="mono">bewerberboerse.dhbw-loerrach.de</td><td class="num">14</td><td class="num">14</td><td class="num ">0</td><td class="num">0</td></tr></tbody></table></section>
+  <section><h2>Per-host URL distribution (spider-trap view)</h2><table><thead><tr><th>Host</th><th>URLs</th><th>Done</th><th>Error</th><th>Pending</th></tr></thead><tbody><tr><td class="mono">www.mosbach.dhbw.de</td><td class="num">24,103</td><td class="num">24,102</td><td class="num ">0</td><td class="num">1</td></tr><tr><td class="mono">www.dhbw-stuttgart.de</td><td class="num">21,887</td><td class="num">18,325</td><td class="num ">2,183</td><td class="num">1,379</td></tr><tr><td class="mono">www.mannheim.dhbw.de</td><td class="num">16,781</td><td class="num">16,777</td><td class="num ">0</td><td class="num">4</td></tr><tr><td class="mono">www.heilbronn.dhbw.de</td><td class="num">10,332</td><td class="num">10,329</td><td class="num ">0</td><td class="num">3</td></tr><tr><td class="mono">www.ravensburg.dhbw.de</td><td class="num">9,154</td><td class="num">9,144</td><td class="num ">6</td><td class="num">4</td></tr><tr><td class="mono">www.karlsruhe.dhbw.de</td><td class="num">7,663</td><td class="num">6,004</td><td class="num ">1,659</td><td class="num">0</td></tr><tr><td class="mono">www.heidenheim.dhbw.de</td><td class="num">6,506</td><td class="num">6,505</td><td class="num ">0</td><td class="num">1</td></tr><tr><td class="mono">dhbw-loerrach.de</td><td class="num">6,473</td><td class="num">6,473</td><td class="num ">0</td><td class="num">0</td></tr><tr><td class="mono">www.dhbw.de</td><td class="num">5,560</td><td class="num">5,559</td><td class="num ">0</td><td class="num">1</td></tr><tr><td class="mono">wwwlehre.dhbw-stuttgart.de</td><td class="num">1,917</td><td class="num">273</td><td class="num hot">1,644</td><td class="num">0</td></tr><tr><td class="mono">www.cas.dhbw.de</td><td class="num">1,627</td><td class="num">1,621</td><td class="num ">6</td><td class="num">0</td></tr><tr><td class="mono">studyup.mannheim.dhbw.de</td><td class="num">1,512</td><td class="num">1,512</td><td class="num ">0</td><td class="num">0</td></tr><tr><td class="mono">www.dhbw-vs.de</td><td class="num">440</td><td class="num">35</td><td class="num hot">405</td><td class="num">0</td></tr><tr><td class="mono">zms.dhbw-stuttgart.de</td><td class="num">222</td><td class="num">89</td><td class="num hot">133</td><td class="num">0</td></tr><tr><td class="mono">blog.dhbw-vs.de</td><td class="num">118</td><td class="num">118</td><td class="num ">0</td><td class="num">0</td></tr><tr><td class="mono">events.heilbronn.dhbw.de</td><td class="num">75</td><td class="num">53</td><td class="num ">22</td><td class="num">0</td></tr><tr><td class="mono">events.mosbach.dhbw.de</td><td class="num">56</td><td class="num">30</td><td class="num hot">26</td><td class="num">0</td></tr><tr><td class="mono">events.mannheim.dhbw.de</td><td class="num">48</td><td class="num">43</td><td class="num ">5</td><td class="num">0</td></tr><tr><td class="mono">umfragen.dhbw-vs.de</td><td class="num">38</td><td class="num">38</td><td class="num ">0</td><td class="num">0</td></tr><tr><td class="mono">nextcloud.dhbw-stuttgart.de</td><td class="num">30</td><td class="num">20</td><td class="num hot">10</td><td class="num">0</td></tr><tr><td class="mono">campusweb.dhbw-loerrach.de</td><td class="num">28</td><td class="num">27</td><td class="num ">1</td><td class="num">0</td></tr><tr><td class="mono">bewerberboerse.karlsruhe.dhbw.de</td><td class="num">25</td><td class="num">25</td><td class="num ">0</td><td class="num">0</td></tr><tr><td class="mono">login.mosbach.dhbw.de</td><td class="num">18</td><td class="num">2</td><td class="num hot">16</td><td class="num">0</td></tr><tr><td class="mono">bewerberboerse.mosbach.dhbw.de</td><td class="num">16</td><td class="num">16</td><td class="num ">0</td><td class="num">0</td></tr><tr><td class="mono">bewerberboerse.dhbw-loerrach.de</td><td class="num">14</td><td class="num">14</td><td class="num ">0</td><td class="num">0</td></tr></tbody></table></section>
 
   <footer>
-    Crawl window 2026-07-14T16:31:51 → 2026-07-16T18:02:38 UTC ·
-    documents updated 2026-07-14T16:32:09 → 2026-07-16T18:12:24 UTC.<br>
+    Crawl window 2026-07-14T16:31:51 → 2026-07-17T20:52:24 UTC ·
+    documents updated 2026-07-14T16:32:09 → 2026-07-17T20:06:51 UTC.<br>
     Read-only snapshot of <span class="mono">C:\Users\manue\Documents\GitHub\DH-DigitalHelper\data\scraper.sqlite3</span>. Static file — regenerate to refresh.
   </footer>
 </div>
 <script id="report-data" type="application/json">{
 "meta": {
-"generated_at": "2026-07-17 16:24:12",
+"generated_at": "2026-07-17 22:04:50",
 "db_path": "C:\\Users\\manue\\Documents\\GitHub\\DH-DigitalHelper\\data\\scraper.sqlite3",
-"db_size_bytes": 4051832832,
-"db_mtime": "2026-07-17 16:22:10",
+"db_size_bytes": 4108226560,
+"db_mtime": "2026-07-17 20:53:38",
 "min_words": 50,
-"raw_dir_bytes": 29745636374
+"raw_dir_bytes": 30079598452
 },
 "totals": {
-"documents": 46389,
-"words": 35284149,
+"documents": 46423,
+"words": 35844942,
 "by_type": {
 "html": {
 "docs": 39150,
@@ -145,56 +137,57 @@ footer { margin-top:40px; color:var(--muted); font-size:12px; border-top:1px sol
 "max": 49024
 },
 "pdf": {
-"docs": 7239,
-"words": 25016768,
-"avg": 3455.8320209973754,
+"docs": 7273,
+"words": 25577561,
+"avg": 3516.7827581465694,
 "max": 172048
 }
 },
-"queue_total": 112826,
+"queue_total": 114845,
 "queue_state": {
-"done": 106648,
-"error": 6178
+"done": 107264,
+"error": 6186,
+"pending": 1395
 },
-"raw_total": 100285,
+"raw_total": 100905,
 "raw_by_type": {
 "html": {
-"n": 91224,
-"bytes": 23332408673
+"n": 91784,
+"bytes": 23608269986
 },
 "pdf": {
-"n": 9061,
-"bytes": 6413227701
+"n": 9121,
+"bytes": 6471328466
 }
 },
-"quality_ok": 98318,
-"quality_bad": 1967,
-"extract_errored": 54,
-"extract_pending": 0,
-"candidates": 92105,
-"distinct_text": 46389
+"quality_ok": 98352,
+"quality_bad": 1933,
+"extract_errored": 20,
+"extract_pending": 620,
+"candidates": 92144,
+"distinct_text": 46423
 },
 "per_site": [
 {
 "name": "heidenheim",
 "domain": "heidenheim.dhbw.de",
-"docs": 3704,
-"words": 1821174,
-"avg": 492,
-"done": 6511,
+"docs": 3709,
+"words": 1828427,
+"avg": 493,
+"done": 6510,
 "error": 5,
-"pending": 0,
-"error_rate": 0.000767341927562922
+"pending": 1,
+"error_rate": 0.0007674597083653108
 },
 {
 "name": "dhbw",
 "domain": "www.dhbw.de",
-"docs": 3377,
-"words": 12894966,
-"avg": 3818,
-"done": 5560,
+"docs": 3406,
+"words": 13448506,
+"avg": 3948,
+"done": 5559,
 "error": 0,
-"pending": 0,
+"pending": 1,
 "error_rate": 0.0
 },
 {
@@ -203,10 +196,10 @@ footer { margin-top:40px; color:var(--muted); font-size:12px; border-top:1px sol
 "docs": 9124,
 "words": 4093834,
 "avg": 449,
-"done": 18337,
+"done": 18333,
 "error": 5,
-"pending": 0,
-"error_rate": 0.0002725984080252971
+"pending": 4,
+"error_rate": 0.00027265786890609664
 },
 {
 "name": "stuttgart",
@@ -214,10 +207,10 @@ footer { margin-top:40px; color:var(--muted); font-size:12px; border-top:1px sol
 "docs": 12087,
 "words": 7605006,
 "avg": 629,
-"done": 18295,
-"error": 4004,
-"pending": 0,
-"error_rate": 0.17955962150769092
+"done": 18750,
+"error": 4006,
+"pending": 1381,
+"error_rate": 0.17604148356477411
 },
 {
 "name": "karlsruhe",
@@ -236,10 +229,10 @@ footer { margin-top:40px; color:var(--muted); font-size:12px; border-top:1px sol
 "docs": 5414,
 "words": 2559548,
 "avg": 473,
-"done": 24173,
+"done": 24172,
 "error": 45,
-"pending": 0,
-"error_rate": 0.0018581220579734082
+"pending": 1,
+"error_rate": 0.0018581987859767931
 },
 {
 "name": "heilbronn",
@@ -247,10 +240,10 @@ footer { margin-top:40px; color:var(--muted); font-size:12px; border-top:1px sol
 "docs": 2372,
 "words": 833063,
 "avg": 351,
-"done": 10388,
+"done": 10385,
 "error": 23,
-"pending": 0,
-"error_rate": 0.0022092018057823454
+"pending": 3,
+"error_rate": 0.0022098385857033053
 },
 {
 "name": "ravensburg",
@@ -258,10 +251,10 @@ footer { margin-top:40px; color:var(--muted); font-size:12px; border-top:1px sol
 "docs": 4328,
 "words": 2393255,
 "avg": 553,
-"done": 9148,
+"done": 9144,
 "error": 6,
-"pending": 0,
-"error_rate": 0.0006554511688879179
+"pending": 4,
+"error_rate": 0.0006557377049180328
 },
 {
 "name": "loerrach",
@@ -291,10 +284,10 @@ footer { margin-top:40px; color:var(--muted); font-size:12px; border-top:1px sol
 "docs": 1209,
 "words": 1073323,
 "avg": 888,
-"done": 1456,
-"error": 1,
+"done": 1631,
+"error": 7,
 "pending": 0,
-"error_rate": 0.0006863417982155113
+"error_rate": 0.004273504273504274
 }
 ],
 "reject_reasons": [
@@ -349,29 +342,21 @@ footer { margin-top:40px; color:var(--muted); font-size:12px; border-top:1px sol
 ],
 "extract_errors": [
 {
-"error": "'NoneType' object has no attribute 'h_lines'",
-"n": 26
-},
-{
 "error": "cannot initialize - document still encrypted",
 "n": 20
-},
-{
-"error": "A process in the process pool was terminated abruptly while the future was running or pending.",
-"n": 8
 }
 ],
 "wordcount": {
-"n": 46389,
+"n": 46423,
 "min": 10,
 "max": 172048,
 "pct": {
 "10": 30,
 "25": 66,
 "50": 217,
-"75": 381,
-"90": 727,
-"99": 17316
+"75": 382,
+"90": 732,
+"99": 17800
 },
 "hist": [
 {
@@ -392,11 +377,11 @@ footer { margin-top:40px; color:var(--muted); font-size:12px; border-top:1px sol
 },
 {
 "label": "500-1,000",
-"n": 3684
+"n": 3685
 },
 {
 "label": "1,000-2,500",
-"n": 1803
+"n": 1807
 },
 {
 "label": "2,500-5,000",
@@ -404,21 +389,21 @@ footer { margin-top:40px; color:var(--muted); font-size:12px; border-top:1px sol
 },
 {
 "label": "5,000+",
-"n": 1036
+"n": 1065
 }
 ],
 "below_min": 8366
 },
 "crawl_log": {
-"total": 1092011,
+"total": 1092649,
 "outcomes": [
 {
 "k": "new",
-"n": 1059464
+"n": 1060084
 },
 {
 "k": "error",
-"n": 12419
+"n": 12427
 },
 {
 "k": "skipped",
@@ -430,7 +415,7 @@ footer { margin-top:40px; color:var(--muted); font-size:12px; border-top:1px sol
 },
 {
 "k": "removed",
-"n": 977
+"n": 987
 },
 {
 "k": "changed",
@@ -440,15 +425,15 @@ footer { margin-top:40px; color:var(--muted); font-size:12px; border-top:1px sol
 "status": [
 {
 "k": 200,
-"n": 1078139
+"n": 1078759
 },
 {
 "k": 0,
-"n": 12187
+"n": 12193
 },
 {
 "k": 404,
-"n": 974
+"n": 984
 },
 {
 "k": 304,
@@ -464,7 +449,7 @@ footer { margin-top:40px; color:var(--muted); font-size:12px; border-top:1px sol
 },
 {
 "k": 500,
-"n": 35
+"n": 37
 },
 {
 "k": 401,
@@ -498,7 +483,7 @@ footer { margin-top:40px; color:var(--muted); font-size:12px; border-top:1px sol
 },
 {
 "k": "HTTP 404",
-"n": 974
+"n": 984
 },
 {
 "k": "HTTP 429",
@@ -518,7 +503,7 @@ footer { margin-top:40px; color:var(--muted); font-size:12px; border-top:1px sol
 },
 {
 "k": "HTTP 500",
-"n": 35
+"n": 37
 },
 {
 "k": "HTTP 401",
@@ -533,8 +518,8 @@ footer { margin-top:40px; color:var(--muted); font-size:12px; border-top:1px sol
 "errors_by_site": [
 {
 "name": "stuttgart",
-"total": 4004,
-"breakdown": "0:3989, 500:7, 401:6, 403:2"
+"total": 4006,
+"breakdown": "0:3989, 500:9, 401:6, 403:2"
 },
 {
 "name": "karlsruhe",
@@ -562,6 +547,11 @@ footer { margin-top:40px; color:var(--muted); font-size:12px; border-top:1px sol
 "breakdown": "0:6, 400:4, 500:4, 403:1"
 },
 {
+"name": "cas",
+"total": 7,
+"breakdown": "0:7"
+},
+{
 "name": "ravensburg",
 "total": 6,
 "breakdown": "400:4, 0:2"
@@ -575,44 +565,39 @@ footer { margin-top:40px; color:var(--muted); font-size:12px; border-top:1px sol
 "name": "mannheim",
 "total": 5,
 "breakdown": "429:5"
-},
-{
-"name": "cas",
-"total": 1,
-"breakdown": "0:1"
 }
 ],
 "links": {
-"total": 15087174,
-"in_domain": 13662926,
-"external": 1424248,
-"distinct_src": 80560,
-"distinct_dst": 147692,
-"docs_no_out": 7259,
+"total": 15217211,
+"in_domain": 13787008,
+"external": 1430203,
+"distinct_src": 81119,
+"distinct_dst": 149510,
+"docs_no_out": 7293,
 "top_external": [
 {
 "host": "www.instagram.com",
-"n": 82371
+"n": 82854
 },
 {
 "host": "www.youtube.com",
-"n": 73306
+"n": 73790
 },
 {
 "host": "www.linkedin.com",
-"n": 58500
+"n": 58984
 },
 {
 "host": "www.dhbw.de",
-"n": 56471
+"n": 57477
 },
 {
 "host": "www.facebook.com",
-"n": 45669
+"n": 46041
 },
 {
 "host": "dualis.dhbw.de",
-"n": 41005
+"n": 41487
 },
 {
 "host": "portal.dhbw.de",
@@ -620,7 +605,7 @@ footer { margin-top:40px; color:var(--muted); font-size:12px; border-top:1px sol
 },
 {
 "host": "www.cas.dhbw.de",
-"n": 34238
+"n": 35003
 },
 {
 "host": "www.tiktok.com",
@@ -656,1153 +641,57 @@ footer { margin-top:40px; color:var(--muted); font-size:12px; border-top:1px sol
 },
 {
 "host": "www.weiterbildung.dhbw.de",
-"n": 12876
+"n": 13369
 },
 {
 "host": "dhbw-loerrach.de",
-"n": 11760
+"n": 12131
 },
 {
 "host": "www.studierendenwerk-stuttgart.de",
-"n": 11557
+"n": 11558
 },
 {
 "host": "www.accenture.com",
 "n": 11488
 }
-],
-"graph": {
-"nodes": [
-{
-"host": "www.dhbw-stuttgart.de",
-"kind": "site",
-"out": 229730,
-"in": 1339,
-"self": 6002816,
-"deg": 6233885
-},
-{
-"host": "www.mosbach.dhbw.de",
-"kind": "site",
-"out": 796731,
-"in": 421,
-"self": 2892493,
-"deg": 3689645
-},
-{
-"host": "www.mannheim.dhbw.de",
-"kind": "site",
-"out": 158552,
-"in": 396,
-"self": 2565375,
-"deg": 2724323
-},
-{
-"host": "www.heilbronn.dhbw.de",
-"kind": "site",
-"out": 136686,
-"in": 217,
-"self": 553644,
-"deg": 690547
-},
-{
-"host": "dhbw-loerrach.de",
-"kind": "site",
-"out": 60669,
-"in": 11808,
-"self": 391762,
-"deg": 464239
-},
-{
-"host": "www.karlsruhe.dhbw.de",
-"kind": "site",
-"out": 45771,
-"in": 336,
-"self": 358132,
-"deg": 404239
-},
-{
-"host": "www.cas.dhbw.de",
-"kind": "site",
-"out": 17628,
-"in": 34238,
-"self": 270898,
-"deg": 322764
-},
-{
-"host": "www.ravensburg.dhbw.de",
-"kind": "site",
-"out": 61628,
-"in": 233,
-"self": 255317,
-"deg": 317178
-},
-{
-"host": "www.heidenheim.dhbw.de",
-"kind": "site",
-"out": 32391,
-"in": 300,
-"self": 171417,
-"deg": 204108
-},
-{
-"host": "www.dhbw.de",
-"kind": "site",
-"out": 7359,
-"in": 56471,
-"self": 53309,
-"deg": 117139
-},
-{
-"host": "www.instagram.com",
-"kind": "external",
-"out": 0,
-"in": 82371,
-"self": 0,
-"deg": 82371
-},
-{
-"host": "www.youtube.com",
-"kind": "external",
-"out": 0,
-"in": 73306,
-"self": 0,
-"deg": 73306
-},
-{
-"host": "www.linkedin.com",
-"kind": "external",
-"out": 0,
-"in": 58500,
-"self": 0,
-"deg": 58500
-},
-{
-"host": "www.facebook.com",
-"kind": "external",
-"out": 0,
-"in": 45669,
-"self": 0,
-"deg": 45669
-},
-{
-"host": "dualis.dhbw.de",
-"kind": "external",
-"out": 0,
-"in": 41005,
-"self": 0,
-"deg": 41005
-},
-{
-"host": "portal.dhbw.de",
-"kind": "external",
-"out": 0,
-"in": 39837,
-"self": 0,
-"deg": 39837
-},
-{
-"host": "www.tiktok.com",
-"kind": "external",
-"out": 0,
-"in": 31235,
-"self": 0,
-"deg": 31235
-},
-{
-"host": "bildungscampus.hn",
-"kind": "external",
-"out": 0,
-"in": 28489,
-"self": 0,
-"deg": 28489
-},
-{
-"host": "moodle.dhbw.de",
-"kind": "external",
-"out": 0,
-"in": 24518,
-"self": 0,
-"deg": 24518
-},
-{
-"host": "studyup.mannheim.dhbw.de",
-"kind": "external",
-"out": 0,
-"in": 22401,
-"self": 0,
-"deg": 22401
-},
-{
-"host": "de.linkedin.com",
-"kind": "external",
-"out": 0,
-"in": 21150,
-"self": 0,
-"deg": 21150
-},
-{
-"host": "www.intern.mosbach.dhbw.de",
-"kind": "site",
-"out": 36,
-"in": 21053,
-"self": 12,
-"deg": 21101
-},
-{
-"host": "bewerbungsportal.heilbronn.dhbw.de",
-"kind": "external",
-"out": 0,
-"in": 18969,
-"self": 0,
-"deg": 18969
-},
-{
-"host": "de-de.facebook.com",
-"kind": "external",
-"out": 0,
-"in": 15864,
-"self": 0,
-"deg": 15864
-}
-],
-"edges": [
-{
-"s": 3,
-"t": 17,
-"w": 28467
-},
-{
-"s": 0,
-"t": 9,
-"w": 24769
-},
-{
-"s": 0,
-"t": 6,
-"w": 23743
-},
-{
-"s": 2,
-"t": 19,
-"w": 22397
-},
-{
-"s": 1,
-"t": 18,
-"w": 21102
-},
-{
-"s": 1,
-"t": 11,
-"w": 21084
-},
-{
-"s": 1,
-"t": 10,
-"w": 21048
-},
-{
-"s": 1,
-"t": 21,
-"w": 21047
-},
-{
-"s": 1,
-"t": 13,
-"w": 21021
-},
-{
-"s": 1,
-"t": 15,
-"w": 21010
-},
-{
-"s": 1,
-"t": 20,
-"w": 21009
-},
-{
-"s": 3,
-"t": 22,
-"w": 18962
-},
-{
-"s": 2,
-"t": 11,
-"w": 15447
-},
-{
-"s": 2,
-"t": 12,
-"w": 15431
-},
-{
-"s": 2,
-"t": 10,
-"w": 15416
-},
-{
-"s": 2,
-"t": 16,
-"w": 15402
-},
-{
-"s": 2,
-"t": 14,
-"w": 15338
-},
-{
-"s": 0,
-"t": 12,
-"w": 11798
-},
-{
-"s": 0,
-"t": 11,
-"w": 11709
-},
-{
-"s": 0,
-"t": 13,
-"w": 11670
-},
-{
-"s": 0,
-"t": 10,
-"w": 11647
-},
-{
-"s": 0,
-"t": 4,
-"w": 11642
-},
-{
-"s": 0,
-"t": 14,
-"w": 11641
-},
-{
-"s": 2,
-"t": 9,
-"w": 10620
-},
-{
-"s": 3,
-"t": 9,
-"w": 9693
-},
-{
-"s": 3,
-"t": 12,
-"w": 9563
-},
-{
-"s": 3,
-"t": 6,
-"w": 9531
-},
-{
-"s": 3,
-"t": 11,
-"w": 9509
-},
-{
-"s": 3,
-"t": 13,
-"w": 9493
-},
-{
-"s": 3,
-"t": 10,
-"w": 9492
-},
-{
-"s": 3,
-"t": 15,
-"w": 9481
-},
-{
-"s": 7,
-"t": 9,
-"w": 6299
-},
-{
-"s": 4,
-"t": 12,
-"w": 6283
-},
-{
-"s": 4,
-"t": 11,
-"w": 6271
-},
-{
-"s": 4,
-"t": 10,
-"w": 6241
-},
-{
-"s": 4,
-"t": 23,
-"w": 6235
-},
-{
-"s": 4,
-"t": 16,
-"w": 6231
-},
-{
-"s": 7,
-"t": 10,
-"w": 6229
-},
-{
-"s": 7,
-"t": 12,
-"w": 6221
-},
-{
-"s": 7,
-"t": 23,
-"w": 6217
-},
-{
-"s": 7,
-"t": 14,
-"w": 6216
-},
-{
-"s": 7,
-"t": 15,
-"w": 6215
-},
-{
-"s": 7,
-"t": 16,
-"w": 6215
-},
-{
-"s": 5,
-"t": 10,
-"w": 6166
-},
-{
-"s": 8,
-"t": 11,
-"w": 3459
-},
-{
-"s": 8,
-"t": 10,
-"w": 3436
-},
-{
-"s": 8,
-"t": 12,
-"w": 3397
-},
-{
-"s": 8,
-"t": 16,
-"w": 3381
-},
-{
-"s": 8,
-"t": 23,
-"w": 3380
-},
-{
-"s": 8,
-"t": 14,
-"w": 3363
-},
-{
-"s": 5,
-"t": 18,
-"w": 3311
-},
-{
-"s": 5,
-"t": 11,
-"w": 3124
-},
-{
-"s": 5,
-"t": 13,
-"w": 3116
-},
-{
-"s": 5,
-"t": 12,
-"w": 3091
-},
-{
-"s": 5,
-"t": 14,
-"w": 3083
-},
-{
-"s": 5,
-"t": 15,
-"w": 3081
-},
-{
-"s": 6,
-"t": 9,
-"w": 2483
-},
-{
-"s": 5,
-"t": 9,
-"w": 1614
-},
-{
-"s": 6,
-"t": 14,
-"w": 1262
-},
-{
-"s": 6,
-"t": 12,
-"w": 1255
-},
-{
-"s": 6,
-"t": 11,
-"w": 1242
-},
-{
-"s": 6,
-"t": 10,
-"w": 1226
-},
-{
-"s": 9,
-"t": 11,
-"w": 1210
-},
-{
-"s": 9,
-"t": 12,
-"w": 1186
-},
-{
-"s": 9,
-"t": 10,
-"w": 1179
-},
-{
-"s": 9,
-"t": 0,
-"w": 468
-},
-{
-"s": 8,
-"t": 9,
-"w": 406
-},
-{
-"s": 9,
-"t": 2,
-"w": 341
-},
-{
-"s": 4,
-"t": 9,
-"w": 321
-},
-{
-"s": 9,
-"t": 1,
-"w": 278
-},
-{
-"s": 4,
-"t": 6,
-"w": 247
-},
-{
-"s": 9,
-"t": 5,
-"w": 242
-},
-{
-"s": 9,
-"t": 8,
-"w": 221
-},
-{
-"s": 9,
-"t": 7,
-"w": 214
-},
-{
-"s": 1,
-"t": 9,
-"w": 210
-},
-{
-"s": 9,
-"t": 6,
-"w": 206
-},
-{
-"s": 9,
-"t": 3,
-"w": 136
-},
-{
-"s": 1,
-"t": 6,
-"w": 123
-},
-{
-"s": 5,
-"t": 6,
-"w": 109
-},
-{
-"s": 8,
-"t": 6,
-"w": 102
-},
-{
-"s": 7,
-"t": 20,
-"w": 93
-},
-{
-"s": 9,
-"t": 4,
-"w": 90
-},
-{
-"s": 2,
-"t": 6,
-"w": 76
-},
-{
-"s": 7,
-"t": 6,
-"w": 57
-},
-{
-"s": 8,
-"t": 18,
-"w": 51
-},
-{
-"s": 3,
-"t": 8,
-"w": 44
-},
-{
-"s": 9,
-"t": 15,
-"w": 42
-},
-{
-"s": 3,
-"t": 5,
-"w": 37
-},
-{
-"s": 1,
-"t": 14,
-"w": 36
-},
-{
-"s": 5,
-"t": 1,
-"w": 32
-},
-{
-"s": 8,
-"t": 13,
-"w": 28
-},
-{
-"s": 9,
-"t": 14,
-"w": 25
-},
-{
-"s": 7,
-"t": 11,
-"w": 24
-},
-{
-"s": 9,
-"t": 18,
-"w": 21
-},
-{
-"s": 1,
-"t": 5,
-"w": 21
-},
-{
-"s": 9,
-"t": 13,
-"w": 20
-},
-{
-"s": 21,
-"t": 1,
-"w": 18
-},
-{
-"s": 2,
-"t": 1,
-"w": 16
-},
-{
-"s": 8,
-"t": 1,
-"w": 16
-},
-{
-"s": 0,
-"t": 2,
-"w": 14
-},
-{
-"s": 8,
-"t": 0,
-"w": 14
-},
-{
-"s": 4,
-"t": 13,
-"w": 13
-},
-{
-"s": 0,
-"t": 1,
-"w": 13
-},
-{
-"s": 3,
-"t": 1,
-"w": 13
-},
-{
-"s": 5,
-"t": 0,
-"w": 12
-},
-{
-"s": 2,
-"t": 0,
-"w": 12
-},
-{
-"s": 2,
-"t": 5,
-"w": 11
-},
-{
-"s": 9,
-"t": 20,
-"w": 11
-},
-{
-"s": 9,
-"t": 17,
-"w": 11
-},
-{
-"s": 7,
-"t": 0,
-"w": 10
-},
-{
-"s": 1,
-"t": 12,
-"w": 10
-},
-{
-"s": 4,
-"t": 18,
-"w": 9
-},
-{
-"s": 8,
-"t": 2,
-"w": 9
-},
-{
-"s": 5,
-"t": 2,
-"w": 9
-},
-{
-"s": 2,
-"t": 13,
-"w": 9
-},
-{
-"s": 1,
-"t": 0,
-"w": 9
-},
-{
-"s": 9,
-"t": 23,
-"w": 9
-},
-{
-"s": 6,
-"t": 3,
-"w": 8
-},
-{
-"s": 6,
-"t": 5,
-"w": 8
-},
-{
-"s": 3,
-"t": 4,
-"w": 8
-},
-{
-"s": 5,
-"t": 3,
-"w": 8
-},
-{
-"s": 7,
-"t": 13,
-"w": 8
-},
-{
-"s": 6,
-"t": 4,
-"w": 7
-},
-{
-"s": 6,
-"t": 13,
-"w": 7
-},
-{
-"s": 6,
-"t": 17,
-"w": 7
-},
-{
-"s": 3,
-"t": 0,
-"w": 7
-},
-{
-"s": 6,
-"t": 0,
-"w": 6
-},
-{
-"s": 3,
-"t": 14,
-"w": 6
-},
-{
-"s": 9,
-"t": 22,
-"w": 6
-},
-{
-"s": 7,
-"t": 18,
-"w": 5
-},
-{
-"s": 0,
-"t": 5,
-"w": 5
-},
-{
-"s": 6,
-"t": 1,
-"w": 4
-},
-{
-"s": 4,
-"t": 0,
-"w": 4
-},
-{
-"s": 4,
-"t": 5,
-"w": 4
-},
-{
-"s": 8,
-"t": 3,
-"w": 4
-},
-{
-"s": 2,
-"t": 8,
-"w": 4
-},
-{
-"s": 2,
-"t": 18,
-"w": 4
-},
-{
-"s": 7,
-"t": 8,
-"w": 4
-},
-{
-"s": 7,
-"t": 4,
-"w": 4
-},
-{
-"s": 9,
-"t": 19,
-"w": 4
-},
-{
-"s": 6,
-"t": 8,
-"w": 3
-},
-{
-"s": 6,
-"t": 7,
-"w": 3
-},
-{
-"s": 8,
-"t": 15,
-"w": 3
-},
-{
-"s": 3,
-"t": 2,
-"w": 3
-},
-{
-"s": 3,
-"t": 7,
-"w": 3
-},
-{
-"s": 5,
-"t": 7,
-"w": 3
-},
-{
-"s": 2,
-"t": 7,
-"w": 3
-},
-{
-"s": 1,
-"t": 2,
-"w": 3
-},
-{
-"s": 1,
-"t": 4,
-"w": 3
-},
-{
-"s": 1,
-"t": 7,
-"w": 3
-},
-{
-"s": 7,
-"t": 1,
-"w": 3
-},
-{
-"s": 9,
-"t": 16,
-"w": 3
-},
-{
-"s": 6,
-"t": 2,
-"w": 2
-},
-{
-"s": 0,
-"t": 7,
-"w": 2
-},
-{
-"s": 8,
-"t": 7,
-"w": 2
-},
-{
-"s": 8,
-"t": 5,
-"w": 2
-},
-{
-"s": 3,
-"t": 18,
-"w": 2
-},
-{
-"s": 5,
-"t": 4,
-"w": 2
-},
-{
-"s": 5,
-"t": 20,
-"w": 2
-},
-{
-"s": 2,
-"t": 3,
-"w": 2
-},
-{
-"s": 2,
-"t": 4,
-"w": 2
-},
-{
-"s": 1,
-"t": 8,
-"w": 2
-},
-{
-"s": 9,
-"t": 21,
-"w": 2
-},
-{
-"s": 7,
-"t": 3,
-"w": 1
-},
-{
-"s": 6,
-"t": 15,
-"w": 1
-},
-{
-"s": 6,
-"t": 23,
-"w": 1
-},
-{
-"s": 0,
-"t": 20,
-"w": 1
-},
-{
-"s": 0,
-"t": 8,
-"w": 1
-},
-{
-"s": 0,
-"t": 18,
-"w": 1
-},
-{
-"s": 8,
-"t": 20,
-"w": 1
-},
-{
-"s": 8,
-"t": 17,
-"w": 1
-},
-{
-"s": 5,
-"t": 22,
-"w": 1
-},
-{
-"s": 5,
-"t": 8,
-"w": 1
-},
-{
-"s": 5,
-"t": 17,
-"w": 1
-},
-{
-"s": 2,
-"t": 20,
-"w": 1
-},
-{
-"s": 1,
-"t": 3,
-"w": 1
-},
-{
-"s": 7,
-"t": 5,
-"w": 1
-},
-{
-"s": 7,
-"t": 2,
-"w": 1
-},
-{
-"s": 7,
-"t": 17,
-"w": 1
-}
-],
-"n_hosts": 8098,
-"n_edges_total": 1552157,
-"n_edges_shown": 627875
-}
+]
 },
 "hosts": [
 {
 "host": "www.mosbach.dhbw.de",
 "urls": 24103,
-"done": 24103,
+"done": 24102,
 "error": 0,
-"pending": 0
+"pending": 1
 },
 {
 "host": "www.dhbw-stuttgart.de",
-"urls": 20051,
-"done": 17870,
-"error": 2181,
-"pending": 0
+"urls": 21887,
+"done": 18325,
+"error": 2183,
+"pending": 1379
 },
 {
 "host": "www.mannheim.dhbw.de",
 "urls": 16781,
-"done": 16781,
+"done": 16777,
 "error": 0,
-"pending": 0
+"pending": 4
 },
 {
 "host": "www.heilbronn.dhbw.de",
 "urls": 10332,
-"done": 10332,
+"done": 10329,
 "error": 0,
-"pending": 0
+"pending": 3
 },
 {
 "host": "www.ravensburg.dhbw.de",
 "urls": 9154,
-"done": 9148,
+"done": 9144,
 "error": 6,
-"pending": 0
+"pending": 4
 },
 {
 "host": "www.karlsruhe.dhbw.de",
@@ -1814,9 +703,9 @@ footer { margin-top:40px; color:var(--muted); font-size:12px; border-top:1px sol
 {
 "host": "www.heidenheim.dhbw.de",
 "urls": 6506,
-"done": 6506,
+"done": 6505,
 "error": 0,
-"pending": 0
+"pending": 1
 },
 {
 "host": "dhbw-loerrach.de",
@@ -1828,9 +717,9 @@ footer { margin-top:40px; color:var(--muted); font-size:12px; border-top:1px sol
 {
 "host": "www.dhbw.de",
 "urls": 5560,
-"done": 5560,
+"done": 5559,
 "error": 0,
-"pending": 0
+"pending": 1
 },
 {
 "host": "wwwlehre.dhbw-stuttgart.de",
@@ -1840,16 +729,16 @@ footer { margin-top:40px; color:var(--muted); font-size:12px; border-top:1px sol
 "pending": 0
 },
 {
-"host": "studyup.mannheim.dhbw.de",
-"urls": 1512,
-"done": 1512,
-"error": 0,
+"host": "www.cas.dhbw.de",
+"urls": 1627,
+"done": 1621,
+"error": 6,
 "pending": 0
 },
 {
-"host": "www.cas.dhbw.de",
-"urls": 1446,
-"done": 1446,
+"host": "studyup.mannheim.dhbw.de",
+"urls": 1512,
+"done": 1512,
 "error": 0,
 "pending": 0
 },
@@ -1948,22 +837,22 @@ footer { margin-top:40px; color:var(--muted); font-size:12px; border-top:1px sol
 "freshness": {
 "queue_first_seen": {
 "min": "2026-07-14T16:31:51",
-"max": "2026-07-16T17:59:23"
+"max": "2026-07-17T20:52:24"
 },
 "documents_updated": {
 "min": "2026-07-14T16:32:09",
-"max": "2026-07-16T18:12:24"
+"max": "2026-07-17T20:06:51"
 },
 "raw_first_seen": {
 "min": "2026-07-14T16:31:55",
-"max": "2026-07-16T18:02:38"
+"max": "2026-07-17T20:52:24"
 }
 },
 "findings": [
 {
 "sev": "crit",
 "title": "villingen_schwenningen is under-covered",
-"detail": "121 documents vs a per-site median of 3,377; queue shows 414 errors (66% of fetch attempts)."
+"detail": "121 documents vs a per-site median of 3,406; queue shows 414 errors (66% of fetch attempts)."
 },
 {
 "sev": "warn",
@@ -1973,7 +862,7 @@ footer { margin-top:40px; color:var(--muted); font-size:12px; border-top:1px sol
 {
 "sev": "info",
 "title": "stuttgart has elevated fetch errors",
-"detail": "4,004 errored URLs (18% of attempts) -- mostly connection refused/timeout, worth one gentle retry."
+"detail": "4,006 errored URLs (18% of attempts) -- mostly connection refused/timeout, worth one gentle retry."
 },
 {
 "sev": "info",

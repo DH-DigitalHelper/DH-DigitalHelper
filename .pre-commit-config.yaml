@@ -21,8 +21,11 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
+      # Keep the vendored, minified d3 byte-identical to upstream (auditability).
       - id: trailing-whitespace
+        exclude: ^src/scraper/vendor/
       - id: end-of-file-fixer
+        exclude: ^src/scraper/vendor/
       - id: check-yaml
       - id: check-toml
       - id: check-merge-conflict
