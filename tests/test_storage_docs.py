@@ -480,3 +480,50 @@ def test_migration_is_idempotent_when_column_present():
     st.init_db(conn)  # second time must not raise a duplicate-column error
     cols = {r["name"] for r in conn.execute("PRAGMA table_info(documents)")}
     assert "text_sha256" in cols
+
+
+# ---------------------------------------------------------------------------
+# Filename title fallback
+# ---------------------------------------------------------------------------
+
+
+def test_upsert_fills_missing_title_from_url_basename():
+    conn = mem()
+    st.enqueue(conn, "https://x/fileadmin/Modulhandbuch_WI.pdf", "x", 0, None, NOW1)
+    titleless = {
+        "title": None,
+        "text": "genuine module handbook body text " * 10,
+        "markdown": "genuine module handbook body text " * 10,
+        "lang": None,
+        "word_count": 60,
+        "metadata": None,
+    }
+    st.upsert_document(
+        conn,
+        "https://x/fileadmin/Modulhandbuch_WI.pdf",
+        "x",
+        "pdf",
+        "c1",
+        titleless,
+        NOW1,
+    )
+    row = conn.execute(
+        "SELECT title FROM documents WHERE url='https://x/fileadmin/Modulhandbuch_WI.pdf'"
+    ).fetchone()
+    assert row["title"] == "Modulhandbuch WI"
+
+
+def test_upsert_keeps_existing_title():
+    conn = mem()
+    st.enqueue(conn, "https://x/a", "x", 0, None, NOW1)
+    withtitle = {
+        "title": "Real Title",
+        "text": "some body text here " * 10,
+        "markdown": "some body text here " * 10,
+        "lang": None,
+        "word_count": 40,
+        "metadata": None,
+    }
+    st.upsert_document(conn, "https://x/a", "x", "html", "c1", withtitle, NOW1)
+    row = conn.execute("SELECT title FROM documents WHERE url='https://x/a'").fetchone()
+    assert row["title"] == "Real Title"

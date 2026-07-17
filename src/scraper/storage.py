@@ -17,7 +17,7 @@ from itertools import groupby
 from pathlib import Path
 from urllib.parse import parse_qsl, urlsplit
 
-from . import classify, taxonomy
+from . import classify, pdf_title, taxonomy
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS queue (
@@ -875,6 +875,11 @@ def _upsert_document(conn, url, site, source_type, content_sha256, doc, now) -> 
 
     existing = conn.execute("SELECT * FROM documents WHERE url=?", (url,)).fetchone()
     meta = json.dumps(doc.get("metadata")) if doc.get("metadata") else None
+    # A doc the extractor could not title (a PDF with no heading and no usable
+    # metadata title, or a rare title-less HTML page) still gets a readable title
+    # from its URL basename. The "unchanged"/"duplicate" branches below never write
+    # title -- the one-time backfill (run_backfill) covers already-stored rows.
+    title = doc.get("title") or pdf_title.from_url(url)
     if existing is None:
         conn.execute(
             """INSERT INTO documents (id, url, final_url, site, source_type,
@@ -888,7 +893,7 @@ def _upsert_document(conn, url, site, source_type, content_sha256, doc, now) -> 
                 site,
                 source_type,
                 content_sha256,
-                doc.get("title"),
+                title,
                 doc["text"],
                 doc["markdown"],
                 doc.get("lang"),
@@ -912,7 +917,7 @@ def _upsert_document(conn, url, site, source_type, content_sha256, doc, now) -> 
             (
                 content_sha256,
                 source_type,
-                doc.get("title"),
+                title,
                 doc["text"],
                 doc["markdown"],
                 doc.get("lang"),
