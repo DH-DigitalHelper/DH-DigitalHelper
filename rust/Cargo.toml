@@ -32,10 +32,15 @@ sha2 = "0.11"
 tl = "0.7"
 regex = "1"
 percent-encoding = "2"
+# Sitemaps are commonly published as `.xml.gz`. reqwest's `gzip` feature only
+# handles Content-Encoding, not a body whose payload IS a gzip member, so we
+# inflate those ourselves (see sitemap::decode_xml).
+flate2 = "1"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
 tempfile = "3"
+flate2 = "1"
 
 [profile.release]
 opt-level = 3

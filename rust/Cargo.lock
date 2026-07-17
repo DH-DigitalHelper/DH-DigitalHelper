@@ -208,6 +208,7 @@ dependencies = [
 name = "dhbw_scraper_native"
 version = "0.3.0"
 dependencies = [
+ "flate2",
  "percent-encoding",
  "pyo3",
  "regex",

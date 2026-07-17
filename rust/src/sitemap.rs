@@ -5,6 +5,7 @@
 //! in-domain locs and in-domain child sitemaps.
 
 use std::collections::{HashMap, HashSet};
+use std::io::Read;
 use std::sync::LazyLock;
 
 use regex::Regex;
@@ -62,6 +63,20 @@ pub async fn discover<C: HttpClient>(
     };
 
     let mut to_visit: Vec<String> = vec![format!("{homepage}/sitemap.xml")];
+    // Probing only the conventional location misses any site that publishes its
+    // index elsewhere and advertises it via robots.txt -- the whole seed, silently.
+    // This reads robots.txt for DISCOVERY only: crawl policy still deliberately
+    // ignores it (see the README), we are just taking the pointer it offers.
+    if let Some(bytes) = client
+        .fetch_bytes(format!("{homepage}/robots.txt"), user_agent.to_string())
+        .await
+    {
+        for loc in robots_sitemaps(&String::from_utf8_lossy(&bytes)) {
+            if in_domain(&loc, allowed_domain) {
+                to_visit.push(loc);
+            }
+        }
+    }
     let mut visited: HashSet<String> = HashSet::new();
     // Insertion-ordered accumulation of found urls (last lastmod wins, as in the
     // Python dict).
@@ -78,7 +93,7 @@ pub async fn discover<C: HttpClient>(
         else {
             continue;
         };
-        let xml = String::from_utf8_lossy(&bytes);
+        let xml = decode_xml(&bytes);
         let (url_pairs, subs) = parse(&xml);
         for (url, lastmod) in url_pairs {
             if in_domain(&url, allowed_domain) {
@@ -100,6 +115,44 @@ pub async fn discover<C: HttpClient>(
         .map(|u| {
             let lm = found.get(&u).cloned().flatten();
             (u, lm)
+        })
+        .collect()
+}
+
+/// Decode a fetched sitemap body to XML text, inflating it first if it is a gzip
+/// member.
+///
+/// `.xml.gz` children are standard on large sites. reqwest's `gzip` feature only
+/// strips a `Content-Encoding: gzip` transfer wrapper -- it does nothing for a
+/// body whose *payload* is gzip (served as application/gzip). Those bytes used to
+/// reach `from_utf8_lossy` raw, decode to replacement-char garbage that the
+/// `<loc>` regex matched nothing in, and every URL in that child vanished from
+/// seeding with no error at all. A corrupt member degrades to best-effort, like
+/// everything else here.
+fn decode_xml(bytes: &[u8]) -> String {
+    if bytes.starts_with(&[0x1f, 0x8b]) {
+        let mut out = String::new();
+        if flate2::read::GzDecoder::new(bytes)
+            .read_to_string(&mut out)
+            .is_ok()
+        {
+            return out;
+        }
+    }
+    String::from_utf8_lossy(bytes).into_owned()
+}
+
+/// The targets of robots.txt `Sitemap:` lines. The directive is case-insensitive
+/// and position-independent (it is not tied to any User-agent group).
+fn robots_sitemaps(text: &str) -> Vec<String> {
+    text.lines()
+        .filter_map(|line| {
+            let (key, value) = line.split_once(':')?;
+            if !key.trim().eq_ignore_ascii_case("sitemap") {
+                return None;
+            }
+            let value = value.trim();
+            (!value.is_empty()).then(|| value.to_string())
         })
         .collect()
 }
@@ -185,6 +238,45 @@ mod tests {
         let (pairs, subs) = parse(xml);
         assert!(pairs.is_empty());
         assert_eq!(subs, vec!["https://a.de/sitemap-1.xml".to_string()]);
+    }
+
+    #[test]
+    fn robots_sitemaps_are_case_insensitive_and_ignore_other_directives() {
+        let robots = "User-agent: *\n\
+                      Disallow: /admin\n\
+                      Sitemap: https://a.de/sitemap.xml\n\
+                      sitemap:  https://a.de/news.xml  \n\
+                      SITEMAP: https://a.de/shouty.xml\n\
+                      Crawl-delay: 5\n\
+                      Sitemap:\n";
+        assert_eq!(
+            robots_sitemaps(robots),
+            vec![
+                "https://a.de/sitemap.xml".to_string(),
+                "https://a.de/news.xml".to_string(),
+                "https://a.de/shouty.xml".to_string(),
+            ],
+            "an empty Sitemap: yields nothing; other directives are ignored"
+        );
+    }
+
+    #[test]
+    fn decode_xml_inflates_a_gzip_member_and_passes_plain_text_through() {
+        use flate2::write::GzEncoder;
+        use flate2::Compression;
+        use std::io::Write;
+
+        let plain = "<urlset><url><loc>https://a.de/x</loc></url></urlset>";
+        let mut enc = GzEncoder::new(Vec::new(), Compression::default());
+        enc.write_all(plain.as_bytes()).unwrap();
+        let gz = enc.finish().unwrap();
+
+        assert_eq!(decode_xml(&gz), plain, "gzip member must be inflated");
+        assert_eq!(
+            decode_xml(plain.as_bytes()),
+            plain,
+            "plain XML passes through"
+        );
     }
 
     #[test]
