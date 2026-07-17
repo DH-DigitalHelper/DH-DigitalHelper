@@ -91,7 +91,7 @@ environment preloaded — and build from there:
 
 ```powershell
 uv sync --extra dev            # installs deps AND builds the extension into .venv
-uv run pytest                  # 86 tests, incl. the end-to-end native crawl test
+uv run pytest                  # 143 tests, incl. the end-to-end crawl test in tests/test_engine_run_fetch.py
 ```
 
 `uv sync` builds the extension as part of installing the project, so it must run in that
@@ -366,16 +366,21 @@ can be overridden per-run without editing the file via the `fetch`/`run` flags
 
 ```
 src/scraper/         Phase 2 + CLI (pure Python)
+  __init__.py      empty package marker
   config.py        load + validate config.toml
   storage.py       SQLite schema (incl. links), Phase-2 claims/upserts/delta, raw-file cache
   fetch.py         content-type classification + ext_for (used by Phase 2 extraction)
   crawl.py         phase 1 adapter -> scraper._engine.run_fetch (Rust engine)
   html_extract.py  trafilatura -> markdown + metadata
   pdf_extract.py   PyMuPDF4LLM -> markdown/text (lazy import, lightweight)
+  markdown.py      shared markdown -> plain-text stripper (keeps word_count consistent across HTML/PDF)
   quality.py       moderate quality gate (min words, nav ratio, login/cookie/error filters)
   extract.py       phase 2: extract, quality-gate, materialize documents
   progress.py      stderr progress reporting (TTY status line / plain log lines)
+  dashboard.py     self-contained read-only HTML analysis report (backs `report`)
   cli.py           `fetch` / `extract` / `run` / `stats` / `delta` entrypoints
+  __main__.py      `python -m scraper` entry point -> cli.main
+  _engine.pyd      built Rust extension (scraper._engine), gitignored
 
 src/scrape-engine/   Phase-1 crawler (compiled to scraper._engine via maturin/PyO3)
   crawl.rs          orchestrator: frontier, per-host workers, rate limit, termination
@@ -387,6 +392,7 @@ src/scrape-engine/   Phase-1 crawler (compiled to scraper._engine via maturin/Py
   {config,outcome,progress,lib}.rs  config mapping, change detection, progress, PyO3
 
 Cargo.toml           root manifest: [lib] path -> src/scrape-engine/lib.rs
+Cargo.lock           pinned dependency versions (checked in for reproducible builds)
 tests/               pytest suites + fixtures/
   scrape-engine/     links/sitemap parity + end-to-end orchestration (cargo)
 ```
