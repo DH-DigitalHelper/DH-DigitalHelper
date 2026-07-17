@@ -43,7 +43,10 @@ PAGES = {
           <a href="http://example.invalid/x">external</a>
         </body></html>""",
     ),
-    "/a": ("text/html", '<html><body>page a <a href="/b">b</a><a href="/c">c</a></body></html>'),
+    "/a": (
+        "text/html",
+        '<html><body>page a <a href="/b">b</a><a href="/c">c</a></body></html>',
+    ),
     "/b": ("text/html", '<html><body>page b <a href="/a">a</a></body></html>'),
     "/c": ("text/html", "<html><body>page c leaf content here</body></html>"),
     "/from-sitemap": ("text/html", "<html><body>sitemap-only leaf page</body></html>"),
@@ -133,8 +136,13 @@ def test_run_fetch_crawls_and_writes_shared_db(tmp_path, server):
     assert done == 5
 
     # Trap + external are recorded as edges but never enqueued.
-    for absent in (f"http://{host}/calendar/view.php?view=month&time=1", "http://example.invalid/x"):
-        n = conn.execute("SELECT COUNT(*) c FROM queue WHERE url=?", (absent,)).fetchone()["c"]
+    for absent in (
+        f"http://{host}/calendar/view.php?view=month&time=1",
+        "http://example.invalid/x",
+    ):
+        n = conn.execute(
+            "SELECT COUNT(*) c FROM queue WHERE url=?", (absent,)
+        ).fetchone()["c"]
         assert n == 0, absent
 
     ext = conn.execute(
@@ -172,57 +180,3 @@ def test_force_full_rerun_refetches_everything(tmp_path, server):
     crawl.run_fetch(_config(tmp_path, host), "run-1")
     counts = crawl.run_fetch(_config(tmp_path, host, recheck="force-full"), "run-2")
     assert counts["127.0.0.1"]["fetched"] == 5
-
-
-def test_backfill_links_rebuilds_edges_from_raw(tmp_path, server):
-    """Crawl, wipe the link graph, then reconstruct it offline from the raw blobs
-    on disk. The rebuilt edge set must match what the crawl originally wrote, with
-    no network fetch (the fixture server would still answer, but backfill must not
-    call it)."""
-    host = server
-    config = _config(tmp_path, host)
-    crawl.run_fetch(config, "run-1")
-
-    conn = sqlite3.connect(tmp_path / "db.sqlite3")
-    before = conn.execute("SELECT COUNT(*) FROM links").fetchone()[0]
-    assert before > 0
-    original = set(
-        conn.execute("SELECT src_url, dst_url, in_domain FROM links").fetchall()
-    )
-    # Also remember how many pages were fetched with a full body (all 5, all html).
-    conn.execute("DELETE FROM links")
-    conn.commit()
-    conn.close()
-
-    counts = crawl.backfill_links(config)
-
-    # 5 present HTML pages re-parsed; every original edge re-inserted; none missing.
-    assert counts["pages"] == 5, counts
-    assert counts["raw_missing"] == 0, counts
-    assert counts["edges"] == before, counts
-
-    conn = sqlite3.connect(tmp_path / "db.sqlite3")
-    rebuilt = set(
-        conn.execute("SELECT src_url, dst_url, in_domain FROM links").fetchall()
-    )
-    conn.close()
-    assert rebuilt == original, "backfill reconstructs the exact edge set"
-
-
-def test_backfill_links_is_idempotent(tmp_path, server):
-    host = server
-    config = _config(tmp_path, host)
-    crawl.run_fetch(config, "run-1")
-
-    conn = sqlite3.connect(tmp_path / "db.sqlite3")
-    total = conn.execute("SELECT COUNT(*) FROM links").fetchone()[0]
-    conn.close()
-
-    # Re-running over an already-populated graph inserts nothing new.
-    counts = crawl.backfill_links(config)
-    assert counts["edges"] == 0, counts
-
-    conn = sqlite3.connect(tmp_path / "db.sqlite3")
-    after = conn.execute("SELECT COUNT(*) FROM links").fetchone()[0]
-    conn.close()
-    assert after == total

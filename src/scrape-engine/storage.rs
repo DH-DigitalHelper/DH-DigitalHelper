@@ -152,17 +152,6 @@ pub struct LinkEdge {
     pub first_seen_at: String,
 }
 
-/// A present page whose content is a stored HTML blob — the unit of work for an
-/// offline `links` backfill (see `backfill.rs`): `(url, site, depth,
-/// content_sha256)`.
-#[derive(Debug, Clone)]
-pub struct BackfillPage {
-    pub url: String,
-    pub site: String,
-    pub depth: i64,
-    pub content_sha256: String,
-}
-
 /// A discovered followable link to enqueue: `(url, site, depth, discovered_from,
 /// first_seen_at)`.
 #[derive(Debug, Clone)]
@@ -371,29 +360,6 @@ pub fn load_pending(
             last_modified: r.get(3)?,
             content_sha256: r.get(4)?,
             present: r.get::<_, i64>(5)? != 0,
-        })
-    })?;
-    rows.collect()
-}
-
-/// Every present page whose stored content is an HTML blob — the input to an
-/// offline `links` backfill. The JOIN to `raw_docs` keeps only URLs whose
-/// `content_sha256` resolves to a `source_type='html'` blob, so PDFs (which never
-/// emit edges) and pages that were never fetched are excluded. Ordered so the
-/// pass is deterministic and touches one site at a time.
-pub fn load_backfill_pages(conn: &Connection) -> rusqlite::Result<Vec<BackfillPage>> {
-    let mut stmt = conn.prepare(
-        "SELECT q.url, q.site, q.depth, q.content_sha256
-         FROM queue q JOIN raw_docs r ON q.content_sha256 = r.content_sha256
-         WHERE q.present = 1 AND q.content_sha256 IS NOT NULL AND r.source_type = 'html'
-         ORDER BY q.site, q.depth, q.url",
-    )?;
-    let rows = stmt.query_map([], |r| {
-        Ok(BackfillPage {
-            url: r.get(0)?,
-            site: r.get(1)?,
-            depth: r.get(2)?,
-            content_sha256: r.get(3)?,
         })
     })?;
     rows.collect()

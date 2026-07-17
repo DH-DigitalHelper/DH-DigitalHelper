@@ -57,7 +57,7 @@ Examples:
 ```
 feat(crawl): add per-host worker override flag
 fix(extract): reject nav-dominated pages under the word gate
-docs: document backfill-links
+docs: document the change-detection flow
 chore(deps): bump trafilatura to 2.1
 ```
 

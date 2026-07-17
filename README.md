@@ -229,40 +229,6 @@ uv run dhbw-scraper stats
 `reset-site` takes `--site` (config name or `allowed_domain`, repeatable) and is the only
 destructive command; it prints the per-table delete counts.
 
-### Rebuilding the link graph (`backfill-links`)
-
-The `links` edge table is written **only on a full-body 2xx fetch**: when a page comes
-back `304 Not Modified` (the common case on any re-crawl once its `ETag`/`Last-Modified`
-are stored), no edges are emitted. So a page fetched once and thereafter only revalidated
-keeps whatever edges that first full fetch wrote — and pages first crawled before edge
-recording existed have none at all. The result is a link graph far sparser than the corpus.
-
-`backfill-links` repairs this **without re-downloading anything**. It re-reads the
-content-addressed raw HTML already in `raw_dir`, re-runs the exact same link discovery the
-crawler uses, and inserts any missing edges:
-
-```sh
-uv run dhbw-scraper backfill-links
-# -> pages=45996 edges=812340 raw_missing=0
-```
-
-- **No network.** It only reads local raw blobs; nothing is fetched.
-- **Additive and idempotent.** Edges are `INSERT OR IGNORE` on `(src_url, dst_url)`, so
-  re-running never duplicates and only fills gaps. `edges` in the summary counts rows newly
-  inserted (0 on a second run), `pages` the HTML pages re-parsed, and `raw_missing` any page
-  whose blob was absent on disk (skipped, never fatal).
-- **Scope.** Only present (`present=1`) pages whose stored content is HTML are processed;
-  PDFs never carry edges, and **errored pages have no raw blob**, so neither is covered —
-  errored URLs still need a re-fetch to ever gain edges. Relative links resolve against each
-  page's stored URL rather than the live post-redirect `final_url`, which differs only for
-  the handful of pages that were redirected.
-
-Run tests:
-
-```sh
-uv run pytest
-```
-
 ## Change detection
 
 Re-running `fetch` is cheap and safe. How much gets re-checked is controlled by

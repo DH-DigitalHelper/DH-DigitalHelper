@@ -92,7 +92,12 @@ def collect_analysis(conn, *, sites, min_words: int, db_path: Path) -> dict:
     docs_present = one("SELECT count(*) FROM documents WHERE present=1")
     words_total = one("SELECT sum(word_count) FROM documents WHERE present=1")
     by_type = {
-        st_: {"docs": n, "words": w or 0, "avg": (w or 0) / n if n else 0, "max": mx or 0}
+        st_: {
+            "docs": n,
+            "words": w or 0,
+            "avg": (w or 0) / n if n else 0,
+            "max": mx or 0,
+        }
         for st_, n, w, mx in q(
             "SELECT source_type,count(*),sum(word_count),max(word_count) "
             "FROM documents WHERE present=1 GROUP BY source_type"
@@ -100,15 +105,21 @@ def collect_analysis(conn, *, sites, min_words: int, db_path: Path) -> dict:
     }
 
     queue_total = one("SELECT count(*) FROM queue")
-    queue_state = {k: n for k, n in q("SELECT work_state,count(*) FROM queue GROUP BY work_state")}
+    queue_state = {
+        k: n for k, n in q("SELECT work_state,count(*) FROM queue GROUP BY work_state")
+    }
     raw_total = one("SELECT count(*) FROM raw_docs")
     raw_by_type = {
         k: {"n": n, "bytes": b or 0}
-        for k, n, b in q("SELECT source_type,count(*),sum(bytes) FROM raw_docs GROUP BY source_type")
+        for k, n, b in q(
+            "SELECT source_type,count(*),sum(bytes) FROM raw_docs GROUP BY source_type"
+        )
     }
     quality_ok = one("SELECT count(*) FROM raw_docs WHERE quality_ok=1")
     quality_bad = one("SELECT count(*) FROM raw_docs WHERE quality_ok=0")
-    extract_errored = one("SELECT count(*) FROM raw_docs WHERE extract_error IS NOT NULL")
+    extract_errored = one(
+        "SELECT count(*) FROM raw_docs WHERE extract_error IS NOT NULL"
+    )
     extract_pending = one("SELECT count(*) FROM raw_docs WHERE extract_state='pending'")
 
     # ---- reconciliation (dedup by text) -------------------------------------
@@ -116,7 +127,9 @@ def collect_analysis(conn, *, sites, min_words: int, db_path: Path) -> dict:
         "SELECT count(*) FROM queue q JOIN raw_docs r ON r.content_sha256=q.content_sha256 "
         "WHERE q.present=1 AND r.quality_ok=1"
     )
-    distinct_text = one("SELECT count(DISTINCT text_sha256) FROM documents WHERE present=1")
+    distinct_text = one(
+        "SELECT count(DISTINCT text_sha256) FROM documents WHERE present=1"
+    )
 
     # ---- per-site ------------------------------------------------------------
     dsite = {
@@ -126,7 +139,9 @@ def collect_analysis(conn, *, sites, min_words: int, db_path: Path) -> dict:
         )
     }
     qsite = defaultdict(Counter)
-    for d, ws, n in q("SELECT site,work_state,count(*) FROM queue GROUP BY site,work_state"):
+    for d, ws, n in q(
+        "SELECT site,work_state,count(*) FROM queue GROUP BY site,work_state"
+    ):
         qsite[d][ws] += n
     seen = set(dsite) | set(qsite)
     ordered = site_order + [d for d in seen if d not in site_order]
@@ -137,17 +152,19 @@ def collect_analysis(conn, *, sites, min_words: int, db_path: Path) -> dict:
         dd = dsite.get(d, {"docs": 0, "words": 0, "avg": 0})
         qq = qsite.get(d, Counter())
         done, err = qq.get("done", 0), qq.get("error", 0)
-        per_site.append({
-            "name": name_of(d),
-            "domain": d,
-            "docs": dd["docs"],
-            "words": dd["words"],
-            "avg": round(dd["avg"]),
-            "done": done,
-            "error": err,
-            "pending": qq.get("pending", 0),
-            "error_rate": err / (done + err) if (done + err) else 0.0,
-        })
+        per_site.append(
+            {
+                "name": name_of(d),
+                "domain": d,
+                "docs": dd["docs"],
+                "words": dd["words"],
+                "avg": round(dd["avg"]),
+                "done": done,
+                "error": err,
+                "pending": qq.get("pending", 0),
+                "error_rate": err / (done + err) if (done + err) else 0.0,
+            }
+        )
 
     # ---- extraction rejects / errors ----------------------------------------
     reject_reasons = [
@@ -166,7 +183,12 @@ def collect_analysis(conn, *, sites, min_words: int, db_path: Path) -> dict:
     ]
 
     # ---- word-count distribution --------------------------------------------
-    wc = [r[0] for r in q("SELECT word_count FROM documents WHERE present=1 ORDER BY word_count")]
+    wc = [
+        r[0]
+        for r in q(
+            "SELECT word_count FROM documents WHERE present=1 ORDER BY word_count"
+        )
+    ]
     hist = []
     for lo, hi in _WC_BUCKETS:
         if hi is None:
@@ -188,13 +210,25 @@ def collect_analysis(conn, *, sites, min_words: int, db_path: Path) -> dict:
     # ---- crawl_log -----------------------------------------------------------
     crawl_log = {
         "total": one("SELECT count(*) FROM crawl_log"),
-        "outcomes": [{"k": k or "(none)", "n": n} for k, n in q(
-            "SELECT outcome,count(*) FROM crawl_log GROUP BY outcome ORDER BY 2 DESC")],
-        "status": [{"k": k if k is not None else 0, "n": n} for k, n in q(
-            "SELECT status,count(*) FROM crawl_log GROUP BY status ORDER BY 2 DESC LIMIT 12")],
-        "errors": [{"k": (k or "")[:100], "n": n} for k, n in q(
-            "SELECT error,count(*) FROM crawl_log WHERE error IS NOT NULL AND error<>'' "
-            "GROUP BY error ORDER BY 2 DESC LIMIT 10")],
+        "outcomes": [
+            {"k": k or "(none)", "n": n}
+            for k, n in q(
+                "SELECT outcome,count(*) FROM crawl_log GROUP BY outcome ORDER BY 2 DESC"
+            )
+        ],
+        "status": [
+            {"k": k if k is not None else 0, "n": n}
+            for k, n in q(
+                "SELECT status,count(*) FROM crawl_log GROUP BY status ORDER BY 2 DESC LIMIT 12"
+            )
+        ],
+        "errors": [
+            {"k": (k or "")[:100], "n": n}
+            for k, n in q(
+                "SELECT error,count(*) FROM crawl_log WHERE error IS NOT NULL AND error<>'' "
+                "GROUP BY error ORDER BY 2 DESC LIMIT 10"
+            )
+        ],
     }
     err_by_site = defaultdict(Counter)
     for d, s_, n in q(
@@ -203,8 +237,11 @@ def collect_analysis(conn, *, sites, min_words: int, db_path: Path) -> dict:
     ):
         err_by_site[d][s_ if s_ is not None else 0] += n
     errors_by_site = [
-        {"name": name_of(d), "total": sum(c.values()),
-         "breakdown": ", ".join(f"{k}:{v}" for k, v in c.most_common(6))}
+        {
+            "name": name_of(d),
+            "total": sum(c.values()),
+            "breakdown": ", ".join(f"{k}:{v}" for k, v in c.most_common(6)),
+        }
         for d, c in sorted(err_by_site.items(), key=lambda kv: -sum(kv[1].values()))
     ]
 
@@ -217,10 +254,14 @@ def collect_analysis(conn, *, sites, min_words: int, db_path: Path) -> dict:
         "distinct_src": one("SELECT count(DISTINCT src_url) FROM links"),
         "distinct_dst": one("SELECT count(DISTINCT dst_url) FROM links"),
     }
-    links["docs_no_out"] = one(
-        "SELECT count(*) FROM documents d WHERE present=1 "
-        "AND NOT EXISTS (SELECT 1 FROM links l WHERE l.src_url=d.url)"
-    ) if links_total else docs_present
+    links["docs_no_out"] = (
+        one(
+            "SELECT count(*) FROM documents d WHERE present=1 "
+            "AND NOT EXISTS (SELECT 1 FROM links l WHERE l.src_url=d.url)"
+        )
+        if links_total
+        else docs_present
+    )
 
     # Single pass over the edge list: external-host tally (for the table below)
     # plus the host-level aggregated graph (nodes = hosts, weighted cross-host
@@ -246,20 +287,31 @@ def collect_analysis(conn, *, sites, min_words: int, db_path: Path) -> dict:
     links["top_external"] = [{"host": h, "n": n} for h, n in ext_hosts.most_common(20)]
 
     max_nodes = 24
-    deg = Counter({
-        h: out_deg[h] + in_deg[h] + self_w[h]
-        for h in set(out_deg) | set(in_deg) | set(self_w)
-    })
+    deg = Counter(
+        {
+            h: out_deg[h] + in_deg[h] + self_w[h]
+            for h in set(out_deg) | set(in_deg) | set(self_w)
+        }
+    )
     top = [h for h, _ in deg.most_common(max_nodes)]
     node_idx = {h: i for i, h in enumerate(top)}
     graph_nodes = [
-        {"host": h, "kind": "site" if h in crawled else "external",
-         "out": out_deg[h], "in": in_deg[h], "self": self_w[h], "deg": deg[h]}
+        {
+            "host": h,
+            "kind": "site" if h in crawled else "external",
+            "out": out_deg[h],
+            "in": in_deg[h],
+            "self": self_w[h],
+            "deg": deg[h],
+        }
         for h in top
     ]
     graph_edges = sorted(
-        ({"s": node_idx[a], "t": node_idx[b], "w": w}
-         for (a, b), w in edge_w.items() if a in node_idx and b in node_idx),
+        (
+            {"s": node_idx[a], "t": node_idx[b], "w": w}
+            for (a, b), w in edge_w.items()
+            if a in node_idx and b in node_idx
+        ),
         key=lambda e: -e["w"],
     )
     links["graph"] = {
@@ -278,8 +330,13 @@ def collect_analysis(conn, *, sites, min_words: int, db_path: Path) -> dict:
         hostc[h] += 1
         hoststate[h][ws] += 1
     hosts = [
-        {"host": h, "urls": n, "done": hoststate[h].get("done", 0),
-         "error": hoststate[h].get("error", 0), "pending": hoststate[h].get("pending", 0)}
+        {
+            "host": h,
+            "urls": n,
+            "done": hoststate[h].get("done", 0),
+            "error": hoststate[h].get("error", 0),
+            "pending": hoststate[h].get("pending", 0),
+        }
         for h, n in hostc.most_common(25)
     ]
 
@@ -340,59 +397,77 @@ def _findings(d: dict) -> list[dict]:
     for s in sites:
         if median and s["docs"] < max(200, 0.15 * median):
             sev = "crit" if s["docs"] < 0.05 * median else "warn"
-            out.append({
-                "sev": sev,
-                "title": f"{s['name']} is under-covered",
-                "detail": f"{s['docs']:,} documents vs a per-site median of {median:,}; "
-                          f"queue shows {s['error']:,} errors "
-                          f"({s['error_rate']*100:.0f}% of fetch attempts).",
-            })
+            out.append(
+                {
+                    "sev": sev,
+                    "title": f"{s['name']} is under-covered",
+                    "detail": f"{s['docs']:,} documents vs a per-site median of {median:,}; "
+                    f"queue shows {s['error']:,} errors "
+                    f"({s['error_rate']*100:.0f}% of fetch attempts).",
+                }
+            )
 
     # Documents below the current min_words gate.
     bm = d["wordcount"]["below_min"]
     if bm:
         pct = bm / max(1, d["totals"]["documents"]) * 100
-        out.append({
-            "sev": "warn",
-            "title": f"{bm:,} documents below min_words={d['meta']['min_words']}",
-            "detail": f"{pct:.0f}% of the corpus is thinner than the current quality gate "
-                      f"(min {d['wordcount']['min']} words) -- legacy rows from an extract "
-                      f"pass with a looser threshold. A full re-extract would normalize them.",
-        })
+        out.append(
+            {
+                "sev": "warn",
+                "title": f"{bm:,} documents below min_words={d['meta']['min_words']}",
+                "detail": f"{pct:.0f}% of the corpus is thinner than the current quality gate "
+                f"(min {d['wordcount']['min']} words) -- legacy rows from an extract "
+                f"pass with a looser threshold. A full re-extract would normalize them.",
+            }
+        )
 
     # Link graph underpopulated.
     lk = d["links"]
     if d["totals"]["documents"] and lk["distinct_src"] < 0.5 * d["totals"]["documents"]:
-        out.append({
-            "sev": "warn",
-            "title": "Link graph is largely unpopulated",
-            "detail": f"{lk['total']:,} edges from only {lk['distinct_src']:,} source pages; "
-                      f"{lk['docs_no_out']:,} of {d['totals']['documents']:,} documents have "
-                      f"zero outbound edges. Investigate the links write path before relying on it.",
-        })
+        out.append(
+            {
+                "sev": "warn",
+                "title": "Link graph is largely unpopulated",
+                "detail": f"{lk['total']:,} edges from only {lk['distinct_src']:,} source pages; "
+                f"{lk['docs_no_out']:,} of {d['totals']['documents']:,} documents have "
+                f"zero outbound edges. Investigate the links write path before relying on it.",
+            }
+        )
 
     # Error hotspots not already flagged as under-covered.
-    flagged = {f["title"].split(" is under-covered")[0] for f in out if "under-covered" in f["title"]}
+    flagged = {
+        f["title"].split(" is under-covered")[0]
+        for f in out
+        if "under-covered" in f["title"]
+    }
     for s in sites:
         if s["name"] not in flagged and s["error"] >= 100 and s["error_rate"] > 0.10:
-            out.append({
-                "sev": "info",
-                "title": f"{s['name']} has elevated fetch errors",
-                "detail": f"{s['error']:,} errored URLs ({s['error_rate']*100:.0f}% of attempts) "
-                          f"-- mostly connection refused/timeout, worth one gentle retry.",
-            })
+            out.append(
+                {
+                    "sev": "info",
+                    "title": f"{s['name']} has elevated fetch errors",
+                    "detail": f"{s['error']:,} errored URLs ({s['error_rate']*100:.0f}% of attempts) "
+                    f"-- mostly connection refused/timeout, worth one gentle retry.",
+                }
+            )
 
     sev_order = {"crit": 0, "warn": 1, "info": 2, "ok": 3}
     out.sort(key=lambda f: sev_order.get(f["sev"], 9))
     if not out:
-        out.append({"sev": "ok", "title": "No issues detected",
-                    "detail": "Coverage, extraction, and the link graph all look healthy."})
+        out.append(
+            {
+                "sev": "ok",
+                "title": "No issues detected",
+                "detail": "Coverage, extraction, and the link graph all look healthy.",
+            }
+        )
     return out
 
 
 # ---------------------------------------------------------------------------
 # Rendering
 # ---------------------------------------------------------------------------
+
 
 def _fmt_bytes(n: int) -> str:
     for unit in ("B", "KB", "MB", "GB", "TB"):
@@ -417,15 +492,19 @@ def _link_graph_svg(g: dict) -> str:
     """
     nodes, edges = g["nodes"], g["edges"]
     if not nodes or not edges:
-        return ('<p class="warnbox">No cross-host links to graph yet — run '
-                '<code>backfill-links</code> to reconstruct the edge list from '
-                'stored HTML, then regenerate this report.</p>')
+        return (
+            '<p class="warnbox">No cross-host links to graph yet — re-run the '
+            "crawl (<code>fetch</code>) to rebuild the edge list from stored "
+            "HTML, then regenerate this report.</p>"
+        )
 
     w, h = 820, 560
     cx, cy, r_ring = w / 2, h / 2, 195
     n = len(nodes)
     # Cluster site hosts before external, each group by descending degree.
-    order = sorted(range(n), key=lambda i: (nodes[i]["kind"] != "site", -nodes[i]["deg"]))
+    order = sorted(
+        range(n), key=lambda i: (nodes[i]["kind"] != "site", -nodes[i]["deg"])
+    )
     pos: dict[int, tuple[float, float, float]] = {}
     for slot, i in enumerate(order):
         ang = 2 * math.pi * slot / n - math.pi / 2
@@ -453,12 +532,14 @@ def _link_graph_svg(g: dict) -> str:
         x, y, ang = pos[i]
         rad = 4 + 11 * math.sqrt(nd["deg"] / max_deg)
         fill = "var(--accent)" if nd["kind"] == "site" else "var(--muted)"
-        tip = (f'{nd["host"]} — {nd["out"]:,} out · {nd["in"]:,} in · '
-               f'{nd["self"]:,} internal')
+        tip = (
+            f'{nd["host"]} — {nd["out"]:,} out · {nd["in"]:,} in · '
+            f'{nd["self"]:,} internal'
+        )
         node_svg.append(
             f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{rad:.1f}" fill="{fill}" '
             f'fill-opacity="0.9" stroke="var(--card)" stroke-width="1.5">'
-            f'<title>{_esc(tip)}</title></circle>'
+            f"<title>{_esc(tip)}</title></circle>"
         )
         lx = cx + (r_ring + 14) * math.cos(ang)
         ly = cy + (r_ring + 14) * math.sin(ang)
@@ -467,13 +548,15 @@ def _link_graph_svg(g: dict) -> str:
         label_svg.append(
             f'<text x="{lx:.1f}" y="{ly:.1f}" text-anchor="{anchor}" '
             f'dominant-baseline="middle" font-size="10" fill="var(--muted)">'
-            f'{_esc(label)}</text>'
+            f"{_esc(label)}</text>"
         )
 
-    defs = ('<defs><marker id="lg-arrow" viewBox="0 0 10 10" refX="9" refY="5" '
-            'markerWidth="6" markerHeight="6" orient="auto-start-reverse">'
-            '<path d="M0,0 L10,5 L0,10 z" fill="var(--bar)" fill-opacity="0.55"/>'
-            '</marker></defs>')
+    defs = (
+        '<defs><marker id="lg-arrow" viewBox="0 0 10 10" refX="9" refY="5" '
+        'markerWidth="6" markerHeight="6" orient="auto-start-reverse">'
+        '<path d="M0,0 L10,5 L0,10 z" fill="var(--bar)" fill-opacity="0.55"/>'
+        "</marker></defs>"
+    )
     return (
         f'<svg class="linkgraph" viewBox="0 0 {w} {h}" width="100%" '
         f'role="img" aria-label="Host-level link graph">{defs}'
@@ -487,24 +570,44 @@ def render_html(d: dict) -> str:
 
     def kpi(label, value, sub=""):
         sub_html = f'<div class="kpi-sub">{_esc(sub)}</div>' if sub else ""
-        return (f'<div class="kpi"><div class="kpi-val">{_esc(value)}</div>'
-                f'<div class="kpi-label">{_esc(label)}</div>{sub_html}</div>')
+        return (
+            f'<div class="kpi"><div class="kpi-val">{_esc(value)}</div>'
+            f'<div class="kpi-label">{_esc(label)}</div>{sub_html}</div>'
+        )
 
     # KPI row
     html_t = t["by_type"].get("html", {})
     pdf_t = t["by_type"].get("pdf", {})
-    kpis = "".join([
-        kpi("Documents", f"{t['documents']:,}", "present, deduplicated"),
-        kpi("Total words", f"{t['words']/1e6:.1f} M",
-            f"HTML {html_t.get('words',0)/1e6:.1f}M · PDF {pdf_t.get('words',0)/1e6:.1f}M"),
-        kpi("Raw blobs", f"{t['raw_total']:,}", _fmt_bytes(m["raw_dir_bytes"]) + " cached"),
-        kpi("Extraction pass", f"{t['quality_ok']/max(1,t['raw_total'])*100:.1f}%",
-            f"{t['quality_bad']:,} rejected · {t['extract_errored']:,} errored"),
-        kpi("URLs crawled", f"{t['queue_total']:,}",
-            f"{t['queue_state'].get('done',0):,} done · {t['queue_state'].get('error',0):,} error"),
-        kpi("Text-dedup", f"{(t['candidates']-t['documents'])/max(1,t['candidates'])*100:.0f}%",
-            f"{t['candidates']:,} candidates → {t['documents']:,} unique"),
-    ])
+    kpis = "".join(
+        [
+            kpi("Documents", f"{t['documents']:,}", "present, deduplicated"),
+            kpi(
+                "Total words",
+                f"{t['words']/1e6:.1f} M",
+                f"HTML {html_t.get('words',0)/1e6:.1f}M · PDF {pdf_t.get('words',0)/1e6:.1f}M",
+            ),
+            kpi(
+                "Raw blobs",
+                f"{t['raw_total']:,}",
+                _fmt_bytes(m["raw_dir_bytes"]) + " cached",
+            ),
+            kpi(
+                "Extraction pass",
+                f"{t['quality_ok']/max(1,t['raw_total'])*100:.1f}%",
+                f"{t['quality_bad']:,} rejected · {t['extract_errored']:,} errored",
+            ),
+            kpi(
+                "URLs crawled",
+                f"{t['queue_total']:,}",
+                f"{t['queue_state'].get('done',0):,} done · {t['queue_state'].get('error',0):,} error",
+            ),
+            kpi(
+                "Text-dedup",
+                f"{(t['candidates']-t['documents'])/max(1,t['candidates'])*100:.0f}%",
+                f"{t['candidates']:,} candidates → {t['documents']:,} unique",
+            ),
+        ]
+    )
 
     # Findings
     sev_label = {"crit": "CRITICAL", "warn": "WARNING", "info": "INFO", "ok": "OK"}
@@ -540,52 +643,82 @@ def render_html(d: dict) -> str:
         for b in d["wordcount"]["hist"]
     )
     p = d["wordcount"]["pct"]
-    pct_line = (f'min {d["wordcount"]["min"]} · p10 {p["10"]} · p25 {p["25"]} · '
-                f'median {p["50"]} · p75 {p["75"]} · p90 {p["90"]} · p99 {p["99"]:,} · '
-                f'max {d["wordcount"]["max"]:,}')
+    pct_line = (
+        f'min {d["wordcount"]["min"]} · p10 {p["10"]} · p25 {p["25"]} · '
+        f'median {p["50"]} · p75 {p["75"]} · p90 {p["90"]} · p99 {p["99"]:,} · '
+        f'max {d["wordcount"]["max"]:,}'
+    )
 
     def simple_table(title, rows_html, headers):
         head = "".join(f"<th>{_esc(h)}</th>" for h in headers)
-        return (f'<section><h2>{_esc(title)}</h2><table><thead><tr>{head}</tr></thead>'
-                f'<tbody>{rows_html}</tbody></table></section>')
+        return (
+            f"<section><h2>{_esc(title)}</h2><table><thead><tr>{head}</tr></thead>"
+            f"<tbody>{rows_html}</tbody></table></section>"
+        )
 
-    reject_rows = "".join(
-        f'<tr><td class="mono">{_esc(r["reason"])}</td><td class="num">{r["n"]:,}</td></tr>'
-        for r in d["reject_reasons"]) or '<tr><td colspan="2">none</td></tr>'
-    exerr_rows = "".join(
-        f'<tr><td class="mono">{_esc(e["error"])}</td><td class="num">{e["n"]:,}</td></tr>'
-        for e in d["extract_errors"]) or '<tr><td colspan="2">none</td></tr>'
+    reject_rows = (
+        "".join(
+            f'<tr><td class="mono">{_esc(r["reason"])}</td><td class="num">{r["n"]:,}</td></tr>'
+            for r in d["reject_reasons"]
+        )
+        or '<tr><td colspan="2">none</td></tr>'
+    )
+    exerr_rows = (
+        "".join(
+            f'<tr><td class="mono">{_esc(e["error"])}</td><td class="num">{e["n"]:,}</td></tr>'
+            for e in d["extract_errors"]
+        )
+        or '<tr><td colspan="2">none</td></tr>'
+    )
     outcome_rows = "".join(
         f'<tr><td class="mono">{_esc(o["k"])}</td><td class="num">{o["n"]:,}</td></tr>'
-        for o in d["crawl_log"]["outcomes"])
+        for o in d["crawl_log"]["outcomes"]
+    )
     status_rows = "".join(
         f'<tr><td class="mono">{_esc(s["k"])}</td><td class="num">{s["n"]:,}</td></tr>'
-        for s in d["crawl_log"]["status"])
-    clerr_rows = "".join(
-        f'<tr><td class="mono">{_esc(e["k"])}</td><td class="num">{e["n"]:,}</td></tr>'
-        for e in d["crawl_log"]["errors"]) or '<tr><td colspan="2">none</td></tr>'
-    errsite_rows = "".join(
-        f'<tr><td class="mono">{_esc(e["name"])}</td><td class="num">{e["total"]:,}</td>'
-        f'<td class="mono small">{_esc(e["breakdown"])}</td></tr>'
-        for e in d["errors_by_site"]) or '<tr><td colspan="3">none</td></tr>'
-    ext_rows = "".join(
-        f'<tr><td class="mono">{_esc(x["host"])}</td><td class="num">{x["n"]:,}</td></tr>'
-        for x in d["links"]["top_external"]) or '<tr><td colspan="2">none</td></tr>'
+        for s in d["crawl_log"]["status"]
+    )
+    clerr_rows = (
+        "".join(
+            f'<tr><td class="mono">{_esc(e["k"])}</td><td class="num">{e["n"]:,}</td></tr>'
+            for e in d["crawl_log"]["errors"]
+        )
+        or '<tr><td colspan="2">none</td></tr>'
+    )
+    errsite_rows = (
+        "".join(
+            f'<tr><td class="mono">{_esc(e["name"])}</td><td class="num">{e["total"]:,}</td>'
+            f'<td class="mono small">{_esc(e["breakdown"])}</td></tr>'
+            for e in d["errors_by_site"]
+        )
+        or '<tr><td colspan="3">none</td></tr>'
+    )
+    ext_rows = (
+        "".join(
+            f'<tr><td class="mono">{_esc(x["host"])}</td><td class="num">{x["n"]:,}</td></tr>'
+            for x in d["links"]["top_external"]
+        )
+        or '<tr><td colspan="2">none</td></tr>'
+    )
     host_rows = ""
     for h in d["hosts"]:
         er_cls = "hot" if h["urls"] and h["error"] / h["urls"] >= 0.3 else ""
-        host_rows += (f'<tr><td class="mono">{_esc(h["host"])}</td>'
-                      f'<td class="num">{h["urls"]:,}</td><td class="num">{h["done"]:,}</td>'
-                      f'<td class="num {er_cls}">{h["error"]:,}</td>'
-                      f'<td class="num">{h["pending"]:,}</td></tr>')
+        host_rows += (
+            f'<tr><td class="mono">{_esc(h["host"])}</td>'
+            f'<td class="num">{h["urls"]:,}</td><td class="num">{h["done"]:,}</td>'
+            f'<td class="num {er_cls}">{h["error"]:,}</td>'
+            f'<td class="num">{h["pending"]:,}</td></tr>'
+        )
 
     lk = d["links"]
     links_warn = ""
     if t["documents"] and lk["distinct_src"] < 0.5 * t["documents"]:
-        links_warn = ('<p class="warnbox">⚠ Only '
-                      f'{lk["distinct_src"]:,} source pages recorded any links '
-                      f'({lk["docs_no_out"]:,} of {t["documents"]:,} documents have none) — '
-                      'the link graph is effectively unpopulated and should not be trusted yet.</p>')
+        links_warn = (
+            '<p class="warnbox">⚠ Only '
+            f'{lk["distinct_src"]:,} source pages recorded any links '
+            f'({lk["docs_no_out"]:,} of {t["documents"]:,} documents have none) — '
+            'the link graph is effectively unpopulated and should not be trusted yet.</p>'
+        )
 
     # Host-level link graph (static SVG) + its caption/legend.
     g = lk["graph"]
@@ -594,13 +727,15 @@ def render_html(d: dict) -> str:
         graph_caption = (
             f'<div class="sub" style="margin:2px 0 10px">Host-level view · '
             f'{g["n_hosts"]:,} hosts total, showing the {len(g["nodes"])} most-connected · '
-            f'{g["n_edges_shown"]:,} of {g["n_edges_total"]:,} cross-host links drawn.</div>')
+            f'{g["n_edges_shown"]:,} of {g["n_edges_total"]:,} cross-host links drawn.</div>'
+        )
         graph_legend = (
             '<div class="graph-legend">'
             '<span><i class="sw site"></i>crawled host</span>'
             '<span><i class="sw ext"></i>external host</span>'
-            '<span>node size = degree</span>'
-            '<span>edge width = link count</span></div>')
+            "<span>node size = degree</span>"
+            "<span>edge width = link count</span></div>"
+        )
     else:
         graph_caption = graph_legend = ""
 

@@ -11,7 +11,6 @@ use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
-pub mod backfill;
 pub mod config;
 pub mod crawl;
 pub mod fetch;
@@ -56,37 +55,8 @@ fn run_fetch<'py>(
     Ok(out)
 }
 
-/// Rebuild the `links` edge table offline from raw HTML already on disk.
-///
-/// A drop-in for a re-crawl when the goal is only to repopulate the link graph:
-/// live crawling emits edges only on a full-body 2xx fetch, so pages that have
-/// since only 304-revalidated never re-record their outbound links. This reads
-/// the content-addressed `raw_dir` blobs the crawl already stored — no network —
-/// and re-runs link discovery. Additive and idempotent. `config` is the same dict
-/// `crawl.run_fetch` builds (only `db_file` and `raw_dir` are read). Returns
-/// `{"pages", "edges", "raw_missing"}`.
-#[pyfunction]
-#[pyo3(signature = (config, progress=None))]
-fn backfill_links<'py>(
-    py: Python<'py>,
-    config: config::RunConfig,
-    progress: Option<Py<PyAny>>,
-) -> PyResult<Bound<'py, PyDict>> {
-    let sink = progress::ProgressSink::new(progress);
-    let counts = py
-        .detach(move || backfill::run(config, sink))
-        .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
-
-    let out = PyDict::new(py);
-    for (k, v) in counts.pairs() {
-        out.set_item(k, v)?;
-    }
-    Ok(out)
-}
-
 #[pymodule]
 fn _engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(run_fetch, m)?)?;
-    m.add_function(wrap_pyfunction!(backfill_links, m)?)?;
     Ok(())
 }

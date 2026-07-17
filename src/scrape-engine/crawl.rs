@@ -265,18 +265,15 @@ async fn worker<C: HttpClient>(
 ///
 /// A 304 says the bytes are unchanged — and we still have them — yet the branch
 /// used to emit no edges at all. Once a page has stored validators every later
-/// crawl revalidates it as 304, so the link graph froze at whatever single
-/// full-body fetch last touched each page and nothing in-band could repair it;
-/// that gap is the entire reason the offline `backfill-links` command exists.
-/// Re-deriving here costs no network and keeps the graph current per revalidation.
+/// crawl revalidates it as 304, so without this the link graph would freeze at
+/// whatever single full-body fetch last touched each page. Re-deriving here costs
+/// no network and keeps the graph current on every revalidation.
 ///
-/// Keyed on the `.html` blob exactly as `backfill` is: a PDF's blob is stored as
-/// `.pdf` and simply will not be found, which is correct — PDFs emit no edges.
-/// A missing or unreadable blob yields no edges, mirroring backfill's
-/// `raw_missing` skip. The base is `item.url`; `FrontierItem` carries no
-/// `final_url`, so a redirected page's edges resolve against its request URL —
-/// the same low-severity divergence `backfill` documents, and harmless because
-/// edges are written INSERT OR IGNORE.
+/// Keyed on the `.html` blob: a PDF's blob is stored as `.pdf` and simply will
+/// not be found, which is correct — PDFs emit no edges. A missing or unreadable
+/// blob yields no edges. The base is `item.url`; `FrontierItem` carries no
+/// `final_url`, so a redirected page's edges resolve against its request URL — a
+/// low-severity divergence, harmless because edges are written INSERT OR IGNORE.
 fn edges_from_cached_blob(
     item: &FrontierItem,
     site_name: &str,

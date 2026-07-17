@@ -58,22 +58,3 @@ def run_fetch(config, run_id, progress=None) -> dict:
     if progress is None:
         progress = Progress()
     return _engine.run_fetch(_engine_config(config), run_id, progress)
-
-
-def backfill_links(config, progress=None) -> dict:
-    """Rebuild the ``links`` edge table offline from raw HTML already on disk.
-
-    Live Phase 1 records ``links`` rows only on a full-body 2xx fetch; a 304
-    re-validation writes none. So a page that was fetched once and thereafter only
-    304s never re-emits its outbound edges, leaving the link graph sparse. This
-    pass re-reads the content-addressed ``raw_dir`` blobs the crawl already stored
-    and re-runs link discovery over them -- **no network** -- so nothing already
-    downloaded is fetched again. It is additive and idempotent (edges INSERT OR
-    IGNORE on ``(src_url, dst_url)``) and touches only the ``links`` table.
-
-    Returns ``{"pages", "edges", "raw_missing"}``: HTML pages re-parsed, edge rows
-    newly inserted, and pages whose raw blob was missing on disk (skipped).
-    """
-    if progress is None:
-        progress = Progress()
-    return _engine.backfill_links(_engine_config(config), progress)

@@ -21,7 +21,7 @@ raw cache (`data/raw/<sha256>.<ext>`):
   It's a `tokio` async crawler with a **single dedicated SQLite writer task** fed by an
   in-memory frontier, so fetch workers are lock-free and there's no write-lock
   contention. It owns *every* Phase-1 DB write. [`crawl.py`](src/scraper/crawl.py)
-  is a thin adapter that forwards `run_fetch`/`backfill_links` to the extension — do not
+  is a thin adapter that forwards `run_fetch` to the extension — do not
   reimplement crawl logic in Python.
 - **Phase 2 — extract — is pure Python** (trafilatura for HTML, PyMuPDF4LLM for PDF).
   It reads the same DB + raw cache the Rust engine wrote.
@@ -29,8 +29,8 @@ raw cache (`data/raw/<sha256>.<ext>`):
 The Rust modules mirror the pipeline: `crawl.rs` (orchestrator), `writer.rs` (the sole
 SQLite writer + frontier), `fetch.rs` (reqwest conditional-GET), `links.rs` (link
 discovery, in-domain filter, **crawler-trap denylist**), `sitemap.rs`, `storage.rs`,
-`backfill.rs`, `lib.rs` (PyO3 boundary). `tests/scrape-engine/` holds `links_parity`,
-`sitemap_parity`, `backfill`, and end-to-end `orchestration` tests.
+`lib.rs` (PyO3 boundary). `tests/scrape-engine/` holds `links_parity`,
+`sitemap_parity`, and end-to-end `orchestration` tests.
 
 ### SQLite storage model
 
@@ -79,8 +79,7 @@ cargo fmt
 `fetch` (Phase 1) · `extract` / `extract-html` / `extract-pdf` (Phase 2) · `run`
 (fetch → extract → **dedup**) · `stats` · `report` (self-contained read-only HTML
 analysis via [`dashboard.py`](src/scraper/dashboard.py)) · `delta --since <ts>`
-(re-index delta for downstream) · `dedup` · `backfill-links` (rebuild the sparse link
-graph from local raw HTML, no network) · `reset-site --site NAME` (the **only**
+(re-index delta for downstream) · `dedup` · `reset-site --site NAME` (the **only**
 destructive command; wipes a site's queue/crawl_log/documents/links, keeps the raw
 cache). See [`cli.py`](src/scraper/cli.py) and README "Usage".
 

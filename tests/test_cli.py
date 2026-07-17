@@ -16,7 +16,6 @@ def test_parser_has_all_subcommands():
         ["reset-site", "--site", "x"],
         ["dedup"],
         ["delta", "--since", "2026-01-01"],
-        ["backfill-links"],
         ["report"],
     ):
         ns = p.parse_args(cmd)
@@ -210,21 +209,6 @@ def test_dedup_command_uses_config_values(tmp_path, monkeypatch):
     assert captured == {"batch_size": 7, "vacuum": False}
 
 
-def test_backfill_links_command_invokes_adapter(tmp_path, monkeypatch):
-    _write_config(tmp_path)
-    captured = {}
-
-    def fake_backfill_links(config, **kwargs):
-        captured["db_file"] = str(config.storage.db_file)
-        return {"pages": 3, "edges": 7, "raw_missing": 0}
-
-    monkeypatch.setattr(cli.crawl, "backfill_links", fake_backfill_links)
-    rc = cli.main(["--config", str(tmp_path / "config.toml"), "backfill-links"])
-
-    assert rc == 0
-    assert captured["db_file"].endswith("db.sqlite3")
-
-
 def _write_two_site_config(tmp_path):
     (tmp_path / "config.toml").write_text(
         """
@@ -296,9 +280,7 @@ def test_cmd_fetch_unknown_site_exits(tmp_path, monkeypatch):
     _write_two_site_config(tmp_path)
     monkeypatch.setattr(cli.crawl, "run_fetch", lambda *a, **k: {})
     with pytest.raises(SystemExit):
-        cli.main(
-            ["--config", str(tmp_path / "config.toml"), "fetch", "--site", "nope"]
-        )
+        cli.main(["--config", str(tmp_path / "config.toml"), "fetch", "--site", "nope"])
 
 
 def test_reset_site_requires_site():

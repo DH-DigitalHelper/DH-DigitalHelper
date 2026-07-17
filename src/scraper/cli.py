@@ -1,5 +1,4 @@
-"""Command-line entrypoint: fetch / extract / run / stats / dedup / delta /
-backfill-links.
+"""Command-line entrypoint: fetch / extract / run / stats / dedup / delta.
 
 config.toml is the sole source of tuning values -- no flag overrides any of them.
 The flags here only select what to act on (``--site``, ``--since``, ``-o``) or which
@@ -146,13 +145,6 @@ def _cmd_report(args) -> int:
     return 0
 
 
-def _cmd_backfill_links(args) -> int:
-    config = _load(args)
-    counts = crawl.backfill_links(config)
-    print(" ".join(f"{k}={v}" for k, v in counts.items()))
-    return 0
-
-
 def _cmd_reset_site(args) -> int:
     config = _load(args)
     sites = _resolve_sites(config, args.site)
@@ -249,14 +241,6 @@ def build_parser() -> argparse.ArgumentParser:
     d = sub.add_parser("delta", help="Emit re-index delta since a timestamp.")
     d.add_argument("--since", required=True)
     d.set_defaults(func=_cmd_delta)
-
-    bl = sub.add_parser(
-        "backfill-links",
-        help="Rebuild the links edge table from raw HTML already on disk (no "
-        "network). Repairs the sparse link graph left by 304-only re-crawls; "
-        "additive and idempotent.",
-    )
-    bl.set_defaults(func=_cmd_backfill_links)
 
     return parser
 

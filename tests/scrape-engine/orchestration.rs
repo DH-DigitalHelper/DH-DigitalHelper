@@ -654,10 +654,9 @@ fn a_304_adopts_its_rotated_etag() {
 }
 
 /// Once a page has stored validators, every later crawl revalidates it as 304 --
-/// and the 304 branch emitted no edges at all. So the link graph froze at
-/// whatever single full-body fetch last touched each page, and nothing in-band
-/// could ever repair it (that is why the offline `backfill-links` command has to
-/// exist). The bytes are already on disk, so a 304 can rebuild them for free.
+/// and the 304 branch used to emit no edges at all, so the link graph froze at
+/// whatever single full-body fetch last touched each page. The bytes are already
+/// on disk, so a 304 rebuilds them for free (see `edges_from_cached_blob`).
 #[test]
 fn a_304_re_emits_edges_from_the_cached_blob() {
     let tmp = tempfile::tempdir().unwrap();

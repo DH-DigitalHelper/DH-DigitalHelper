@@ -46,7 +46,7 @@ def test_scraped_content_cannot_break_out_of_the_json_island(tmp_path):
     """
     conn, db_file = _db(tmp_path)
     _doc(conn, "https://www.alpha.de/a")
-    payload = '</script><img src=x onerror=alert(1)>'
+    payload = "</script><img src=x onerror=alert(1)>"
     conn.execute(
         "INSERT INTO raw_docs (content_sha256, source_type, raw_path, bytes, "
         "first_seen_at, extract_state, extract_error) VALUES (?,?,?,?,?,?,?)",
@@ -82,8 +82,8 @@ def test_graph_payload_has_nodes_edges_and_kinds(tmp_path):
     g = data["links"]["graph"]
     kinds = {n["host"]: n["kind"] for n in g["nodes"]}
 
-    assert kinds["www.alpha.de"] == "site"          # appeared as a source
-    assert kinds["moodle.alpha.de"] == "external"   # dst-only subdomain
+    assert kinds["www.alpha.de"] == "site"  # appeared as a source
+    assert kinds["moodle.alpha.de"] == "external"  # dst-only subdomain
     assert kinds["github.com"] == "external"
     # cross-host edges only (the self-loop is not an edge); github weight == 2.
     weights = {
@@ -123,5 +123,5 @@ def test_empty_link_graph_degrades_to_warnbox(tmp_path):
     )
     assert data["links"]["graph"]["nodes"] == []
     html = dashboard.render_html(data)
-    assert 'class="linkgraph"' not in html   # no SVG rendered
-    assert "backfill-links" in html          # the graceful fallback message
+    assert 'class="linkgraph"' not in html  # no SVG rendered
+    assert "No cross-host links to graph yet" in html  # the graceful fallback message
