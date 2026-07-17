@@ -39,3 +39,16 @@ def test_leading_ordinals_survive_the_markdown_stripper():
 
 def test_returns_none_for_contentless_html():
     assert extract_html("<html><body></body></html>") is None
+
+
+def test_extract_html_detects_language():
+    html = (
+        "<html><body><main><p>"
+        "Die Duale Hochschule Baden-Württemberg verbindet ein wissenschaftliches "
+        "Studium mit der praktischen Berufsausbildung in einem Unternehmen und "
+        "richtet sich an Studierende aus der ganzen Region."
+        "</p></main></body></html>"
+    )
+    doc = extract_html(html)
+    assert doc is not None
+    assert doc["lang"] == "de"

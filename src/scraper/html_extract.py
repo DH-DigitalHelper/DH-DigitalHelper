@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from . import lang as langmod
 from . import markdown as md
 
 # Text is derived from the one markdown pass rather than a second extraction:
@@ -38,7 +39,7 @@ def extract_html(html: str | bytes, url: str | None = None) -> dict | None:
         "title": getattr(meta, "title", None) if meta else None,
         "text": text,
         "markdown": markdown,
-        "lang": None,
+        "lang": langmod.detect(text),
         "word_count": len(text.split()),
         "metadata": {
             "author": getattr(meta, "author", None) if meta else None,
