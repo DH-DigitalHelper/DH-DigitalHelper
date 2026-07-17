@@ -216,7 +216,6 @@ fn run(dir: &std::path::Path) -> HashMap<String, _engine::writer::Counts> {
     run_with_client(
         config(dir),
         "run-test".into(),
-        false,
         ProgressSink::new(None),
         fixture(),
     )
@@ -306,7 +305,6 @@ fn raw_cache_write_failure_never_orphans_a_page() {
     let counts = run_with_client(
         config(tmp.path()),
         "run-rawfail".into(),
-        false,
         ProgressSink::new(None),
         fixture(),
     )
@@ -378,14 +376,8 @@ fn off_domain_redirect_content_is_not_stored() {
     let mut cfg = config(tmp.path());
     cfg.use_sitemap = false;
 
-    let counts = run_with_client(
-        cfg,
-        "run-redir".into(),
-        false,
-        ProgressSink::new(None),
-        client,
-    )
-    .expect("crawl run");
+    let counts = run_with_client(cfg, "run-redir".into(), ProgressSink::new(None), client)
+        .expect("crawl run");
 
     let conn = rusqlite::Connection::open(tmp.path().join("db.sqlite3")).unwrap();
 
@@ -457,14 +449,8 @@ fn empty_body_2xx_is_not_recorded_as_an_error() {
         ("http://site.test/empty", Page::html("")),
     ]);
 
-    let counts = run_with_client(
-        cfg,
-        "run-empty".into(),
-        false,
-        ProgressSink::new(None),
-        client,
-    )
-    .expect("crawl run");
+    let counts = run_with_client(cfg, "run-empty".into(), ProgressSink::new(None), client)
+        .expect("crawl run");
 
     let conn = rusqlite::Connection::open(tmp.path().join("db.sqlite3")).unwrap();
     let (state, status): (String, Option<i64>) = conn
@@ -509,7 +495,6 @@ fn empty_body_2xx_keeps_previously_stored_content() {
     run_with_client(
         cfg,
         "run-1".into(),
-        false,
         ProgressSink::new(None),
         MockClient::from_pages(vec![
             ("http://site.test/startseite", Page::html(seed)),
@@ -537,7 +522,6 @@ fn empty_body_2xx_keeps_previously_stored_content() {
     let counts = run_with_client(
         cfg2,
         "run-2".into(),
-        false,
         ProgressSink::new(None),
         MockClient::from_pages(vec![
             ("http://site.test/startseite", Page::html(seed)),
@@ -589,14 +573,7 @@ fn gone_410_is_recorded_as_410_not_404() {
         ),
     ]);
 
-    run_with_client(
-        cfg,
-        "run-410".into(),
-        false,
-        ProgressSink::new(None),
-        client,
-    )
-    .expect("crawl run");
+    run_with_client(cfg, "run-410".into(), ProgressSink::new(None), client).expect("crawl run");
 
     let conn = rusqlite::Connection::open(tmp.path().join("db.sqlite3")).unwrap();
     let (status, present): (i64, i64) = conn
@@ -629,7 +606,6 @@ fn a_304_adopts_its_rotated_etag() {
     run_with_client(
         cfg,
         "run-1".into(),
-        false,
         ProgressSink::new(None),
         MockClient::from_pages(vec![
             ("http://site.test/startseite", Page::html(seed)),
@@ -654,7 +630,6 @@ fn a_304_adopts_its_rotated_etag() {
     run_with_client(
         cfg2,
         "run-2".into(),
-        false,
         ProgressSink::new(None),
         MockClient::from_pages(vec![
             ("http://site.test/startseite", Page::html(seed)),
@@ -706,8 +681,7 @@ fn a_304_re_emits_edges_from_the_cached_blob() {
 
     let mut cfg = config(tmp.path());
     cfg.use_sitemap = false;
-    run_with_client(cfg, "run-1".into(), false, ProgressSink::new(None), pages())
-        .expect("first crawl");
+    run_with_client(cfg, "run-1".into(), ProgressSink::new(None), pages()).expect("first crawl");
 
     let conn = rusqlite::Connection::open(tmp.path().join("db.sqlite3")).unwrap();
     let before: i64 = conn
@@ -724,14 +698,8 @@ fn a_304_re_emits_edges_from_the_cached_blob() {
 
     let mut cfg2 = config(tmp.path());
     cfg2.use_sitemap = false;
-    let counts = run_with_client(
-        cfg2,
-        "run-2".into(),
-        false,
-        ProgressSink::new(None),
-        pages(),
-    )
-    .expect("second crawl");
+    let counts = run_with_client(cfg2, "run-2".into(), ProgressSink::new(None), pages())
+        .expect("second crawl");
     assert!(
         counts["site.test"].unchanged > 0,
         "precondition: the re-crawl really did revalidate as 304"
@@ -759,14 +727,8 @@ fn max_pages_caps_total_fetches() {
     let tmp = tempfile::tempdir().unwrap();
     let mut cfg = config(tmp.path());
     cfg.max_pages = 2;
-    let counts = run_with_client(
-        cfg,
-        "run-cap".into(),
-        false,
-        ProgressSink::new(None),
-        fixture(),
-    )
-    .expect("crawl run");
+    let counts = run_with_client(cfg, "run-cap".into(), ProgressSink::new(None), fixture())
+        .expect("crawl run");
     assert_eq!(counts["site.test"].fetched, 2, "max_pages caps fetches");
 }
 
@@ -780,15 +742,78 @@ fn second_run_new_only_fetches_nothing() {
     // A new-only re-run must not re-fetch any already-checked URL.
     let mut cfg = config(tmp.path());
     cfg.recheck = "new-only".into();
-    let second = run_with_client(
-        cfg,
-        "run-2".into(),
-        false,
-        ProgressSink::new(None),
-        fixture(),
-    )
-    .expect("crawl run");
+    let second = run_with_client(cfg, "run-2".into(), ProgressSink::new(None), fixture())
+        .expect("crawl run");
     assert_eq!(second["site.test"].fetched, 0, "nothing new to fetch");
+}
+
+/// `recheck = "force-full"` is `"all"` plus: do not send the stored validators.
+///
+/// Without that second half a page with an ETag revalidates to a cheap 304 and is
+/// never re-downloaded -- which is the entire point of asking for a forced full
+/// re-crawl (repairing a corpus whose stored bytes are suspect). The two halves used
+/// to be `recheck="all"` and a separate `force_full: bool` argument; this pins that
+/// the one enum value still drives both.
+#[test]
+fn force_full_redownloads_where_recheck_all_revalidates() {
+    let tmp = tempfile::tempdir().unwrap();
+    let seed = "http://site.test/startseite";
+    let pages = || {
+        MockClient::from_pages(vec![(
+            seed,
+            Page::html("<html><body>seed body</body></html>").etag("\"v1\""),
+        )])
+    };
+    let cfg_at = |recheck: &str| {
+        let mut c = config(tmp.path());
+        c.use_sitemap = false;
+        c.recheck = recheck.into();
+        c
+    };
+
+    // Run 1 stores the body and its ETag.
+    run_with_client(
+        cfg_at("all"),
+        "run-1".into(),
+        ProgressSink::new(None),
+        pages(),
+    )
+    .expect("first crawl");
+    // Run 2, recheck="all": the stored validator still matches, so the page 304s.
+    run_with_client(
+        cfg_at("all"),
+        "run-2".into(),
+        ProgressSink::new(None),
+        pages(),
+    )
+    .expect("recheck=all crawl");
+    // Run 3, recheck="force-full": same page, no validator sent, so a full 200.
+    run_with_client(
+        cfg_at("force-full"),
+        "run-3".into(),
+        ProgressSink::new(None),
+        pages(),
+    )
+    .expect("force-full crawl");
+
+    // Assert on crawl_log.status, not the counts: force-full re-downloads identical
+    // bytes, so its outcome is still `unchanged` and counts cannot tell the two
+    // modes apart. crawl_log is append-only, so every run's row survives.
+    let conn = rusqlite::Connection::open(tmp.path().join("db.sqlite3")).unwrap();
+    let status = |run: &str| -> i64 {
+        conn.query_row(
+            "SELECT status FROM crawl_log WHERE run_id=? AND url=?",
+            [run, seed],
+            |r| r.get(0),
+        )
+        .unwrap()
+    };
+    assert_eq!(
+        status("run-2"),
+        304,
+        "precondition: recheck=all revalidates"
+    );
+    assert_eq!(status("run-3"), 200, "force-full must re-download, not 304");
 }
 
 #[test]
@@ -831,14 +856,8 @@ fn per_host_budget_caps_single_host() {
         ("http://good.test/a", "text/html", "<body>ga</body>"),
         ("http://good.test/b", "text/html", "<body>gb</body>"),
     ]);
-    let counts = run_with_client(
-        cfg,
-        "run-perhost".into(),
-        false,
-        ProgressSink::new(None),
-        client,
-    )
-    .expect("crawl run");
+    let counts = run_with_client(cfg, "run-perhost".into(), ProgressSink::new(None), client)
+        .expect("crawl run");
     // seed hub(1) + flood(2, capped) + good(2) = 5
     assert_eq!(
         counts["test"].fetched, 5,
@@ -915,14 +934,7 @@ fn frontier_load_drops_preseeded_trap() {
             "<body>studium</body>",
         ),
     ]);
-    run_with_client(
-        cfg,
-        "run-trap".into(),
-        false,
-        ProgressSink::new(None),
-        client,
-    )
-    .expect("crawl run");
+    run_with_client(cfg, "run-trap".into(), ProgressSink::new(None), client).expect("crawl run");
 
     let conn = rusqlite::Connection::open(&db_path).unwrap();
     let logged: i64 = conn

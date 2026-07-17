@@ -24,17 +24,17 @@ pub mod writer;
 
 /// Run the entire Phase-1 crawl.
 ///
-/// `config` is the plain dict the Python `crawl.run_fetch` adapter builds from
-/// the parsed (and CLI-overridden) `Config`. `progress`, if given, is the
-/// existing Python `Progress` instance; Rust calls back into it (throttled)
-/// during the crawl. Returns `{site_name: {counts...}}`.
+/// `config` is the plain dict the Python `crawl.run_fetch` adapter builds from the
+/// parsed `Config`. Everything the crawl needs is in it — including whether to drop
+/// stored validators, which is derived from `recheck == "force-full"`. `progress`,
+/// if given, is the existing Python `Progress` instance; Rust calls back into it
+/// (throttled) during the crawl. Returns `{site_name: {counts...}}`.
 #[pyfunction]
-#[pyo3(signature = (config, run_id, force_full=false, progress=None))]
+#[pyo3(signature = (config, run_id, progress=None))]
 fn run_fetch<'py>(
     py: Python<'py>,
     config: config::RunConfig,
     run_id: String,
-    force_full: bool,
     progress: Option<Py<PyAny>>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let sink = progress::ProgressSink::new(progress);
@@ -42,7 +42,7 @@ fn run_fetch<'py>(
     // coordinator thread and the progress bridge re-attach only briefly when
     // calling back into Python.
     let counts = py
-        .detach(move || crawl::run(config, run_id, force_full, sink))
+        .detach(move || crawl::run(config, run_id, sink))
         .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
 
     let out = PyDict::new(py);

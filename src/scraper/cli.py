@@ -49,15 +49,13 @@ def _cmd_fetch(args) -> int:
         object.__setattr__(config.crawl, "workers_per_host", args.workers_per_host)
     if args.request_delay is not None:
         object.__setattr__(config.crawl, "request_delay_seconds", args.request_delay)
-    force_full = False
     if args.changed_only:
         object.__setattr__(config.crawl, "recheck", "changed-only")
     elif args.new_only:
         object.__setattr__(config.crawl, "recheck", "new-only")
     elif args.full:
-        object.__setattr__(config.crawl, "recheck", "all")
-        force_full = True
-    results = crawl.run_fetch(config, _run_id(), force_full=force_full)
+        object.__setattr__(config.crawl, "recheck", "force-full")
+    results = crawl.run_fetch(config, _run_id())
     for site, counts in results.items():
         print(f"[{site}] " + " ".join(f"{k}={v}" for k, v in counts.items()))
     return 0

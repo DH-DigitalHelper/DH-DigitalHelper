@@ -157,6 +157,21 @@ def test_new_only_rerun_fetches_nothing(tmp_path, server):
     assert counts["127.0.0.1"]["fetched"] == 0
 
 
+def test_force_full_rerun_refetches_everything(tmp_path, server):
+    """The "force-full" recheck value has to survive the whole hop: config.py's enum
+    -> _engine_config's dict -> RunConfig extraction -> rechecks_all(). The opposite
+    of new-only above: every already-present URL comes back.
+
+    That it also *drops the validators* is asserted in Rust
+    (tests/scrape-engine/orchestration.rs) -- the fixture server here serves no ETag,
+    so nothing on this side could tell force-full from "all".
+    """
+    host = server
+    crawl.run_fetch(_config(tmp_path, host), "run-1")
+    counts = crawl.run_fetch(_config(tmp_path, host, recheck="force-full"), "run-2")
+    assert counts["127.0.0.1"]["fetched"] == 5
+
+
 def test_backfill_links_rebuilds_edges_from_raw(tmp_path, server):
     """Crawl, wipe the link graph, then reconstruct it offline from the raw blobs
     on disk. The rebuilt edge set must match what the crawl originally wrote, with

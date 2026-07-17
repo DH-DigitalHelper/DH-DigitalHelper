@@ -75,6 +75,11 @@ def test_load_config_accepts_new_only(tmp_path):
     assert cfg.crawl.recheck == "new-only"
 
 
+def test_load_config_accepts_force_full(tmp_path):
+    cfg = load_config(_write(tmp_path, "force-full"))
+    assert cfg.crawl.recheck == "force-full"
+
+
 def test_load_config_rejects_unknown_recheck(tmp_path):
     with pytest.raises(ValueError, match="recheck"):
         load_config(_write(tmp_path, "sometimes"))

@@ -89,11 +89,10 @@ impl RateLimiter {
 pub fn run(
     config: RunConfig,
     run_id: String,
-    force_full: bool,
     progress: ProgressSink,
 ) -> Result<std::collections::HashMap<String, Counts>, CrawlError> {
     let client = ReqwestClient::new().map_err(|e| CrawlError::Http(e.to_string()))?;
-    run_with_client(config, run_id, force_full, progress, client)
+    run_with_client(config, run_id, progress, client)
 }
 
 /// Orchestration generic over the HTTP client — the injection seam used by tests
@@ -101,7 +100,6 @@ pub fn run(
 pub fn run_with_client<C: HttpClient>(
     config: RunConfig,
     run_id: String,
-    force_full: bool,
     progress: ProgressSink,
     client: C,
 ) -> Result<std::collections::HashMap<String, Counts>, CrawlError> {
@@ -148,7 +146,7 @@ pub fn run_with_client<C: HttpClient>(
             )?;
         }
         storage::enqueue(&conn, &site.seed_url, &site.allowed_domain, 0, None, &now)?;
-        if config.recheck == "all" || force_full {
+        if config.rechecks_all() {
             storage::requeue_present_urls(&conn, &site.allowed_domain)?;
         }
     }
@@ -178,6 +176,7 @@ pub fn run_with_client<C: HttpClient>(
     progress.header("Crawling");
 
     // --- run per-host workers ---
+    let force_full = config.force_full();
     rt.block_on(async {
         let mut handles = Vec::new();
         for (i, site) in config.sites.iter().enumerate() {

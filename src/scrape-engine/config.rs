@@ -1,10 +1,13 @@
 //! Run configuration passed from Python.
 //!
-//! The Python side (`config.py` + `cli.py`) already parses `config.toml` and
-//! applies any CLI overrides (`--max-pages`, `--workers-per-host`,
-//! `--new-only`/`--changed-only`/`--full`) onto the frozen `Config` dataclass.
-//! The thin `crawl.run_fetch` adapter then hands us a plain dict with the final
-//! values, so Rust never re-reads `config.toml`.
+//! `config.py` parses `config.toml` into a frozen `Config` dataclass and the thin
+//! `crawl.run_fetch` adapter flattens it into a plain dict, so Rust never re-reads
+//! `config.toml`. There are no CLI overrides: what the file says is what arrives
+//! here.
+//!
+//! Every field is mandatory (`from_item_all` extracts each by dict key, so a
+//! missing one is an extraction error rather than a default). `config.py` owns both
+//! the defaulting and the range checks.
 
 use pyo3::prelude::*;
 
@@ -41,5 +44,22 @@ impl RunConfig {
     /// `recheck == "new-only"`: only fetch queued URLs never fetched before.
     pub fn only_new(&self) -> bool {
         self.recheck == "new-only"
+    }
+
+    /// Re-queue every already-present URL for this run. Both `"all"` and
+    /// `"force-full"` do; the latter is `"all"` plus dropped validators.
+    pub fn rechecks_all(&self) -> bool {
+        matches!(self.recheck.as_str(), "all" | "force-full")
+    }
+
+    /// `recheck == "force-full"`: send no stored `ETag`/`Last-Modified`, so every
+    /// re-checked URL is downloaded in full instead of revalidating to a cheap 304.
+    ///
+    /// Derived from `recheck` rather than carried beside it: as a separate flag it
+    /// could be combined with `"new-only"` to ask for a forced re-download of pages
+    /// that by definition have nothing stored to re-download. That is now
+    /// unrepresentable.
+    pub fn force_full(&self) -> bool {
+        self.recheck == "force-full"
     }
 }

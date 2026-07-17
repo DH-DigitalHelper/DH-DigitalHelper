@@ -10,6 +10,12 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
+# What a re-run re-checks. "force-full" is "all" plus: ignore the stored
+# ETag/Last-Modified, so every re-checked URL is re-downloaded in full rather than
+# revalidating to a 304. The engine derives both behaviours from this one value
+# (see RunConfig::rechecks_all / ::force_full in src/scrape-engine/config.rs).
+RECHECK_MODES = ("all", "changed-only", "new-only", "force-full")
+
 
 @dataclass(frozen=True)
 class Site:
@@ -84,10 +90,11 @@ def load_config(path: Path | None = None) -> Config:
     storage_raw = data["storage"]
 
     recheck = str(crawl_raw.get("recheck", "all"))
-    if recheck not in {"all", "changed-only", "new-only"}:
+    if recheck not in RECHECK_MODES:
         raise ValueError(
-            "crawl.recheck must be one of 'all', 'changed-only', 'new-only'; "
-            f"got {recheck!r}"
+            "crawl.recheck must be one of "
+            + ", ".join(repr(m) for m in RECHECK_MODES)
+            + f"; got {recheck!r}"
         )
 
     return Config(

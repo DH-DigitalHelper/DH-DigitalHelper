@@ -4,8 +4,8 @@ The crawl engine itself lives in Rust (`scraper._engine`, built from
 ``src/scrape-engine/``): a tokio async crawler with a single dedicated SQLite
 writer task and an in-memory frontier, which owns all Phase-1 writes to the same
 SQLite database Phase 2 reads. This module is now a thin adapter that maps the
-parsed (and CLI-overridden) :class:`~scraper.config.Config` into the plain dict
-the extension expects and forwards the call.
+parsed :class:`~scraper.config.Config` into the plain dict the extension expects
+and forwards the call.
 
 Phase 2 (extraction) stays in Python and is untouched.
 """
@@ -19,11 +19,9 @@ from .progress import Progress
 def _engine_config(config) -> dict:
     """Flatten the typed Config into the dict the Rust engine consumes.
 
-    CLI overrides (``--max-pages``, ``--workers-per-host``,
-    ``--new-only``/``--changed-only``/``--full``) are already applied onto
-    ``config`` by ``cli.py`` before we get here, so we just read the final
-    values. ``respect_robots`` is intentionally omitted: it was never enforced
-    in Phase 1.
+    config.toml is the only source of these values and nothing overrides them on
+    the way through, so this is a straight projection. ``respect_robots`` is
+    intentionally omitted: it was never enforced in Phase 1.
     """
     c = config.crawl
     s = config.storage
@@ -48,24 +46,18 @@ def _engine_config(config) -> dict:
     }
 
 
-def run_fetch(
-    config,
-    run_id,
-    fetch_fn=None,
-    clock=None,
-    force_full=False,
-    progress=None,
-) -> dict:
+def run_fetch(config, run_id, progress=None) -> dict:
     """Run Phase 1 via the Rust engine and return per-site counts.
 
-    ``fetch_fn`` and ``clock`` are accepted for source compatibility with the
-    old signature but ignored — the Rust engine owns fetching and time. Testing
-    uses the engine's own injectable HTTP client (see ``tests/scrape-engine``)
-    plus the end-to-end fixture-server test in ``tests/test_engine_run_fetch.py``.
+    Everything the crawl needs is in ``config`` — including whether to drop the
+    stored validators, which the engine derives from ``crawl.recheck ==
+    "force-full"``. Testing uses the engine's own injectable HTTP client (see
+    ``tests/scrape-engine``) plus the end-to-end fixture-server test in
+    ``tests/test_engine_run_fetch.py``.
     """
     if progress is None:
         progress = Progress()
-    return _engine.run_fetch(_engine_config(config), run_id, force_full, progress)
+    return _engine.run_fetch(_engine_config(config), run_id, progress)
 
 
 def backfill_links(config, progress=None) -> dict:

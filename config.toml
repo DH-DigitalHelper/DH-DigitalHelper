@@ -72,7 +72,13 @@ max_pages_per_host = 50000
 request_delay_seconds = 0.0
 respect_robots = false
 workers_per_host = 16
-recheck = "changed-only"                       # "all" | "changed-only" | "new-only"
+# What a re-run re-checks:
+#   "all"          re-check every already-present URL (conditional GET; a 304 is cheap)
+#   "changed-only" only URLs the sitemap <lastmod> scan flags as changed
+#   "new-only"     only queued URLs never fetched before; never re-download a stored page
+#   "force-full"   like "all", but ignore the stored ETag/Last-Modified so every URL is
+#                  re-downloaded in full. Expensive; for repairing a spoilt crawl.
+recheck = "changed-only"
 user_agent = ""
 
 [extract]

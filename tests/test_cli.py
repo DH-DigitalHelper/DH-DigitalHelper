@@ -126,20 +126,22 @@ raw_dir = "raw"
     )
 
 
-def test_cmd_fetch_maps_full_to_recheck_all_and_force_full(tmp_path, monkeypatch):
+def test_cmd_fetch_maps_full_to_recheck_force_full(tmp_path, monkeypatch):
+    """``--full`` is carried entirely by the recheck value now. It used to set
+    recheck="all" plus a separate force_full=True argument; the engine derives the
+    validator-dropping from the one enum value instead."""
     _write_config(tmp_path, recheck="changed-only")
     captured = {}
 
-    def fake_run_fetch(config, run_id, force_full=False, **kwargs):
+    def fake_run_fetch(config, run_id, **kwargs):
         captured["recheck"] = config.crawl.recheck
-        captured["force_full"] = force_full
         return {}
 
     monkeypatch.setattr(cli.crawl, "run_fetch", fake_run_fetch)
     rc = cli.main(["--config", str(tmp_path / "config.toml"), "fetch", "--full"])
 
     assert rc == 0
-    assert captured == {"recheck": "all", "force_full": True}
+    assert captured == {"recheck": "force-full"}
 
 
 def test_cmd_fetch_maps_changed_only_to_recheck_changed_only(tmp_path, monkeypatch):
