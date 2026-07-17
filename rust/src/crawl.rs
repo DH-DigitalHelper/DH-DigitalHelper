@@ -434,8 +434,14 @@ fn build_batch(
                     mark: UrlMark::Error {
                         http_status: Some(200),
                     },
-                    followable: Vec::new(),
-                    edges: Vec::new(),
+                    // Keep the link discovery: the body *was* downloaded and
+                    // parsed, only the cache write failed. Dropping these would
+                    // amputate the entire subtree behind this page over one
+                    // transient disk hiccup, and this page's own error row is
+                    // already the signal that it needs re-fetching. Both writes
+                    // are INSERT OR IGNORE, so re-emitting them later is a no-op.
+                    followable,
+                    edges,
                     raw_doc: None,
                     log: CrawlLogRow {
                         final_url: result.final_url.clone(),

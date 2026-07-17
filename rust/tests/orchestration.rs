@@ -243,6 +243,27 @@ fn raw_cache_write_failure_never_orphans_a_page() {
     let c = &counts["site.test"];
     assert_eq!(c.new, 0, "nothing was stored, so nothing is 'new'");
     assert!(c.error > 0, "raw-write failures must surface as errors");
+
+    // Losing the bytes must not also lose the link discovery that already
+    // succeeded: the body WAS downloaded and parsed, only the cache write
+    // failed. Dropping the outbound links would amputate the whole subtree
+    // behind a page over one transient disk hiccup, so the cascade must still
+    // reach a/b/c (5 pages) rather than stopping at the two seeded ones.
+    assert_eq!(
+        c.fetched, 5,
+        "discovered links must still be followed after a raw-write failure"
+    );
+    let edges: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM links WHERE src_url = 'http://site.test/startseite'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(
+        edges > 0,
+        "edges discovered from the fetched body must survive"
+    );
 }
 
 #[test]
