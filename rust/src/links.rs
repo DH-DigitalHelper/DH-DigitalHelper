@@ -72,7 +72,9 @@ fn host_is_trap(host: &str) -> bool {
         return true;
     }
     let label = host.split_once('.').map(|(l, _)| l).unwrap_or(&host);
-    TRAP_HOST_LABEL_PREFIXES.iter().any(|p| label.starts_with(p))
+    TRAP_HOST_LABEL_PREFIXES
+        .iter()
+        .any(|p| label.starts_with(p))
 }
 
 /// True if the URL is a known crawler trap that must never be enqueued.
@@ -127,7 +129,9 @@ pub fn discover_all_links(html: &str, base_url: &str) -> Vec<String> {
             continue;
         }
         let lower = href.to_ascii_lowercase();
-        if lower.starts_with("mailto:") || lower.starts_with("tel:") || lower.starts_with("javascript:")
+        if lower.starts_with("mailto:")
+            || lower.starts_with("tel:")
+            || lower.starts_with("javascript:")
         {
             continue;
         }

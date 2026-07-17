@@ -40,7 +40,11 @@ impl Outcome {
 ///           Changed   if changed
 ///           Unchanged otherwise
 /// ```
-pub fn content_outcome(prior_sha: Option<&str>, present: bool, new_digest: &str) -> (Outcome, bool) {
+pub fn content_outcome(
+    prior_sha: Option<&str>,
+    present: bool,
+    new_digest: &str,
+) -> (Outcome, bool) {
     let changed = prior_sha != Some(new_digest) || !present;
     let outcome = if prior_sha.is_none() {
         Outcome::New

@@ -253,7 +253,12 @@ pub struct Coordinator {
 }
 
 impl Coordinator {
-    pub fn new(conn: Connection, run_id: String, inits: Vec<SiteInit>, progress: ProgressSink) -> Self {
+    pub fn new(
+        conn: Connection,
+        run_id: String,
+        inits: Vec<SiteInit>,
+        progress: ProgressSink,
+    ) -> Self {
         let sites = inits
             .into_iter()
             .map(|init| {
@@ -289,7 +294,10 @@ impl Coordinator {
 
     /// Run the coordinator loop until the channel closes (all workers gone).
     /// Returns per-site counts keyed by site name.
-    pub fn run(mut self, mut rx: UnboundedReceiver<WriterMsg>) -> rusqlite::Result<HashMap<String, Counts>> {
+    pub fn run(
+        mut self,
+        mut rx: UnboundedReceiver<WriterMsg>,
+    ) -> rusqlite::Result<HashMap<String, Counts>> {
         while let Some(first) = rx.blocking_recv() {
             match first {
                 WriterMsg::Claim { site_idx, reply } => self.handle_claim(site_idx, reply),
@@ -346,6 +354,12 @@ impl Coordinator {
         }
     }
 
+    // The `Box` is deliberate and not redundant indirection: these values arrive
+    // already boxed as `WriterMsg::Complete(Box<PageBatch>)` — which keeps the
+    // channel message small — and are pushed straight into this Vec. Taking
+    // `Vec<PageBatch>` as clippy suggests would force a large move out of every
+    // box on the writer's hot path for no benefit.
+    #[allow(clippy::vec_box)]
     fn apply_completes(&mut self, completes: Vec<Box<PageBatch>>) -> rusqlite::Result<()> {
         let tx = self
             .conn

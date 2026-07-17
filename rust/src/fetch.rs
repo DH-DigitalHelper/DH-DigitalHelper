@@ -184,7 +184,10 @@ impl HttpClient for ReqwestClient {
     }
 }
 
-fn header_string(headers: &reqwest::header::HeaderMap, name: reqwest::header::HeaderName) -> Option<String> {
+fn header_string(
+    headers: &reqwest::header::HeaderMap,
+    name: reqwest::header::HeaderName,
+) -> Option<String> {
     headers
         .get(name)
         .and_then(|v| v.to_str().ok())
@@ -250,7 +253,10 @@ mod tests {
 
     #[test]
     fn classify_html_by_content_type() {
-        assert_eq!(classify("text/html; charset=utf-8", "https://x.de/a"), "html");
+        assert_eq!(
+            classify("text/html; charset=utf-8", "https://x.de/a"),
+            "html"
+        );
         assert_eq!(classify("application/xml", "https://x.de/a"), "html");
         assert_eq!(classify("text/plain", "https://x.de/a"), "html");
     }

@@ -13,7 +13,8 @@ use url::Url;
 use crate::fetch::HttpClient;
 use crate::links::in_domain;
 
-static LOC: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)<loc>\s*([^<\s]+)\s*</loc>").unwrap());
+static LOC: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?i)<loc>\s*([^<\s]+)\s*</loc>").unwrap());
 static URL_BLOCK: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?is)<url>(.*?)</url>").unwrap());
 static SITEMAP_BLOCK: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?is)<sitemap>(.*?)</sitemap>").unwrap());
@@ -28,9 +29,7 @@ pub fn parse(xml: &str) -> (Vec<(String, Option<String>)>, Vec<String>) {
         let Some(loc) = LOC.captures(inner) else {
             continue;
         };
-        let lm = LASTMOD
-            .captures(inner)
-            .map(|c| unescape(&c[1]));
+        let lm = LASTMOD.captures(inner).map(|c| unescape(&c[1]));
         url_pairs.push((unescape(&loc[1]), lm));
     }
     let mut subs = Vec::new();
@@ -73,7 +72,10 @@ pub async fn discover<C: HttpClient>(
         if !visited.insert(target.clone()) {
             continue;
         }
-        let Some(bytes) = client.fetch_bytes(target.clone(), user_agent.to_string()).await else {
+        let Some(bytes) = client
+            .fetch_bytes(target.clone(), user_agent.to_string())
+            .await
+        else {
             continue;
         };
         let xml = String::from_utf8_lossy(&bytes);
@@ -167,7 +169,10 @@ mod tests {
         </urlset>"#;
         let (pairs, subs) = parse(xml);
         assert_eq!(pairs.len(), 2);
-        assert_eq!(pairs[0], ("https://a.de/x".into(), Some("2026-02-01".into())));
+        assert_eq!(
+            pairs[0],
+            ("https://a.de/x".into(), Some("2026-02-01".into()))
+        );
         assert_eq!(pairs[1], ("https://a.de/y".into(), None));
         assert!(subs.is_empty());
     }

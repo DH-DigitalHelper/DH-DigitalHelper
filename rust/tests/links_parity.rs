@@ -79,7 +79,9 @@ fn is_trap_url_flags_mrbs_booking_host() {
     // "buchen.*" is generalized to the leftmost DNS label, so any campus's booking
     // host is trapped without pinning each one in config.
     assert!(is_trap_url("https://buchen.mosbach.dhbw.de/index.php"));
-    assert!(is_trap_url("https://buchen.dhbw-stuttgart.de/edit_entry.php?area=1"));
+    assert!(is_trap_url(
+        "https://buchen.dhbw-stuttgart.de/edit_entry.php?area=1"
+    ));
 }
 
 #[test]
@@ -100,17 +102,29 @@ fn is_trap_url_allows_buchen_in_path_on_normal_host() {
 
 #[test]
 fn is_trap_url_flags_lms_hosts() {
-    assert!(is_trap_url("https://moodle.dhbw-vs.de/mod/forum/discuss.php?d=86015"));
-    assert!(is_trap_url("https://moodle.heidenheim.dhbw.de/course/view.php?id=976"));
-    assert!(is_trap_url("https://moodle2.dhbw-loerrach.de/moodle/mod/data/edit.php?d=397"));
+    assert!(is_trap_url(
+        "https://moodle.dhbw-vs.de/mod/forum/discuss.php?d=86015"
+    ));
+    assert!(is_trap_url(
+        "https://moodle.heidenheim.dhbw.de/course/view.php?id=976"
+    ));
+    assert!(is_trap_url(
+        "https://moodle2.dhbw-loerrach.de/moodle/mod/data/edit.php?d=397"
+    ));
     assert!(is_trap_url("https://moodle27.dhbw-stuttgart.de/"));
-    assert!(is_trap_url("https://elearning.dhbw-stuttgart.de/login/index.php"));
-    assert!(is_trap_url("https://elearning.cas.dhbw.de/course/view.php?id=1"));
+    assert!(is_trap_url(
+        "https://elearning.dhbw-stuttgart.de/login/index.php"
+    ));
+    assert!(is_trap_url(
+        "https://elearning.cas.dhbw.de/course/view.php?id=1"
+    ));
 }
 
 #[test]
 fn is_trap_url_allows_non_lms_hosts_mentioning_moodle() {
-    assert!(!is_trap_url("https://www.heilbronn.dhbw.de/studium/moodle/"));
+    assert!(!is_trap_url(
+        "https://www.heilbronn.dhbw.de/studium/moodle/"
+    ));
     assert!(!is_trap_url(
         "https://www.heilbronn.dhbw.de/informationen-fuer/dozierende/unsere-lernplattform-moodle/"
     ));
@@ -156,7 +170,11 @@ fn discover_links_drops_trap_urls() {
     <a href="https://moodle.heidenheim.dhbw.de/course/view.php?id=5">lms-host trap</a>
     <a href="https://www.heidenheim.dhbw.de/kontakt">keep</a>
     "#;
-    let got = discover_links(html, "https://www.heidenheim.dhbw.de/x", "heidenheim.dhbw.de");
+    let got = discover_links(
+        html,
+        "https://www.heidenheim.dhbw.de/x",
+        "heidenheim.dhbw.de",
+    );
     assert!(has(&got, "https://www.heidenheim.dhbw.de/studium"));
     assert!(has(&got, "https://www.heidenheim.dhbw.de/kontakt"));
     assert!(got.iter().all(|u| !u.contains("moodle.heidenheim.dhbw.de")));

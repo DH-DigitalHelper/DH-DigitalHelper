@@ -87,7 +87,9 @@ async fn off_domain_index_child_not_followed() {
     let pairs = sitemap::discover("https://www.dhbw.de", "www.dhbw.de", &client, "ua").await;
     assert!(pairs.is_empty());
     let calls = client.calls.lock().unwrap();
-    assert!(!calls.iter().any(|u| u == "https://evil.example/sitemap-x.xml"));
+    assert!(!calls
+        .iter()
+        .any(|u| u == "https://evil.example/sitemap-x.xml"));
 }
 
 #[tokio::test]
@@ -107,7 +109,13 @@ async fn cycle_safety_terminates() {
     let pairs = sitemap::discover("https://www.dhbw.de", "www.dhbw.de", &client, "ua").await;
     assert!(pairs.is_empty());
     let calls = client.calls.lock().unwrap();
-    assert!(calls.iter().filter(|u| *u == "https://www.dhbw.de/sitemap.xml").count() <= 1);
+    assert!(
+        calls
+            .iter()
+            .filter(|u| *u == "https://www.dhbw.de/sitemap.xml")
+            .count()
+            <= 1
+    );
 }
 
 #[tokio::test]
