@@ -17,7 +17,7 @@ from itertools import groupby
 from pathlib import Path
 from urllib.parse import parse_qsl, urlsplit
 
-from . import taxonomy
+from . import classify, taxonomy
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS queue (
@@ -759,6 +759,48 @@ def _doc_id(url: str) -> str:
     return hashlib.sha1(url.encode("utf-8")).hexdigest()[:16]
 
 
+def _standort_id(conn, slug):
+    if slug is None:
+        return None
+    row = conn.execute("SELECT id FROM standorte WHERE name=?", (slug,)).fetchone()
+    return row["id"] if row else None
+
+
+def _department_id(conn, slug):
+    row = conn.execute("SELECT id FROM departments WHERE name=?", (slug,)).fetchone()
+    return row["id"] if row else None
+
+
+def _program_id(conn, slug, display, dept_slug):
+    if slug is None:
+        return None
+    conn.execute(
+        "INSERT OR IGNORE INTO study_programs (name, display_name, department_id) "
+        "VALUES (?, ?, ?)",
+        (slug, display, _department_id(conn, dept_slug)),
+    )
+    row = conn.execute("SELECT id FROM study_programs WHERE name=?", (slug,)).fetchone()
+    return row["id"]
+
+
+def _set_classification(conn, doc_id, url, site, doc) -> None:
+    """Classify (url, site, doc) and write the four enrichment columns onto the
+    document row by id. Never touches updated_at -- this is derived metadata, and
+    the backfill re-runs it over the whole corpus without spamming delta()."""
+    cl = classify.classify(url, site, doc)
+    conn.execute(
+        "UPDATE documents SET standort_id=?, department_id=?, study_program_id=?, "
+        "classify_meta=? WHERE id=?",
+        (
+            _standort_id(conn, cl.standort),
+            _department_id(conn, cl.department),
+            _program_id(conn, cl.program, cl.program_display, cl.department),
+            json.dumps(cl.meta),
+            doc_id,
+        ),
+    )
+
+
 def _upsert_document(conn, url, site, source_type, content_sha256, doc, now) -> str:
     """Materialize one URL's document row (no commit), deduplicated on the
     extracted-text hash: the corpus keeps at most one row per distinct text --
@@ -817,6 +859,7 @@ def _upsert_document(conn, url, site, source_type, content_sha256, doc, now) -> 
                 now,
             ),
         )
+        _set_classification(conn, _doc_id(url), url, site, doc)
         return "new"
     if existing["text_sha256"] != h:
         # The extracted TEXT changed -> a genuine content change: bump revision +
@@ -840,6 +883,7 @@ def _upsert_document(conn, url, site, source_type, content_sha256, doc, now) -> 
                 url,
             ),
         )
+        _set_classification(conn, existing["id"], url, site, doc)
         return "changed"
     if existing["content_sha256"] != content_sha256:
         # Same text, new raw bytes (cHash churn): refresh the byte pointer

@@ -305,6 +305,29 @@ def test_extract_one_isolates_failures_after_extraction(tmp_path):
     assert raw["extract_error"]
 
 
+def test_extract_one_populates_classification_columns(tmp_path):
+    conn, _ = setup_raw(tmp_path)  # present URL https://www.dhbw.de/a, site www.dhbw.de
+    row = st.claim_pending_raw(conn)
+    outcome = extract.extract_one(
+        conn, row, cfg(tmp_path), {"html": good_doc, "pdf": good_doc}, NOW
+    )
+    assert outcome == "indexed"
+    doc = conn.execute(
+        "SELECT standort_id, department_id, classify_meta FROM documents "
+        "WHERE url='https://www.dhbw.de/a'"
+    ).fetchone()
+    # www.dhbw.de -> central standort resolves; department falls back to 'unknown'.
+    standort = conn.execute(
+        "SELECT name FROM standorte WHERE id=?", (doc["standort_id"],)
+    ).fetchone()
+    dept = conn.execute(
+        "SELECT name FROM departments WHERE id=?", (doc["department_id"],)
+    ).fetchone()
+    assert standort["name"] == "dhbw"
+    assert dept["name"] == "unknown"
+    assert doc["classify_meta"] is not None
+
+
 def test_run_extract_processes_pending_docs_through_thread_pool(tmp_path):
     c = cfg(tmp_path)
     conn = st.connect(c.storage.db_file)
