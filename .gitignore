@@ -31,6 +31,9 @@ data/*.sqlite3-shm
 # Agent/tooling scratch: SDD task briefs, reports, and review diffs.
 .superpowers/
 
+# graphify knowledge graph + cache: regenerated locally via `graphify update .`.
+graphify-out/
+
 # OS cruft
 .DS_Store
 Thumbs.db
