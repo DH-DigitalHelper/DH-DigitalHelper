@@ -2,10 +2,10 @@
 //! crawl. Seeds the DB + content-addressed cache directly (the state a real crawl
 //! leaves behind) and drives `backfill::run` against it.
 
-use _native::backfill;
-use _native::config::{RunConfig, SiteCfg};
-use _native::progress::ProgressSink;
-use _native::storage::{self, RawCache};
+use _engine::backfill;
+use _engine::config::{RunConfig, SiteCfg};
+use _engine::progress::ProgressSink;
+use _engine::storage::{self, RawCache};
 
 fn config(dir: &std::path::Path) -> RunConfig {
     RunConfig {

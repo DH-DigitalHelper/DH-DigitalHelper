@@ -6,10 +6,10 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use _native::config::{RunConfig, SiteCfg};
-use _native::crawl::run_with_client;
-use _native::fetch::{FetchRequest, FetchResult, HttpClient};
-use _native::progress::ProgressSink;
+use _engine::config::{RunConfig, SiteCfg};
+use _engine::crawl::run_with_client;
+use _engine::fetch::{FetchRequest, FetchResult, HttpClient};
+use _engine::progress::ProgressSink;
 
 /// One canned response. `Default` is a 200 with an empty body, so a test spells
 /// out only the field it cares about.
@@ -212,7 +212,7 @@ fn fixture() -> MockClient {
     ])
 }
 
-fn run(dir: &std::path::Path) -> HashMap<String, _native::writer::Counts> {
+fn run(dir: &std::path::Path) -> HashMap<String, _engine::writer::Counts> {
     run_with_client(
         config(dir),
         "run-test".into(),
@@ -875,9 +875,9 @@ fn frontier_load_drops_preseeded_trap() {
     // trap rule existed, or via a sitemap). The frontier load must drop it so it is
     // never served/fetched — the block is authoritative, not just discovery-time.
     {
-        let conn = _native::storage::connect(db_path.to_str().unwrap()).unwrap();
-        _native::storage::init_db(&conn).unwrap();
-        _native::storage::enqueue(
+        let conn = _engine::storage::connect(db_path.to_str().unwrap()).unwrap();
+        _engine::storage::init_db(&conn).unwrap();
+        _engine::storage::enqueue(
             &conn,
             "https://buchen.dhbw-vs.de/edit_entry.php?area=5&room=10",
             "dhbw-vs.de",

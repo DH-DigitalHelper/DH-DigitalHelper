@@ -5,7 +5,7 @@ Serves a tiny fixture site from a local ``ThreadingHTTPServer``, runs
 asserts the shared SQLite DB + content-addressed raw cache — the cross-language
 contract Phase 2 relies on.
 
-Skipped automatically if the ``_native`` extension has not been built yet
+Skipped automatically if the ``_engine`` extension has not been built yet
 (``maturin develop``).
 """
 
@@ -18,7 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import pytest
 
 pytest.importorskip(
-    "scraper._native",
+    "scraper._engine",
     reason="Rust extension not built; run `maturin develop` first.",
 )
 

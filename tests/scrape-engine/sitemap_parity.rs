@@ -4,8 +4,8 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use _native::fetch::{FetchRequest, FetchResult, HttpClient};
-use _native::sitemap;
+use _engine::fetch::{FetchRequest, FetchResult, HttpClient};
+use _engine::sitemap;
 
 #[derive(Clone)]
 struct MockClient {

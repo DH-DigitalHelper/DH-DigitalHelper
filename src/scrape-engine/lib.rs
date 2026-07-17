@@ -1,5 +1,5 @@
 //! Phase-1 crawler for `dhbw-scraper`, implemented in Rust and exposed to Python
-//! as the `dhbw_scraper._native` extension module.
+//! as the `scraper._engine` extension module.
 //!
 //! The single public entry point is [`run_fetch`], a drop-in replacement for the
 //! former Python `crawl.run_fetch`. It owns the whole crawl: async fetching,
@@ -85,7 +85,7 @@ fn backfill_links<'py>(
 }
 
 #[pymodule]
-fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(run_fetch, m)?)?;
     m.add_function(wrap_pyfunction!(backfill_links, m)?)?;
     Ok(())

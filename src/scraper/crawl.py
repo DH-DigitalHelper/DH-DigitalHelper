@@ -1,6 +1,6 @@
 """Phase 1: queue-driven crawl with conditional-GET change detection.
 
-The crawl engine itself lives in Rust (`scraper._native`, built from
+The crawl engine itself lives in Rust (`scraper._engine`, built from
 ``src/scrape-engine/``): a tokio async crawler with a single dedicated SQLite
 writer task and an in-memory frontier, which owns all Phase-1 writes to the same
 SQLite database Phase 2 reads. This module is now a thin adapter that maps the
@@ -12,11 +12,11 @@ Phase 2 (extraction) stays in Python and is untouched.
 
 from __future__ import annotations
 
-from . import _native
+from . import _engine
 from .progress import Progress
 
 
-def _native_config(config) -> dict:
+def _engine_config(config) -> dict:
     """Flatten the typed Config into the dict the Rust engine consumes.
 
     CLI overrides (``--max-pages``, ``--workers-per-host``,
@@ -61,11 +61,11 @@ def run_fetch(
     ``fetch_fn`` and ``clock`` are accepted for source compatibility with the
     old signature but ignored — the Rust engine owns fetching and time. Testing
     uses the engine's own injectable HTTP client (see ``tests/scrape-engine``)
-    plus the end-to-end fixture-server test in ``tests/test_native_run_fetch.py``.
+    plus the end-to-end fixture-server test in ``tests/test_engine_run_fetch.py``.
     """
     if progress is None:
         progress = Progress()
-    return _native.run_fetch(_native_config(config), run_id, force_full, progress)
+    return _engine.run_fetch(_engine_config(config), run_id, force_full, progress)
 
 
 def backfill_links(config, progress=None) -> dict:
@@ -84,4 +84,4 @@ def backfill_links(config, progress=None) -> dict:
     """
     if progress is None:
         progress = Progress()
-    return _native.backfill_links(_native_config(config), progress)
+    return _engine.backfill_links(_engine_config(config), progress)

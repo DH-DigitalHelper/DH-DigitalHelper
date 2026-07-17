@@ -26,11 +26,11 @@ build-backend = "maturin"
 [tool.maturin]
 # Mixed Rust/Python layout, one source root: the pure-Python package tree stays
 # authoritative under src/scraper/, and the Rust crate at src/scrape-engine/ is
-# injected as the single submodule scraper._native. The Rust is a SIBLING of the
+# injected as the single submodule scraper._engine. The Rust is a SIBLING of the
 # package, not nested inside it — anything under the package dir is the wheel
 # payload and would ship .rs files into site-packages.
 python-source = "src"
-module-name = "scraper._native"
+module-name = "scraper._engine"
 features = ["pyo3/extension-module"]
 
 [tool.pytest.ini_options]

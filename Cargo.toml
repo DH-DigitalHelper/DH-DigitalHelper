@@ -1,5 +1,5 @@
 [package]
-name = "dhbw_scraper_native"
+name = "scrape_engine"
 version = "0.3.0"
 edition = "2021"
 publish = false
@@ -9,7 +9,7 @@ publish = false
 autotests = false
 
 [lib]
-name = "_native"
+name = "_engine"
 path = "src/scrape-engine/lib.rs"
 crate-type = ["cdylib", "rlib"]
 

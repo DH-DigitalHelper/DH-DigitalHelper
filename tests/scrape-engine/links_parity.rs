@@ -1,7 +1,7 @@
 //! Verbatim port of the Python `tests/test_links.py`. These lock the trap rules
 //! and link-discovery behaviour to the originals.
 
-use _native::links::{discover_links, in_domain, is_trap_url};
+use _engine::links::{discover_links, in_domain, is_trap_url};
 
 fn has(v: &[String], s: &str) -> bool {
     v.iter().any(|u| u == s)
