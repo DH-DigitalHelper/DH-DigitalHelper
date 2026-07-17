@@ -10,15 +10,15 @@ The git hooks are driven by [pre-commit](https://pre-commit.com), declared in
 cloning and installing deps, install the hooks once:
 
 ```powershell
-# Windows (see README "Setup → Windows" for the MSVC prerequisites first)
-. .\scripts\dev-env.ps1        # loads the MSVC env; needed to build the Rust extension
+# Windows: run from the "x64 Native Tools Command Prompt for VS 2022" so the MSVC env
+# needed to build the Rust extension is loaded (see README "Setup → Windows").
 uv sync --extra dev            # installs deps incl. pre-commit, builds the extension
 uv run pre-commit install --install-hooks
 ```
 
 ```sh
 # NixOS: `nix develop` installs the hooks for you via the flake's shellHook.
-# Otherwise, the same two commands as above (without dev-env.ps1):
+# Otherwise, the same two commands as above:
 uv sync --extra dev
 uv run pre-commit install --install-hooks
 ```
@@ -67,10 +67,10 @@ This is validated locally by the `commit-msg` hook and again in CI on pull reque
 
 `clippy` and `cargo test` compile `rusqlite`'s bundled SQLite, which needs
 `cl.exe`/`link.exe` on `PATH`. Run `git push` (and `pre-commit run --hook-stage pre-push`)
-from a shell where you have sourced the helper, or from the *x64 Native Tools* prompt:
+from the *x64 Native Tools Command Prompt for VS 2022*, which has that environment
+preloaded:
 
 ```powershell
-. .\scripts\dev-env.ps1
 git push
 ```
 

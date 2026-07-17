@@ -17,7 +17,7 @@ jobs:
     env:
       # The Rust test binaries link libpython — the crate omits `extension-module`
       # on purpose so `cargo test` can link (see rust/Cargo.toml). Point pyo3 at the
-      # uv-managed interpreter; this is the Linux analog of scripts/dev-env.ps1.
+      # uv-managed interpreter (README "Windows" covers the local equivalent).
       PYO3_PYTHON: ${{ github.workspace }}/.venv/bin/python
     steps:
       - uses: actions/checkout@v7

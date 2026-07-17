@@ -47,9 +47,9 @@ Building the extension needs a **Rust toolchain + a C compiler** (for `rusqlite`
 bundled SQLite). `uv sync` itself compiles the extension, so it must run in an
 MSVC-enabled shell on Windows.
 
-**Windows** (primary dev platform here):
+**Windows** (primary dev platform here) — run everything from the **"x64 Native Tools
+Command Prompt for VS 2022"**, which has the MSVC env preloaded:
 ```powershell
-. .\scripts\dev-env.ps1        # REQUIRED: loads the MSVC (vcvars64) env + python3.dll on PATH
 uv sync --extra dev            # installs deps AND builds the _native extension
 uv run pytest                  # verify
 ```
@@ -66,7 +66,7 @@ git hooks); then `uv sync` and `uv run maturin develop --release`.
 uv run pytest                                   # all Python tests (Phase 2 + CLI + native e2e)
 uv run pytest tests/test_cli.py                 # one file
 uv run pytest -k dedup                          # one test / pattern
-cargo test --manifest-path rust\Cargo.toml      # Rust tests (needs dev-env.ps1 sourced for python3.dll)
+cargo test --manifest-path rust\Cargo.toml      # Rust tests (needs python3.dll on PATH; see README "Windows")
 
 uv run pre-commit run --all-files                        # commit-stage: ruff lint+format, rustfmt, hygiene
 uv run pre-commit run --hook-stage pre-push --all-files  # push-stage: pytest (+ clippy/cargo test if Rust changed)

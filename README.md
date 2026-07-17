@@ -85,12 +85,11 @@ Install [rustup](https://rustup.rs) (the `x86_64-pc-windows-msvc` toolchain) and
 **Visual Studio Build Tools** with the *Desktop development with C++* workload (this also
 provides the Windows SDK that `rusqlite`'s bundled SQLite needs).
 
-The Rust build needs the MSVC compiler (`cl.exe`/`link.exe`) on `PATH`. The most reliable
-way is to load the MSVC environment first — either open the **"x64 Native Tools Command
-Prompt for VS 2022"**, or in PowerShell dot-source the bundled helper:
+The Rust build needs the MSVC compiler (`cl.exe`/`link.exe`) on `PATH`. Open the **"x64
+Native Tools Command Prompt for VS 2022"** (installed with the Build Tools) — it has that
+environment preloaded — and build from there:
 
 ```powershell
-. .\scripts\dev-env.ps1        # loads the MSVC (vcvars64) environment
 uv sync --extra dev            # installs deps AND builds the extension into .venv
 uv run pytest                  # 86 tests, incl. the end-to-end native crawl test
 ```
@@ -104,13 +103,18 @@ the same shell.
 > The pyo3-abi3 forward-compatibility flag needed to build against CPython 3.14 is set for
 > you in [`.cargo/config.toml`](./.cargo/config.toml), so you don't need any extra env vars.
 
-To run the Rust-side tests, dot-source the same helper (it also puts the interpreter's
-`python3.dll` on `PATH`, which the test binaries need) and run cargo from `rust/`:
+The Rust test binaries link libpython, so running them needs the interpreter's
+`python3.dll` on `PATH` in addition to the MSVC environment. From the same Native Tools
+prompt:
 
 ```powershell
-. .\scripts\dev-env.ps1
+$env:PYO3_PYTHON = "$PWD\.venv\Scripts\python.exe"
+$env:Path = "$(& .venv\Scripts\python.exe -c 'import sys; print(sys.base_prefix)');$env:Path"
 cargo test --manifest-path rust\Cargo.toml
 ```
+
+(`uv sync` and `maturin develop` don't need this — the host CPython provides the symbols
+there. Only the standalone `cargo test` binaries do.)
 
 If you use direnv on NixOS, `direnv allow` auto-enters the `nix develop` shell (which already
 has rustc/cargo/maturin) on `cd`.
