@@ -43,7 +43,6 @@ def from_url(url: str) -> str | None:
     path = urlsplit(url).path
     if path.endswith("/"):
         return None
-    path = path.rstrip("/")
     base = unquote(path.rsplit("/", 1)[-1]) if path else ""
     base, _ext = os.path.splitext(base)
     base = _WS.sub(" ", base.replace("_", " ").replace("-", " ")).strip()

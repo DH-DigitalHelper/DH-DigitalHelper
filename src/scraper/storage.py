@@ -1223,9 +1223,10 @@ def run_backfill(conn, raw_dir, batch_size: int = 500) -> dict:
 
     cache = RawCache(raw_dir)
 
-    # Step A: (url, sha256) -> final_url, built by streaming crawl_log once (never
-    # resident) and keeping only keys that belong to a present doc. Later rows (a
-    # larger id, i.e. a more recent fetch of those exact bytes) win.
+    # Step A: (url, sha256) -> final_url, built by streaming crawl_log once (its many
+    # rows are never all resident) and keeping only keys that belong to a present doc.
+    # The two dicts below are bounded by the present-doc count, not by crawl_log size.
+    # Later rows (a larger id, i.e. a more recent fetch of those exact bytes) win.
     doc_keys = {
         (r["url"], r["content_sha256"])
         for r in conn.execute(

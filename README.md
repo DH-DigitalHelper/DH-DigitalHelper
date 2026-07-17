@@ -275,6 +275,12 @@ It streams the corpus in `dedup.batch_size` chunks, is idempotent, and — like
 `dedup`/`reclassify` — leaves `updated_at` untouched so it does not spam `delta`. Do not
 run it while a `fetch`/`extract` is in progress.
 
+`lang` and `title` are also populated on the forward path (the extractors and the
+document upsert), so newly-crawled pages carry them without a backfill. `final_url` is
+**not** maintained on the forward path — a freshly-crawled redirected page is indexed
+under `final_url == url` until this pass corrects it, so re-run `backfill` after a crawl
+to refresh redirect targets.
+
 ## Change detection
 
 Re-running `fetch` is cheap and safe. How much gets re-checked is controlled by
