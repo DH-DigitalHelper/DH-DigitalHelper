@@ -85,3 +85,16 @@ def test_upsert_document_detects_program_and_derives_faculty():
     ).fetchone()
     assert prog["name"] == "maschinenbau"
     assert dept["name"] == "technik"
+
+
+def test_stats_reports_department_and_standort_breakdown():
+    conn = mem()
+    url = "https://www.dhbw-stuttgart.de/fakultaet-wirtschaft/"
+    st.enqueue(conn, url, "dhbw-stuttgart.de", 0, None, NOW)
+    st.mark_url_checked(conn, url, 200, None, None, "c1", True, True, NOW)
+    st.upsert_document(conn, url, "dhbw-stuttgart.de", "html", "c1", doc(), NOW)
+
+    s = st.stats(conn)
+    assert s["by_department"].get("wirtschaft") == 1
+    assert s["by_standort"].get("stuttgart") == 1
+    assert s["unclassified"] == 0

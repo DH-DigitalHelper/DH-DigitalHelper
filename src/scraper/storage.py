@@ -953,6 +953,20 @@ def stats(conn) -> dict:
         "SELECT reject_reason, COUNT(*) c FROM raw_docs "
         "WHERE extract_state='rejected' GROUP BY reject_reason"
     ).fetchall()
+    by_department = conn.execute(
+        "SELECT d.name, COUNT(*) c FROM documents doc "
+        "JOIN departments d ON d.id = doc.department_id "
+        "WHERE doc.present=1 GROUP BY d.name"
+    ).fetchall()
+    by_standort = conn.execute(
+        "SELECT s.name, COUNT(*) c FROM documents doc "
+        "JOIN standorte s ON s.id = doc.standort_id "
+        "WHERE doc.present=1 GROUP BY s.name"
+    ).fetchall()
+    unclassified = scalar(
+        "SELECT COUNT(*) FROM documents "
+        "WHERE present=1 AND (standort_id IS NULL OR department_id IS NULL)"
+    )
     return {
         "queue_pending": scalar(
             "SELECT COUNT(*) FROM queue WHERE work_state='pending'"
@@ -967,6 +981,9 @@ def stats(conn) -> dict:
         "documents": scalar("SELECT COUNT(*) FROM documents WHERE present=1"),
         "documents_removed": scalar("SELECT COUNT(*) FROM documents WHERE present=0"),
         "rejects": {r["reject_reason"]: r["c"] for r in by_reason},
+        "by_department": {r["name"]: r["c"] for r in by_department},
+        "by_standort": {r["name"]: r["c"] for r in by_standort},
+        "unclassified": unclassified,
     }
 
 
