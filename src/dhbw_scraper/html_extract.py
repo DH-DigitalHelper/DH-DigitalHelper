@@ -38,7 +38,9 @@ def _markdown_to_text(markdown: str) -> str:
     return text.strip()
 
 
-def extract_html(html: str, url: str | None = None) -> dict | None:
+def extract_html(html: str | bytes, url: str | None = None) -> dict | None:
+    """Extract main content + metadata. Accepts raw ``bytes`` (preferred: lets
+    trafilatura detect the page's encoding) or an already-decoded ``str``."""
     # Imported lazily so PDF-only pool workers never pay trafilatura's heavy
     # import cost (and vice versa for pymupdf in pdf_extract).
     import trafilatura

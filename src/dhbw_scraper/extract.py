@@ -49,7 +49,12 @@ def _extract_dispatch(source_type: str, raw_path_str: str) -> dict | None:
     """
     data = Path(raw_path_str).read_bytes()
     if source_type == "html":
-        return html_extract.extract_html(data.decode("utf-8", errors="replace"))
+        # Hand trafilatura the raw bytes: it sniffs the encoding (BOM, <meta
+        # charset>, heuristics). Pre-decoding as UTF-8 with errors="replace"
+        # destroyed every umlaut on the legacy cp1252/latin-1 pages this German
+        # corpus still contains -- corrupting the indexed text *and* the
+        # text_sha256 the corpus dedups on.
+        return html_extract.extract_html(data)
     return pdf_extract.extract_pdf(data)
 
 

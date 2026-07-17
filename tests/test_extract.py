@@ -32,6 +32,34 @@ def write_raw(tmp_path, digest, body, kind="html"):
     return cache, path
 
 
+def test_extract_dispatch_preserves_non_utf8_german_text(tmp_path):
+    """A legacy Windows-1252 page must survive extraction with its umlauts.
+
+    The corpus is German, so aeoeue/ss carry meaning; decoding cp1252 bytes as
+    UTF-8 turns every one of them into U+FFFD, which silently corrupts both the
+    indexed text and the text_sha256 the corpus dedups on. Exercised through
+    _extract_dispatch on purpose: that is where the decode happens -- calling
+    extract_html with bytes already works, since trafilatura sniffs the charset.
+    """
+    html = (
+        '<html><head><meta charset="windows-1252"><title>Pruefung</title></head>'
+        "<body><main><p>Die Prüfungsordnung regelt die Fächer und Module "
+        "des Studiums ausführlich und verbindlich für alle Studierenden "
+        "der Dualen Hochschule Baden-Württemberg.</p></main></body></html>"
+    )
+    path = tmp_path / "cp1252.html"
+    path.write_bytes(html.encode("windows-1252"))
+
+    doc = extract._extract_dispatch("html", str(path))
+
+    assert doc is not None
+    assert "�" not in doc["text"], "cp1252 bytes were mangled into replacement chars"
+    assert "Prüfungsordnung" in doc["text"]
+    assert "Fächer" in doc["text"]
+    # Locks that trafilatura's metadata pass also accepts bytes, not just extract().
+    assert doc["title"] == "Pruefung"
+
+
 def setup_raw(tmp_path, digest="c1", body=b"<html>x</html>", kind="html"):
     conn = st.connect(":memory:")
     st.init_db(conn)
