@@ -317,6 +317,33 @@ def test_retired_duplicate_is_reported_as_a_deletion():
     assert st.stats(conn)["documents"] == 1
 
 
+def test_re_retiring_a_duplicate_does_not_re_emit_the_deletion():
+    """Retiring is idempotent: updated_at is stamped only on the live -> retired
+    transition, because that stamp IS the deletion signal delta() reports.
+
+    A duplicate whose *bytes* churn while its extracted text stays identical
+    re-enters the duplicate branch on every re-extraction. Re-stamping it there
+    would re-ship the same deletion on every delta() forever -- the hard DELETE
+    this replaced was self-limiting, so the tombstone must be too.
+    """
+    conn = mem()
+    base = "https://x/p/"
+    variant = "https://x/p/?cHash=abc"
+    st.upsert_document(conn, variant, "x", "html", "c2", doc(), NOW1)
+    st.upsert_document(conn, base, "x", "html", "c1", doc(), NOW2)  # variant retired @NOW2
+
+    # Same URL, same text, NEW bytes -> lands in the duplicate branch again.
+    assert st.upsert_document(conn, variant, "x", "html", "c3", doc(), NOW3) == "duplicate"
+
+    row = conn.execute(
+        "SELECT present, updated_at FROM documents WHERE url=?", (variant,)
+    ).fetchone()
+    assert row["present"] == 0
+    assert row["updated_at"] == NOW2, "an already-retired row must not be re-stamped"
+    # A consumer that already saw the NOW2 deletion is not told about it again.
+    assert variant not in {d["url"] for d in st.delta(conn, since=NOW2)["deletions"]}
+
+
 def test_retired_duplicate_can_become_canonical_again():
     """Resurrection: a tombstoned URL that later wins again must come back with
     its content intact and be re-emitted as an upsert."""

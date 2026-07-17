@@ -799,7 +799,19 @@ def upsert_document(conn, url, site, source_type, content_sha256, doc, now) -> s
 
 
 def _mark_document_removed(conn, url, now) -> None:
-    conn.execute("UPDATE documents SET present=0, updated_at=? WHERE url=?", (now, url))
+    """Retire a document from the live corpus (no commit).
+
+    Guarded on ``present=1`` so this is a true no-op on an already-retired row.
+    ``updated_at`` must be stamped only on the live -> retired transition,
+    because that stamp *is* the deletion signal :func:`delta` reports
+    (``present=0 AND updated_at > since``). Re-stamping it would re-ship the same
+    deletion on every subsequent delta -- the hard DELETE this replaced was
+    self-limiting, and the tombstone has to be too.
+    """
+    conn.execute(
+        "UPDATE documents SET present=0, updated_at=? WHERE url=? AND present=1",
+        (now, url),
+    )
 
 
 def mark_document_removed(conn, url, now) -> None:
