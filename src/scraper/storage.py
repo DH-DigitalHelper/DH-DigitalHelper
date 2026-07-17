@@ -17,6 +17,8 @@ from itertools import groupby
 from pathlib import Path
 from urllib.parse import parse_qsl, urlsplit
 
+from . import taxonomy
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS queue (
     url             TEXT PRIMARY KEY,
@@ -140,6 +142,27 @@ CREATE TABLE IF NOT EXISTS links (
 );
 CREATE INDEX IF NOT EXISTS idx_links_dst  ON links(dst_id);
 CREATE INDEX IF NOT EXISTS idx_links_site ON links(site);
+
+CREATE TABLE IF NOT EXISTS standorte (
+    id           INTEGER PRIMARY KEY,
+    name         TEXT NOT NULL UNIQUE,
+    display_name TEXT NOT NULL,
+    kind         TEXT NOT NULL,
+    parent_id    INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS departments (
+    id           INTEGER PRIMARY KEY,
+    name         TEXT NOT NULL UNIQUE,
+    display_name TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS study_programs (
+    id            INTEGER PRIMARY KEY,
+    name          TEXT NOT NULL UNIQUE,
+    display_name  TEXT NOT NULL,
+    department_id INTEGER
+);
 """
 
 
@@ -225,6 +248,17 @@ def _migrate(conn: sqlite3.Connection) -> None:
     cols = {r["name"] for r in conn.execute("PRAGMA table_info(documents)")}
     if cols and "text_sha256" not in cols:
         conn.execute("ALTER TABLE documents ADD COLUMN text_sha256 TEXT")
+    for col in ("standort_id", "department_id", "study_program_id"):
+        if cols and col not in cols:
+            conn.execute(f"ALTER TABLE documents ADD COLUMN {col} INTEGER")
+    if cols and "classify_meta" not in cols:
+        conn.execute("ALTER TABLE documents ADD COLUMN classify_meta TEXT")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_documents_standort ON documents(standort_id)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_documents_department ON documents(department_id)"
+    )
     # Composite (text_sha256, present): both the dedup lookup in _upsert_document
     # and run_dedup filter on `text_sha256=? AND present=1`. A single-column
     # text_sha256 index is NOT reliably chosen -- SQLite (without ANALYZE stats)
@@ -238,9 +272,32 @@ def _migrate(conn: sqlite3.Connection) -> None:
     )
 
 
+def _seed_taxonomy(conn) -> None:
+    """Seed the fixed vocabularies (idempotent). Departments are a fixed 5;
+    standorte are seeded in two passes so a satellite's parent_id can reference an
+    already-inserted campus. study_programs are interned on demand, not here."""
+    conn.executemany(
+        "INSERT OR IGNORE INTO departments (name, display_name) VALUES (?, ?)",
+        taxonomy.DEPARTMENTS,
+    )
+    for slug, display, kind, _parent in taxonomy.STANDORTE:
+        conn.execute(
+            "INSERT OR IGNORE INTO standorte (name, display_name, kind) VALUES (?, ?, ?)",
+            (slug, display, kind),
+        )
+    for slug, _display, _kind, parent in taxonomy.STANDORTE:
+        if parent is not None:
+            conn.execute(
+                "UPDATE standorte SET parent_id = (SELECT id FROM standorte WHERE name = ?) "
+                "WHERE name = ?",
+                (parent, slug),
+            )
+
+
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
     _migrate(conn)
+    _seed_taxonomy(conn)
     conn.commit()
 
 
