@@ -16,11 +16,11 @@ covered here.
 The pipeline is two re-runnable phases sharing one SQLite DB + one content-addressed
 raw cache (`data/raw/<sha256>.<ext>`):
 
-- **Phase 1 — fetch/crawl — is Rust** (`rust/`), compiled to the Python extension
-  `dhbw_scraper._native` via [PyO3](https://pyo3.rs) + [maturin](https://www.maturin.rs).
+- **Phase 1 — fetch/crawl — is Rust** (`src/scrape-engine/`), compiled to the Python extension
+  `scraper._engine` via [PyO3](https://pyo3.rs) + [maturin](https://www.maturin.rs).
   It's a `tokio` async crawler with a **single dedicated SQLite writer task** fed by an
   in-memory frontier, so fetch workers are lock-free and there's no write-lock
-  contention. It owns *every* Phase-1 DB write. [`crawl.py`](src/dhbw_scraper/crawl.py)
+  contention. It owns *every* Phase-1 DB write. [`crawl.py`](src/scraper/crawl.py)
   is a thin adapter that forwards `run_fetch`/`backfill_links` to the extension — do not
   reimplement crawl logic in Python.
 - **Phase 2 — extract — is pure Python** (trafilatura for HTML, PyMuPDF4LLM for PDF).
@@ -29,7 +29,7 @@ raw cache (`data/raw/<sha256>.<ext>`):
 The Rust modules mirror the pipeline: `crawl.rs` (orchestrator), `writer.rs` (the sole
 SQLite writer + frontier), `fetch.rs` (reqwest conditional-GET), `links.rs` (link
 discovery, in-domain filter, **crawler-trap denylist**), `sitemap.rs`, `storage.rs`,
-`backfill.rs`, `lib.rs` (PyO3 boundary). `rust/tests/` holds `links_parity`,
+`backfill.rs`, `lib.rs` (PyO3 boundary). `tests/scrape-engine/` holds `links_parity`,
 `sitemap_parity`, `backfill`, and end-to-end `orchestration` tests.
 
 ### SQLite storage model
@@ -50,7 +50,7 @@ MSVC-enabled shell on Windows.
 **Windows** (primary dev platform here) — run everything from the **"x64 Native Tools
 Command Prompt for VS 2022"**, which has the MSVC env preloaded:
 ```powershell
-uv sync --extra dev            # installs deps AND builds the _native extension
+uv sync --extra dev            # installs deps AND builds the _engine extension
 uv run pytest                  # verify
 ```
 A plain shell fails with `cl.exe not found`. After changing **Rust** code, rebuild:
@@ -66,23 +66,23 @@ git hooks); then `uv sync` and `uv run maturin develop --release`.
 uv run pytest                                   # all Python tests (Phase 2 + CLI + native e2e)
 uv run pytest tests/test_cli.py                 # one file
 uv run pytest -k dedup                          # one test / pattern
-cargo test --manifest-path rust\Cargo.toml      # Rust tests (needs python3.dll on PATH; see README "Windows")
+cargo test                                      # Rust tests (needs python3.dll on PATH; see README "Windows")
 
 uv run pre-commit run --all-files                        # commit-stage: ruff lint+format, rustfmt, hygiene
 uv run pre-commit run --hook-stage pre-push --all-files  # push-stage: pytest (+ clippy/cargo test if Rust changed)
-cargo clippy --manifest-path rust\Cargo.toml --all-targets -- -D warnings
-cargo fmt --manifest-path rust\Cargo.toml
+cargo clippy --all-targets -- -D warnings
+cargo fmt
 ```
 
 ### CLI (`uv run dhbw-scraper <cmd>`)
 
 `fetch` (Phase 1) · `extract` / `extract-html` / `extract-pdf` (Phase 2) · `run`
 (fetch → extract → **dedup**) · `stats` · `report` (self-contained read-only HTML
-analysis via [`dashboard.py`](src/dhbw_scraper/dashboard.py)) · `delta --since <ts>`
+analysis via [`dashboard.py`](src/scraper/dashboard.py)) · `delta --since <ts>`
 (re-index delta for downstream) · `dedup` · `backfill-links` (rebuild the sparse link
 graph from local raw HTML, no network) · `reset-site --site NAME` (the **only**
 destructive command; wipes a site's queue/crawl_log/documents/links, keeps the raw
-cache). All accept `--config PATH`. See [`cli.py`](src/dhbw_scraper/cli.py) and README
+cache). All accept `--config PATH`. See [`cli.py`](src/scraper/cli.py) and README
 "Usage" for flags. Note `--max-pages` is a **per-site** budget, not a global cap.
 
 ## Conventions

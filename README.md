@@ -55,12 +55,12 @@ counts are still printed on **stdout**.
 
 ## Architecture: Rust Phase 1, Python Phase 2
 
-**Phase 1 (fetch/crawl) is implemented in Rust** (`rust/`, exposed to Python as the
-`dhbw_scraper._native` extension via [PyO3](https://pyo3.rs) + built with
+**Phase 1 (fetch/crawl) is implemented in Rust** (`src/scrape-engine/`, exposed to Python as the
+`scraper._engine` extension via [PyO3](https://pyo3.rs) + built with
 [maturin](https://www.maturin.rs)). It is a `tokio` async crawler with a **single dedicated
 SQLite writer task** fed by an in-memory frontier, so fetch workers run lock-free and there
 is no write-lock contention — the crawl parallelises cleanly across all sites and workers.
-It owns every Phase-1 write to the SQLite DB; `src/dhbw_scraper/crawl.py` is now a thin
+It owns every Phase-1 write to the SQLite DB; `src/scraper/crawl.py` is now a thin
 adapter that forwards `run_fetch` to the extension.
 
 **Phase 2 (extract) stays pure Python** (trafilatura / PyMuPDF4LLM) and reads the exact same
@@ -110,7 +110,7 @@ prompt:
 ```powershell
 $env:PYO3_PYTHON = "$PWD\.venv\Scripts\python.exe"
 $env:Path = "$(& .venv\Scripts\python.exe -c 'import sys; print(sys.base_prefix)');$env:Path"
-cargo test --manifest-path rust\Cargo.toml
+cargo test
 ```
 
 (`uv sync` and `maturin develop` don't need this — the host CPython provides the symbols
@@ -170,7 +170,7 @@ webapp whose URLs explode combinatorially — monopolizing a site's crawl the wa
 No legitimate campus host approaches 50,000 pages; a spider trap blows straight past it
 and is cut off, with the skipped count reported in the run summary (never silently
 truncated). Known traps (`buchen.*`, `moodle.*`, `elearning.*`, Solr search, …) are
-denylisted outright in `rust/src/links.rs`; the per-host cap only catches *unknown* ones.
+denylisted outright in `src/scrape-engine/links.rs`; the per-host cap only catches *unknown* ones.
 
 `fetch` and `run` also accept:
 
@@ -365,11 +365,11 @@ can be overridden per-run without editing the file via the `fetch`/`run` flags
 ## Project layout
 
 ```
-src/dhbw_scraper/
+src/scraper/         Phase 2 + CLI (pure Python)
   config.py        load + validate config.toml
   storage.py       SQLite schema (incl. links), Phase-2 claims/upserts/delta, raw-file cache
   fetch.py         content-type classification + ext_for (used by Phase 2 extraction)
-  crawl.py         phase 1 adapter -> dhbw_scraper._native.run_fetch (Rust engine)
+  crawl.py         phase 1 adapter -> scraper._engine.run_fetch (Rust engine)
   html_extract.py  trafilatura -> markdown + metadata
   pdf_extract.py   PyMuPDF4LLM -> markdown/text (lazy import, lightweight)
   quality.py       moderate quality gate (min words, nav ratio, login/cookie/error filters)
@@ -377,13 +377,16 @@ src/dhbw_scraper/
   progress.py      stderr progress reporting (TTY status line / plain log lines)
   cli.py           `fetch` / `extract` / `run` / `stats` / `delta` entrypoints
 
-rust/               Phase-1 crawler (compiled to dhbw_scraper._native via maturin/PyO3)
-  src/crawl.rs      orchestrator: frontier, per-host workers, rate limit, termination
-  src/writer.rs     single SQLite writer + in-memory frontier (no write contention)
-  src/fetch.rs      reqwest conditional-GET HttpClient + content-type classify
-  src/links.rs      <a href> discovery, in-domain filter, crawler-trap rules
-  src/sitemap.rs    sitemap + nested sitemap-index discovery
-  src/storage.rs    SQLite schema + write ops + content-addressed raw cache
-  src/{config,outcome,progress,lib}.rs  config mapping, change detection, progress, PyO3
-  tests/            links/sitemap parity + end-to-end orchestration tests
+src/scrape-engine/   Phase-1 crawler (compiled to scraper._engine via maturin/PyO3)
+  crawl.rs          orchestrator: frontier, per-host workers, rate limit, termination
+  writer.rs         single SQLite writer + in-memory frontier (no write contention)
+  fetch.rs          reqwest conditional-GET HttpClient + content-type classify
+  links.rs          <a href> discovery, in-domain filter, crawler-trap rules
+  sitemap.rs        sitemap + nested sitemap-index discovery
+  storage.rs        SQLite schema + write ops + content-addressed raw cache
+  {config,outcome,progress,lib}.rs  config mapping, change detection, progress, PyO3
+
+Cargo.toml           root manifest: [lib] path -> src/scrape-engine/lib.rs
+tests/               pytest suites + fixtures/
+  scrape-engine/     links/sitemap parity + end-to-end orchestration (cargo)
 ```

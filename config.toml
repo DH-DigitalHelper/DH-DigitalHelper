@@ -11,7 +11,7 @@ allowed_domain = "www.dhbw.de"
 # The nine DHBW campus locations + the Center for Advanced Studies (CAS). Each is
 # crawled strictly in-domain (links leaving allowed_domain are recorded in the
 # links table, never followed). allowed_domain omits the "www." prefix on purpose:
-# in_domain() matches both the bare host and any subdomain of it (rust/src/links.rs),
+# in_domain() matches both the bare host and any subdomain of it (src/scrape-engine/links.rs),
 # so "mannheim.dhbw.de" covers www.mannheim.dhbw.de too. NOTE the three campuses that do NOT follow the
 # <location>.dhbw.de pattern: Stuttgart, Lörrach, and Villingen-Schwenningen.
 
@@ -67,7 +67,7 @@ max_pages = 0                              # per-site page budget (0 = unlimited
 # subdomain monopolizing a site's crawl, the way the buchen.dhbw-vs.de booking
 # trap once did. No legitimate campus host approaches this; a spider trap blows
 # straight past it and gets cut off. Known traps (buchen.*, moodle.*, ...) are
-# denylisted outright in rust/src/links.rs; this only catches unknown ones.
+# denylisted outright in src/scrape-engine/links.rs; this only catches unknown ones.
 max_pages_per_host = 50000
 request_delay_seconds = 0.0
 respect_robots = false

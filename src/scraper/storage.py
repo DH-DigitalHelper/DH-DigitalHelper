@@ -114,7 +114,7 @@ CREATE INDEX IF NOT EXISTS idx_documents_present ON documents(present);
 -- CREATE INDEX in this batch (which runs before _migrate) would fail.
 
 -- Outbound link graph: every <a href> a crawled page emits, in-domain and
--- external alike. Written by the Rust Phase-1 crawler (see rust/src/storage.rs,
+-- external alike. Written by the Rust Phase-1 crawler (see src/scrape-engine/storage.rs,
 -- which keeps this DDL in sync). Following stays in-domain (in_domain=1 marks a
 -- follow candidate); external/cross-campus edges are recorded, never crawled.
 -- This is additive: no Phase-2 query reads it. queue.discovered_from is kept as
