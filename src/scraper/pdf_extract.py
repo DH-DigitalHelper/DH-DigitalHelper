@@ -22,7 +22,9 @@ Two settings keep this fast on the corpus of DHBW regulation/handbook PDFs
 
 from __future__ import annotations
 
+from . import lang as langmod
 from . import markdown as md
+from . import pdf_title
 
 _layout_disabled = False
 
@@ -45,9 +47,30 @@ def _to_markdown(data: bytes) -> str:
         return pymupdf4llm.to_markdown(doc, table_strategy=None)
 
 
-def extract_pdf(data: bytes, to_markdown=None) -> dict | None:
+def _meta_title(data: bytes) -> str | None:
+    """The PDF's own embedded title (``doc.metadata['title']``), raw. Consulted only
+    when the markdown carried no ``# `` heading, so most PDFs never pay this open.
+    Reused by the backfill (storage.run_backfill) to title existing PDFs."""
+    import pymupdf
+
+    with pymupdf.open(stream=data, filetype="pdf") as doc:
+        if doc.needs_pass:
+            doc.authenticate("")
+        return doc.metadata.get("title")
+
+
+def _heading_title(markdown: str) -> str | None:
+    for line in markdown.splitlines():
+        if line.startswith("# "):
+            return line[2:].strip()
+    return None
+
+
+def extract_pdf(data: bytes, to_markdown=None, meta_title=None) -> dict | None:
     if to_markdown is None:
         to_markdown = _to_markdown
+    if meta_title is None:
+        meta_title = _meta_title
 
     markdown = (to_markdown(data) or "").strip()
     if not markdown:
@@ -58,17 +81,19 @@ def extract_pdf(data: bytes, to_markdown=None) -> dict | None:
     # as words, so the shared min_words gate was reading two different notions of
     # "word" and a heading/table-heavy PDF passed it on punctuation alone.
     text = md.to_text(markdown)
-    title = None
-    for line in markdown.splitlines():
-        if line.startswith("# "):
-            title = line[2:].strip()
-            break
+
+    # Title chain: a leading `# ` heading, else the PDF's own (sanitised) metadata
+    # title. The per-URL filename fallback lives in the write path / backfill --
+    # the extractor only sees content-addressed bytes, never the URL.
+    title = _heading_title(markdown)
+    if not title:
+        title = pdf_title.clean(meta_title(data))
 
     return {
         "title": title,
         "text": text,
         "markdown": markdown,
-        "lang": None,
+        "lang": langmod.detect(text),
         "word_count": len(text.split()),
         "metadata": {"extractor": "pymupdf4llm"},
     }

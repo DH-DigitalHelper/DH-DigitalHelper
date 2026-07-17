@@ -88,3 +88,49 @@ def test_extract_pdf_uses_to_markdown_and_shapes_doc():
 
 def test_extract_pdf_returns_none_when_empty():
     assert extract_pdf(b"%PDF fake", to_markdown=lambda data: "   ") is None
+
+
+def test_extract_pdf_detects_language():
+    text_md = (
+        "# Modulhandbuch\n\n"
+        "Die Studierenden erwerben in diesem Modul grundlegende Kenntnisse der "
+        "Wirtschaftsinformatik und wenden sie in praktischen Projekten an."
+    )
+    doc = extract_pdf(b"%PDF fake", to_markdown=lambda data: text_md)
+    assert doc["lang"] == "de"
+
+
+def test_extract_pdf_falls_back_to_metadata_title_when_no_heading():
+    # Markdown without any "# " heading -> the metadata title is consulted.
+    no_heading = "Inhalt ohne Ueberschrift, aber mit ausreichend echtem Fliesstext."
+    doc = extract_pdf(
+        b"%PDF fake",
+        to_markdown=lambda data: no_heading,
+        meta_title=lambda data: "  Studien- und Pruefungsordnung  ",
+    )
+    assert doc["title"] == "Studien- und Pruefungsordnung"
+
+
+def test_extract_pdf_rejects_junk_metadata_title():
+    doc = extract_pdf(
+        b"%PDF fake",
+        to_markdown=lambda data: "Fliesstext ohne jede Ueberschrift in dem Dokument.",
+        meta_title=lambda data: "Microsoft Word - egal.docx",
+    )
+    assert doc["title"] is None  # junk metadata rejected; filename fallback is per-URL
+
+
+def test_extract_pdf_prefers_heading_over_metadata():
+    called = {"meta": 0}
+
+    def meta(data):
+        called["meta"] += 1
+        return "Metadata Title"
+
+    doc = extract_pdf(
+        b"%PDF fake",
+        to_markdown=lambda data: "# Heading Wins\n\nEnough real body text here too.",
+        meta_title=meta,
+    )
+    assert doc["title"] == "Heading Wins"
+    assert called["meta"] == 0  # metadata is not read when a heading exists
