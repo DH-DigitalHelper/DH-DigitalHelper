@@ -221,6 +221,33 @@ impl SiteState {
         None // frontier momentarily empty but work is in flight — park
     }
 
+    /// Hand `res` to a claimant, undoing `try_serve`'s bookkeeping if the claimant
+    /// is already gone.
+    ///
+    /// `try_serve` pops the URL and commits `in_flight`/`given`/`host_given` before
+    /// we can know whether the reply lands. A worker that died in between would
+    /// otherwise take the URL with it AND leave `in_flight` incremented forever --
+    /// and since termination is decided on `in_flight == 0`, that leak parks every
+    /// remaining worker for good. Put all of it back instead.
+    fn send_or_return(&mut self, reply: oneshot::Sender<ClaimResult>, res: ClaimResult) {
+        let Err(returned) = reply.send(res) else {
+            return;
+        };
+        if let ClaimResult::Give(item) = returned {
+            self.in_flight = self.in_flight.saturating_sub(1);
+            self.given -= 1;
+            if self.max_pages_per_host > 0 {
+                if let Some(n) = self
+                    .host_given
+                    .get_mut(&host_of(&item.url).unwrap_or_default())
+                {
+                    *n -= 1;
+                }
+            }
+            self.heap.push(HeapItem(item));
+        }
+    }
+
     /// Serve as many parked waiters as current state allows.
     fn service_waiters(&mut self) {
         while let Some(front) = self.waiters.front() {
@@ -231,7 +258,7 @@ impl SiteState {
             match self.try_serve() {
                 Some(res) => {
                     let reply = self.waiters.pop_front().unwrap();
-                    let _ = reply.send(res);
+                    self.send_or_return(reply, res);
                 }
                 None => break,
             }
@@ -351,9 +378,9 @@ impl Coordinator {
     fn handle_claim(&mut self, site_idx: usize, reply: oneshot::Sender<ClaimResult>) {
         let site = &mut self.sites[site_idx];
         match site.try_serve() {
-            Some(res) => {
-                let _ = reply.send(res);
-            }
+            // Same lost-claim hazard as the parked-waiter path: the worker may be
+            // gone by the time we answer, so undo rather than leak.
+            Some(res) => site.send_or_return(reply, res),
             None => site.waiters.push_back(reply),
         }
     }
@@ -511,4 +538,83 @@ fn apply_one(c: &Connection, run_id: &str, site: &str, b: &PageBatch) -> rusqlit
         &b.now,
     )?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::storage::FrontierItem;
+
+    fn site_with_one_url(url: &str) -> SiteState {
+        let mut heap = BinaryHeap::new();
+        heap.push(HeapItem(FrontierItem {
+            url: url.to_string(),
+            depth: 0,
+            etag: None,
+            last_modified: None,
+            content_sha256: None,
+            present: true,
+        }));
+        SiteState {
+            name: "x.de".into(),
+            max_pages: 0,
+            max_pages_per_host: 2,
+            heap,
+            seen: HashSet::new(),
+            in_flight: 0,
+            given: 0,
+            host_given: HashMap::new(),
+            host_over_budget_dropped: 0,
+            waiters: VecDeque::new(),
+            counts: Counts::default(),
+            last_current: String::new(),
+            dirty: false,
+        }
+    }
+
+    /// try_serve commits the bookkeeping (in_flight/given/host_given) and pops the
+    /// URL *before* the reply is sent, so a worker that died in between takes the
+    /// URL with it and leaves in_flight incremented forever. Termination is decided
+    /// on in_flight==0, so that leak parks every remaining worker for good.
+    #[test]
+    fn a_lost_claim_is_fully_returned_to_the_frontier() {
+        let mut site = site_with_one_url("https://x.de/a");
+        let (tx, rx) = oneshot::channel();
+        drop(rx); // the worker is gone before we can answer it
+
+        let res = site.try_serve().expect("one URL is available");
+        assert_eq!(
+            site.in_flight, 1,
+            "precondition: try_serve commits up front"
+        );
+
+        site.send_or_return(tx, res);
+
+        assert_eq!(
+            site.in_flight, 0,
+            "in_flight must not leak, or the site hangs"
+        );
+        assert_eq!(site.given, 0, "a lost claim must not spend the page budget");
+        assert_eq!(
+            site.host_given.get("x.de").copied().unwrap_or(0),
+            0,
+            "nor the per-host budget"
+        );
+        assert_eq!(site.heap.len(), 1, "the URL must go back on the frontier");
+    }
+
+    /// The happy path must keep committing, or every claim would be undone.
+    #[test]
+    fn a_delivered_claim_keeps_its_bookkeeping() {
+        let mut site = site_with_one_url("https://x.de/a");
+        let (tx, rx) = oneshot::channel();
+
+        let res = site.try_serve().expect("one URL is available");
+        site.send_or_return(tx, res);
+
+        assert_eq!(site.in_flight, 1);
+        assert_eq!(site.given, 1);
+        assert_eq!(site.heap.len(), 0);
+        assert!(matches!(rx.blocking_recv(), Ok(ClaimResult::Give(_))));
+    }
 }
