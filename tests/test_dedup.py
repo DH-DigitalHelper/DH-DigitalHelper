@@ -2,7 +2,8 @@
 
 These seed the `documents` table with legacy rows whose text_sha256 is NULL (as
 a pre-dedup DB would have after the migration), then exercise the two phases:
-backfill the hash, and hard-delete all but the cleanest URL of each text group.
+backfill the hash, and retire all but the cleanest URL of each text group with a
+present=0 tombstone (so delta() can report the deletion downstream).
 """
 
 from dhbw_scraper import storage as st
@@ -71,9 +72,22 @@ def test_dedup_deletes_all_but_cleanest(tmp_path):
 
     assert result["groups"] == 1
     assert result["deleted"] == 2
+    # before/after count the LIVE corpus, so before - after == deleted still holds
+    # even though the losers survive as tombstones.
     assert result["before"] == 3 and result["after"] == 1
-    urls = [r["url"] for r in conn.execute("SELECT url FROM documents").fetchall()]
+    urls = [
+        r["url"]
+        for r in conn.execute("SELECT url FROM documents WHERE present=1").fetchall()
+    ]
     assert urls == [base]  # the query-param-free URL is the canonical survivor
+    # The losers are retired, not destroyed: delta() must still be able to report
+    # them so a downstream index that already ingested them drops the orphans.
+    retired = {
+        r["url"]
+        for r in conn.execute("SELECT url FROM documents WHERE present=0").fetchall()
+    }
+    assert retired == {base + "?cHash=aaa", base + "?tx=1&cHash=bbb"}
+    assert {d["url"] for d in st.delta(conn, since=NOW1)["deletions"]} == retired
 
 
 def test_dedup_is_idempotent(tmp_path):

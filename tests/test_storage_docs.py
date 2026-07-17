@@ -2,8 +2,10 @@ import threading
 
 from dhbw_scraper import storage as st
 
+NOW0 = "2026-07-13T00:00:00"
 NOW1 = "2026-07-14T00:00:00"
 NOW2 = "2026-07-15T00:00:00"
+NOW3 = "2026-07-16T00:00:00"
 
 
 def mem():
@@ -271,8 +273,68 @@ def test_upsert_cleaner_url_replaces_existing_owner():
     assert st.upsert_document(conn, variant, "x", "html", "c2", doc(), NOW1) == "new"
     # ... then the clean base URL arrives with identical text and takes over
     assert st.upsert_document(conn, base, "x", "html", "c1", doc(), NOW2) == "new"
-    urls = [r["url"] for r in conn.execute("SELECT url FROM documents").fetchall()]
+    # The variant is retired from the live corpus, but survives as a present=0
+    # tombstone so delta() can report the deletion downstream.
+    urls = [
+        r["url"]
+        for r in conn.execute("SELECT url FROM documents WHERE present=1").fetchall()
+    ]
     assert urls == [base]
+    assert (
+        conn.execute(
+            "SELECT present FROM documents WHERE url=?", (variant,)
+        ).fetchone()["present"]
+        == 0
+    )
+
+
+def test_retired_duplicate_is_reported_as_a_deletion():
+    """A URL already handed downstream, later retired as a dedup duplicate, must
+    surface in delta()'s deletions.
+
+    delta derives deletions from `present=0 AND updated_at > since`, so retiring
+    a loser with a hard DELETE erased the row without a trace: the URL had
+    already been emitted as an upsert, and downstream could never learn it should
+    drop it. Contrast mark_document_removed, which correctly tombstones.
+    """
+    conn = mem()
+    base = "https://x/dualis/"
+    variant = "https://x/dualis/?cHash=abc"
+
+    # The messy variant is materialized first and IS emitted downstream.
+    st.upsert_document(conn, variant, "x", "html", "c2", doc(), NOW1)
+    assert {u["url"] for u in st.delta(conn, since=NOW0)["upserts"]} == {variant}
+
+    # The clean base URL arrives with identical text and takes over.
+    st.upsert_document(conn, base, "x", "html", "c1", doc(), NOW2)
+
+    d = st.delta(conn, since=NOW1)
+    assert base in {u["url"] for u in d["upserts"]}
+    assert variant in {x["url"] for x in d["deletions"]}, (
+        "the retired duplicate must be reported so downstream drops the orphan"
+    )
+    # ... and it must be gone from the live corpus, not merely flagged.
+    assert st.stats(conn)["documents"] == 1
+
+
+def test_retired_duplicate_can_become_canonical_again():
+    """Resurrection: a tombstoned URL that later wins again must come back with
+    its content intact and be re-emitted as an upsert."""
+    conn = mem()
+    base = "https://x/p/"
+    variant = "https://x/p/?cHash=abc"
+    st.upsert_document(conn, variant, "x", "html", "c2", doc(), NOW1)
+    st.upsert_document(conn, base, "x", "html", "c1", doc(), NOW2)  # variant retired
+
+    # The variant now carries DIFFERENT text, so it is nobody's duplicate.
+    assert (
+        st.upsert_document(conn, variant, "x", "html", "c3", doc("fresh text " * 30), NOW3)
+        == "changed"
+    )
+    row = conn.execute("SELECT * FROM documents WHERE url=?", (variant,)).fetchone()
+    assert row["present"] == 1
+    assert "fresh text" in row["text"]
+    assert variant in {u["url"] for u in st.delta(conn, since=NOW2)["upserts"]}
 
 
 def test_upsert_bytes_change_same_text_does_not_bump_revision():

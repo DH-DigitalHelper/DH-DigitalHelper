@@ -716,13 +716,13 @@ def _upsert_document(conn, url, site, source_type, content_sha256, doc, now) -> 
         cleanest_other = min(others, key=lambda r: _canonical_key(r["url"]))["url"]
         if _canonical_key(cleanest_other) <= _canonical_key(url):
             # A cleaner (or equal) URL already represents this text -> this URL is
-            # a duplicate. Drop any stale row it held (it may have been canonical
+            # a duplicate. Retire any stale row it held (it may have been canonical
             # for a since-changed text) and index nothing for it.
-            conn.execute("DELETE FROM documents WHERE url=?", (url,))
+            _mark_document_removed(conn, url, now)
             return "duplicate"
         # This URL is cleaner than every current holder -> it wins; retire them.
         for r in others:
-            conn.execute("DELETE FROM documents WHERE url=?", (r["url"],))
+            _mark_document_removed(conn, r["url"], now)
 
     existing = conn.execute("SELECT * FROM documents WHERE url=?", (url,)).fetchone()
     meta = json.dumps(doc.get("metadata")) if doc.get("metadata") else None
@@ -847,8 +847,8 @@ def stats(conn) -> dict:
     }
 
 
-def run_dedup(conn, batch_size: int = 500, vacuum: bool = True) -> dict:
-    """Backfill ``text_sha256`` and hard-delete duplicate documents, keeping the
+def run_dedup(conn, batch_size: int = 500, vacuum: bool = True, now: str | None = None) -> dict:
+    """Backfill ``text_sha256`` and retire duplicate documents, keeping the
     single cleanest URL (see :func:`_canonical_key`) per distinct extracted text.
 
     This is the one-time corpus cleanup *and* an idempotent maintenance pass: a
@@ -863,10 +863,21 @@ def run_dedup(conn, batch_size: int = 500, vacuum: bool = True) -> dict:
          the whole corpus) in a single O(n) forward pass. This is derived
          metadata -- it never touches ``updated_at`` (no delta spam).
       B. For every present text group with more than one member, keep the cleanest
-         URL and DELETE the rest.
-      C. VACUUM to reclaim the freed pages -- only if anything was deleted.
+         URL and retire the rest with a ``present=0`` tombstone (NOT a hard
+         DELETE): a loser may already have been handed downstream as an upsert,
+         and :func:`delta` can only report a deletion it can still see
+         (``present=0 AND updated_at > since``). A deleted row is invisible, so
+         the downstream index would keep the orphan forever. Retiring bumps
+         ``updated_at`` by design -- that bump *is* the deletion signal.
+      C. VACUUM to defragment -- only if anything was retired.
+
+    ``before``/``after`` count the live corpus (``present=1``), so
+    ``before - after == deleted`` still holds even though no row is destroyed.
     """
-    before = conn.execute("SELECT COUNT(*) c FROM documents").fetchone()["c"]
+    now = now or time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime())
+    before = conn.execute(
+        "SELECT COUNT(*) c FROM documents WHERE present=1"
+    ).fetchone()["c"]
 
     backfilled = 0
     last_id = ""
@@ -920,15 +931,23 @@ def run_dedup(conn, batch_size: int = 500, vacuum: bool = True) -> dict:
         chunk = to_delete[i : i + batch_size]
         with write_txn(conn):
             for doc_id in chunk:
-                conn.execute("DELETE FROM documents WHERE id=?", (doc_id,))
+                conn.execute(
+                    "UPDATE documents SET present=0, updated_at=? WHERE id=?",
+                    (now, doc_id),
+                )
         deleted += len(chunk)
 
     if vacuum and deleted:
         # VACUUM cannot run inside a transaction; every write_txn above has
-        # already committed, so the connection is in autocommit here.
+        # already committed, so the connection is in autocommit here. Retiring is
+        # a soft delete, so this reclaims little -- it only defragments after the
+        # backfill's UPDATE churn. `--no-vacuum` remains the escape hatch on a
+        # large corpus.
         conn.execute("VACUUM")
 
-    after = conn.execute("SELECT COUNT(*) c FROM documents").fetchone()["c"]
+    after = conn.execute(
+        "SELECT COUNT(*) c FROM documents WHERE present=1"
+    ).fetchone()["c"]
     return {
         "backfilled": backfilled,
         "groups": groups,
