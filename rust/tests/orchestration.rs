@@ -401,6 +401,135 @@ fn off_domain_redirect_content_is_not_stored() {
     );
 }
 
+/// `FetchResult::ok()` requires a non-empty body, so a legitimate empty 200/204
+/// failed it, was not a 404/410, and fell through to the error branch -- landing
+/// in the DB as work_state='error' with http_status=200 and error=NULL (an
+/// incoherent row), re-tried on every recheck=all run, discarding its validators.
+#[test]
+fn empty_body_2xx_is_not_recorded_as_an_error() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut cfg = config(tmp.path());
+    cfg.use_sitemap = false;
+    let client = MockClient::from_pages(vec![
+        (
+            "http://site.test/startseite",
+            Page::html(r#"<html><body>seed <a href="/empty">e</a></body></html>"#),
+        ),
+        ("http://site.test/empty", Page::html("")),
+    ]);
+
+    let counts = run_with_client(
+        cfg,
+        "run-empty".into(),
+        false,
+        ProgressSink::new(None),
+        client,
+    )
+    .expect("crawl run");
+
+    let conn = rusqlite::Connection::open(tmp.path().join("db.sqlite3")).unwrap();
+    let (state, status): (String, Option<i64>) = conn
+        .query_row(
+            "SELECT work_state, http_status FROM queue WHERE url='http://site.test/empty'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(state, "done", "an empty 200 is not an error");
+    assert_eq!(status, Some(200));
+    assert_eq!(
+        counts["site.test"].error, 0,
+        "no errors on a clean empty 200"
+    );
+    // Nothing was stored, and it never had content, so it is a skip -- but an
+    // auditable one, not a silent present row that never extracts.
+    assert_eq!(counts["site.test"].skipped, 1);
+    let err: Option<String> = conn
+        .query_row(
+            "SELECT error FROM crawl_log WHERE url='http://site.test/empty'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(
+        err.unwrap_or_default().contains("empty"),
+        "crawl_log must say why nothing was stored"
+    );
+}
+
+/// An empty body is far likelier a blip than "this page is now genuinely empty",
+/// so a page that already has content must keep it rather than be wiped or errored.
+#[test]
+fn empty_body_2xx_keeps_previously_stored_content() {
+    let tmp = tempfile::tempdir().unwrap();
+    let page = "http://site.test/p";
+    let seed = r#"<html><body>seed <a href="/p">p</a></body></html>"#;
+
+    let mut cfg = config(tmp.path());
+    cfg.use_sitemap = false;
+    run_with_client(
+        cfg,
+        "run-1".into(),
+        false,
+        ProgressSink::new(None),
+        MockClient::from_pages(vec![
+            ("http://site.test/startseite", Page::html(seed)),
+            (
+                page,
+                Page::html("<html><body>real content here</body></html>"),
+            ),
+        ]),
+    )
+    .expect("first crawl");
+
+    let conn = rusqlite::Connection::open(tmp.path().join("db.sqlite3")).unwrap();
+    let before: Option<String> = conn
+        .query_row(
+            "SELECT content_sha256 FROM queue WHERE url=?",
+            [page],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(before.is_some(), "precondition: the page stored content");
+
+    // Second run: the same page now answers an empty 200.
+    let mut cfg2 = config(tmp.path());
+    cfg2.use_sitemap = false;
+    let counts = run_with_client(
+        cfg2,
+        "run-2".into(),
+        false,
+        ProgressSink::new(None),
+        MockClient::from_pages(vec![
+            ("http://site.test/startseite", Page::html(seed)),
+            (page, Page::html("")),
+        ]),
+    )
+    .expect("second crawl");
+
+    let after: Option<String> = conn
+        .query_row(
+            "SELECT content_sha256 FROM queue WHERE url=?",
+            [page],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        after, before,
+        "a blank response must not drop stored content"
+    );
+    assert_eq!(counts["site.test"].error, 0, "still not an error");
+    let orphans: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM queue q WHERE q.present=1 AND q.content_sha256 IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM raw_docs r WHERE r.content_sha256=q.content_sha256)",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(orphans, 0, "the kept digest must still resolve to its blob");
+}
+
 #[test]
 fn max_pages_caps_total_fetches() {
     let tmp = tempfile::tempdir().unwrap();

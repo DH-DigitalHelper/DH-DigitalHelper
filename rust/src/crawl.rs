@@ -305,6 +305,53 @@ fn build_batch(
         };
     }
 
+    // A 2xx that simply carried no body is not a failure. `ok()` requires a
+    // non-empty body, so an empty 200/204 failed it, was not a 404/410, and fell
+    // into the error branch below -- stored as work_state='error' with
+    // http_status=200 and error=NULL (a row that contradicts itself), re-tried on
+    // every recheck=all run and throwing away its fresh validators each time.
+    // Treat it as a transient no-change: an empty body is far likelier a blip than
+    // a page that genuinely became empty, so keep whatever content we already had.
+    if result.error.is_none() && (200..300).contains(&result.status) && result.data.is_empty() {
+        let had_content = item.content_sha256.is_some();
+        return PageBatch {
+            site_idx,
+            url: item.url.clone(),
+            now,
+            mark: UrlMark::Checked {
+                http_status: result.status as i64,
+                etag: result.etag.clone(),
+                last_modified: result.last_modified.clone(),
+                content_sha256: item.content_sha256.clone(),
+                changed: false,
+                present: true,
+            },
+            followable: Vec::new(),
+            edges: Vec::new(),
+            raw_doc: None,
+            log: CrawlLogRow {
+                final_url: result.final_url.clone(),
+                status: Some(result.status as i64),
+                content_type: Some(result.content_type.clone()),
+                sha256: item.content_sha256.clone(),
+                bytes: 0,
+                kind: None,
+                // With no prior content there is nothing to keep and nothing to
+                // extract, so say so rather than leave a silent present row.
+                error: if had_content {
+                    None
+                } else {
+                    Some("empty 2xx body, nothing stored".to_string())
+                },
+            },
+            outcome: if had_content {
+                Outcome::Unchanged
+            } else {
+                Outcome::Skipped
+            },
+        };
+    }
+
     // Non-2xx / transport error.
     if !result.ok() {
         let status = result.status as i64;
