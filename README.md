@@ -257,6 +257,24 @@ teasers would otherwise leak a faculty), streams the corpus in `dedup.batch_size
 and leaves `updated_at` untouched so it does not spam `delta`. It is idempotent (same rules
 ⇒ same tags). Do not run it while a `fetch`/`extract` is in progress.
 
+## Backfilling dead metadata fields
+
+`backfill` is a one-time maintenance pass that populates three previously-unwritten
+metadata fields on existing `documents`:
+
+```sh
+uv run dhbw-scraper backfill   # populates lang + final_url + titles; prints JSON counts
+uv run dhbw-scraper stats
+```
+
+- `lang` — detected from the stored extracted text.
+- `final_url` — the real redirect target, recovered from `crawl_log`.
+- `title` — for title-less docs: a PDF's embedded metadata title, else the URL basename.
+
+It streams the corpus in `dedup.batch_size` chunks, is idempotent, and — like
+`dedup`/`reclassify` — leaves `updated_at` untouched so it does not spam `delta`. Do not
+run it while a `fetch`/`extract` is in progress.
+
 ## Change detection
 
 Re-running `fetch` is cheap and safe. How much gets re-checked is controlled by

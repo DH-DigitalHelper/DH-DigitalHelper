@@ -15,6 +15,7 @@ def test_parser_has_all_subcommands():
         ["stats"],
         ["reset-site", "--site", "x"],
         ["dedup"],
+        ["backfill"],
         ["delta", "--since", "2026-01-01"],
         ["report"],
     ):
@@ -207,6 +208,23 @@ def test_dedup_command_uses_config_values(tmp_path, monkeypatch):
 
     assert rc == 0
     assert captured == {"batch_size": 7, "vacuum": False}
+
+
+def test_backfill_command_dispatches_with_config_values(tmp_path, monkeypatch):
+    _write_config(tmp_path, dedup_extra="batch_size = 9")
+    captured = {}
+
+    def fake_run_backfill(conn, raw_dir, batch_size=500):
+        captured["raw_dir"] = str(raw_dir)
+        captured["batch_size"] = batch_size
+        return {"lang": 0, "final_url": 0, "titles": 0, "scanned": 0}
+
+    monkeypatch.setattr(cli.storage, "run_backfill", fake_run_backfill)
+    rc = cli.main(["--config", str(tmp_path / "config.toml"), "backfill"])
+
+    assert rc == 0
+    assert captured["batch_size"] == 9
+    assert captured["raw_dir"].endswith("raw")
 
 
 def _write_two_site_config(tmp_path):

@@ -82,9 +82,11 @@ analysis via [`dashboard.py`](src/scraper/dashboard.py); includes an interactive
 per-site crawl-discovery tree drawn by a vendored, inlined d3) · `delta --since <ts>`
 (re-index delta for downstream) · `dedup` · `reclassify` (re-tag the
 Standort/Studienabteilung/Studiengang columns after a taxonomy or `CLASSIFY_VERSION`
-change; idempotent, never touches `updated_at`) · `reset-site --site NAME` (the **only**
-destructive command; wipes a site's queue/crawl_log/documents/links, keeps the raw
-cache). See [`cli.py`](src/scraper/cli.py) and README "Usage".
+change; idempotent, never touches `updated_at`) · `backfill` (one-time: populate the dead
+`lang`/`final_url`/`title` metadata across the existing corpus from stored text +
+`crawl_log` + the raw cache; idempotent, never touches `updated_at`) · `reset-site --site
+NAME` (the **only** destructive command; wipes a site's queue/crawl_log/documents/links,
+keeps the raw cache). See [`cli.py`](src/scraper/cli.py) and README "Usage".
 
 **`config.toml` is the sole source of tuning values — no CLI flag overrides it.** The
 only flags are operational: global `--config PATH`; `--site NAME` on

@@ -123,6 +123,18 @@ def _cmd_reclassify(args) -> int:
     return 0
 
 
+def _cmd_backfill(args) -> int:
+    config = _load(args)
+    conn = storage.connect(config.storage.db_file)
+    storage.init_db(conn)
+    result = storage.run_backfill(
+        conn, config.storage.raw_dir, batch_size=config.dedup.batch_size
+    )
+    print(json.dumps(result, indent=2))
+    conn.close()
+    return 0
+
+
 def _cmd_report(args) -> int:
     """Write a static HTML analysis report of the corpus. Opens the DB read-only
     (never writes), so it is safe to run at any time -- even while a crawl is in
@@ -256,6 +268,14 @@ def build_parser() -> argparse.ArgumentParser:
         "Do not run while fetch/extract is running.",
     )
     rc.set_defaults(func=_cmd_reclassify)
+
+    bf = sub.add_parser(
+        "backfill",
+        help="One-time repair of dead metadata (lang / final_url / titles) across "
+        "the existing corpus. Idempotent; never touches updated_at. Do not run "
+        "while fetch/extract is running.",
+    )
+    bf.set_defaults(func=_cmd_backfill)
 
     d = sub.add_parser("delta", help="Emit re-index delta since a timestamp.")
     d.add_argument("--since", required=True)
