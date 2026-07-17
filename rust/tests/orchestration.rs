@@ -11,37 +11,71 @@ use _native::crawl::run_with_client;
 use _native::fetch::{FetchRequest, FetchResult, HttpClient};
 use _native::progress::ProgressSink;
 
+/// One canned response. `Default` is a 200 with an empty body, so a test spells
+/// out only the field it cares about.
+#[derive(Clone, Default)]
+struct Page {
+    content_type: String,
+    body: Vec<u8>,
+    /// 0 means 200.
+    status: u16,
+    /// Set to model a redirect: reqwest follows it and reports where the bytes
+    /// actually came from, which may be a different host than was requested.
+    final_url: Option<String>,
+}
+
+impl Page {
+    fn html(body: &str) -> Self {
+        Self {
+            content_type: "text/html".into(),
+            body: body.as_bytes().to_vec(),
+            ..Default::default()
+        }
+    }
+
+    /// The request was redirected, and the body below came from `final_url`.
+    fn redirected_to(mut self, final_url: &str) -> Self {
+        self.final_url = Some(final_url.into());
+        self
+    }
+}
+
 #[derive(Clone)]
 struct MockClient {
-    pages: Arc<HashMap<String, (String, Vec<u8>)>>, // url -> (content_type, body)
+    pages: Arc<HashMap<String, Page>>,
 }
 
 impl MockClient {
+    /// Shorthand for the common case: `(url, content_type, body)` -> a plain 200.
     fn new(pages: Vec<(&str, &str, &str)>) -> Self {
-        let map = pages
-            .into_iter()
-            .map(|(url, ct, body)| (url.to_string(), (ct.to_string(), body.as_bytes().to_vec())))
-            .collect();
+        Self::from_pages(
+            pages
+                .into_iter()
+                .map(|(url, ct, body)| {
+                    (
+                        url,
+                        Page {
+                            content_type: ct.to_string(),
+                            body: body.as_bytes().to_vec(),
+                            ..Default::default()
+                        },
+                    )
+                })
+                .collect(),
+        )
+    }
+
+    fn from_pages(pages: Vec<(&str, Page)>) -> Self {
         Self {
-            pages: Arc::new(map),
+            pages: Arc::new(pages.into_iter().map(|(u, p)| (u.to_string(), p)).collect()),
         }
     }
 }
 
 impl HttpClient for MockClient {
     async fn fetch(&self, req: FetchRequest, _ua: String) -> FetchResult {
-        match self.pages.get(&req.url) {
-            Some((ct, body)) => FetchResult {
-                url: req.url.clone(),
-                final_url: req.url,
-                status: 200,
-                content_type: ct.clone(),
-                data: body.clone(),
-                etag: None,
-                last_modified: None,
-                error: None,
-            },
-            None => FetchResult {
+        let Some(page) = self.pages.get(&req.url) else {
+            return FetchResult {
                 url: req.url.clone(),
                 final_url: req.url,
                 status: 404,
@@ -50,12 +84,29 @@ impl HttpClient for MockClient {
                 etag: None,
                 last_modified: None,
                 error: Some("HTTP 404".into()),
-            },
+            };
+        };
+        let status = if page.status == 0 { 200 } else { page.status };
+        // Mirrors ReqwestClient: a non-2xx still yields an error string, a 2xx does not.
+        let error = if (200..300).contains(&status) {
+            None
+        } else {
+            Some(format!("HTTP {status}"))
+        };
+        FetchResult {
+            final_url: page.final_url.clone().unwrap_or_else(|| req.url.clone()),
+            url: req.url,
+            status,
+            content_type: page.content_type.clone(),
+            data: page.body.clone(),
+            etag: None,
+            last_modified: None,
+            error,
         }
     }
 
     async fn fetch_bytes(&self, url: String, _ua: String) -> Option<Vec<u8>> {
-        self.pages.get(&url).map(|(_, body)| body.clone())
+        self.pages.get(&url).map(|p| p.body.clone())
     }
 }
 
@@ -263,6 +314,90 @@ fn raw_cache_write_failure_never_orphans_a_page() {
     assert!(
         edges > 0,
         "edges discovered from the fetched body must survive"
+    );
+}
+
+/// The domain allowlist is enforced on discovered links and at enqueue, but
+/// reqwest follows redirects to ANY host. So an in-domain URL that 30x's to a
+/// foreign host had that host's bytes downloaded, hashed, cached and link-scanned,
+/// all attributed to the in-domain URL -- the allowlist silently bypassed.
+#[test]
+fn off_domain_redirect_content_is_not_stored() {
+    let tmp = tempfile::tempdir().unwrap();
+    let client = MockClient::from_pages(vec![
+        (
+            "http://site.test/startseite",
+            Page::html(r#"<html><body>seed <a href="/go">go</a></body></html>"#),
+        ),
+        // Requested in-domain, but the bytes actually came from another host.
+        (
+            "http://site.test/go",
+            Page::html("<html><body>foreign host content, not ours at all</body></html>")
+                .redirected_to("http://evil.test/landing"),
+        ),
+    ]);
+    let mut cfg = config(tmp.path());
+    cfg.use_sitemap = false;
+
+    let counts = run_with_client(
+        cfg,
+        "run-redir".into(),
+        false,
+        ProgressSink::new(None),
+        client,
+    )
+    .expect("crawl run");
+
+    let conn = rusqlite::Connection::open(tmp.path().join("db.sqlite3")).unwrap();
+
+    // The foreign bytes must not enter the corpus under our URL ...
+    let raw: i64 = conn
+        .query_row("SELECT COUNT(*) FROM raw_docs", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(raw, 1, "only the seed's own body may be stored");
+    let sha: Option<String> = conn
+        .query_row(
+            "SELECT content_sha256 FROM queue WHERE url='http://site.test/go'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        sha, None,
+        "no digest may be recorded for off-domain content"
+    );
+
+    // ... it is counted as skipped, not as a successful fetch ...
+    assert_eq!(
+        counts["site.test"].skipped, 1,
+        "off-domain redirect is skipped"
+    );
+    assert_eq!(counts["site.test"].new, 1, "only the seed is new");
+
+    // ... the reason is auditable ...
+    let err: Option<String> = conn
+        .query_row(
+            "SELECT error FROM crawl_log WHERE url='http://site.test/go'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(
+        err.unwrap_or_default().contains("evil.test"),
+        "crawl_log must record where it was redirected"
+    );
+
+    // ... and no links from the foreign page leak into our graph.
+    let edges: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM links WHERE src_url='http://site.test/go'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        edges, 0,
+        "foreign page's links must not be recorded as ours"
     );
 }
 

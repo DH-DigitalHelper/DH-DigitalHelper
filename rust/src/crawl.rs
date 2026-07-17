@@ -352,6 +352,43 @@ fn build_batch(
         };
     }
 
+    // 2xx, but did we actually end up where we asked? reqwest follows redirects to
+    // any host, and the allowlist is otherwise only enforced on discovered links
+    // and at enqueue -- so without this an in-domain URL that 30x's to a foreign
+    // host would have that host's bytes hashed, cached and link-scanned, all
+    // attributed to our URL. Checked before classify/hash/cache so nothing foreign
+    // is ever stored. Marked done+unchanged (like the content-type skip below)
+    // rather than error, so it is not retried on every --full run; the page keeps
+    // whatever content it legitimately had before.
+    if !in_domain(&result.final_url, site_name) {
+        return PageBatch {
+            site_idx,
+            url: item.url.clone(),
+            now,
+            mark: UrlMark::Checked {
+                http_status: 200,
+                etag: result.etag.clone(),
+                last_modified: result.last_modified.clone(),
+                content_sha256: item.content_sha256.clone(),
+                changed: false,
+                present: true,
+            },
+            followable: Vec::new(),
+            edges: Vec::new(),
+            raw_doc: None,
+            log: CrawlLogRow {
+                final_url: result.final_url.clone(),
+                status: Some(200),
+                content_type: Some(result.content_type.clone()),
+                sha256: None,
+                bytes: result.data.len() as i64,
+                kind: None,
+                error: Some(format!("redirected off-domain to {}", result.final_url)),
+            },
+            outcome: Outcome::Skipped,
+        };
+    }
+
     // 2xx: route by content type.
     let kind = classify(&result.content_type, &result.final_url);
     if kind == "other" {
