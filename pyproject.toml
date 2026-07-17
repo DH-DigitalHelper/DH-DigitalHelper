@@ -12,7 +12,7 @@ dependencies = [
 ]
 
 [project.scripts]
-dhbw-scraper = "dhbw_scraper.cli:main"
+dhbw-scraper = "scraper.cli:main"
 
 [project.optional-dependencies]
 # pre-commit drives the git hooks (lint/format on commit, Conventional-Commit
@@ -25,12 +25,12 @@ build-backend = "maturin"
 
 [tool.maturin]
 # Mixed Rust/Python layout, one source root: the pure-Python package tree stays
-# authoritative under src/dhbw_scraper/, and the Rust crate at src/scrape-engine/
-# is injected as the single submodule dhbw_scraper._native. The Rust is a SIBLING
-# of the package, not nested inside it — anything under the package dir is the
-# wheel payload and would ship .rs files into site-packages.
+# authoritative under src/scraper/, and the Rust crate at src/scrape-engine/ is
+# injected as the single submodule scraper._native. The Rust is a SIBLING of the
+# package, not nested inside it — anything under the package dir is the wheel
+# payload and would ship .rs files into site-packages.
 python-source = "src"
-module-name = "dhbw_scraper._native"
+module-name = "scraper._native"
 features = ["pyo3/extension-module"]
 
 [tool.pytest.ini_options]

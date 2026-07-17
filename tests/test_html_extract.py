@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from dhbw_scraper.html_extract import _markdown_to_text, extract_html
+from scraper.html_extract import _markdown_to_text, extract_html
 
 FIXTURE = Path(__file__).parent / "fixtures" / "sample.html"
 

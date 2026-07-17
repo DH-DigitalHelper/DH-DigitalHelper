@@ -1,6 +1,6 @@
 import threading
 
-from dhbw_scraper import storage as st
+from scraper import storage as st
 
 NOW0 = "2026-07-13T00:00:00"
 NOW1 = "2026-07-14T00:00:00"

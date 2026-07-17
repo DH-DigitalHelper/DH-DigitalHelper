@@ -18,12 +18,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import pytest
 
 pytest.importorskip(
-    "dhbw_scraper._native",
+    "scraper._native",
     reason="Rust extension not built; run `maturin develop` first.",
 )
 
-from dhbw_scraper import crawl  # noqa: E402
-from dhbw_scraper.config import (  # noqa: E402
+from scraper import crawl  # noqa: E402
+from scraper.config import (  # noqa: E402
     Config,
     CrawlConfig,
     ExtractConfig,

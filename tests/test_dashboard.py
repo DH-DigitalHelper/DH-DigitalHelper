@@ -1,7 +1,7 @@
 import types
 
-from dhbw_scraper import dashboard
-from dhbw_scraper import storage as st
+from scraper import dashboard
+from scraper import storage as st
 
 NOW = "2026-07-16T00:00:00"
 

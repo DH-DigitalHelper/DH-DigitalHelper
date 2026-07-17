@@ -6,7 +6,7 @@ backfill the hash, and retire all but the cleanest URL of each text group with a
 present=0 tombstone (so delta() can report the deletion downstream).
 """
 
-from dhbw_scraper import storage as st
+from scraper import storage as st
 
 NOW1 = "2026-07-14T00:00:00"
 

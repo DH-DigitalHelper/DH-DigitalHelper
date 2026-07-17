@@ -2,7 +2,7 @@ import sqlite3
 
 import pytest
 
-from dhbw_scraper import storage as st
+from scraper import storage as st
 
 NOW = "2026-07-14T00:00:00"
 

@@ -1,4 +1,4 @@
-from dhbw_scraper import fetch as f
+from scraper import fetch as f
 
 
 class FakeResp:

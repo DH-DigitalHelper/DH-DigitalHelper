@@ -1,5 +1,5 @@
-from dhbw_scraper.pdf_extract import extract_pdf
-from dhbw_scraper.quality import evaluate
+from scraper.pdf_extract import extract_pdf
+from scraper.quality import evaluate
 
 MARKDOWN = "# Modulhandbuch\n\nInhalt des Moduls mit ausreichend Text."
 

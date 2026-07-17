@@ -1,4 +1,4 @@
-from dhbw_scraper.quality import evaluate
+from scraper.quality import evaluate
 
 
 def test_rejects_none_and_empty():

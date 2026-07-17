@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from dhbw_scraper.config import load_config
+from scraper.config import load_config
 
 
 def test_load_config_parses_sites_and_sections(tmp_path: Path):

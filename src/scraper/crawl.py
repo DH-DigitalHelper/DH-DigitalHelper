@@ -1,11 +1,11 @@
 """Phase 1: queue-driven crawl with conditional-GET change detection.
 
-The crawl engine itself lives in Rust (`dhbw_scraper._native`, built from
-``rust/``): a tokio async crawler with a single dedicated SQLite writer task and
-an in-memory frontier, which owns all Phase-1 writes to the same SQLite database
-Phase 2 reads. This module is now a thin adapter that maps the parsed (and
-CLI-overridden) :class:`~dhbw_scraper.config.Config` into the plain dict the
-extension expects and forwards the call.
+The crawl engine itself lives in Rust (`scraper._native`, built from
+``src/scrape-engine/``): a tokio async crawler with a single dedicated SQLite
+writer task and an in-memory frontier, which owns all Phase-1 writes to the same
+SQLite database Phase 2 reads. This module is now a thin adapter that maps the
+parsed (and CLI-overridden) :class:`~scraper.config.Config` into the plain dict
+the extension expects and forwards the call.
 
 Phase 2 (extraction) stays in Python and is untouched.
 """
@@ -60,8 +60,8 @@ def run_fetch(
 
     ``fetch_fn`` and ``clock`` are accepted for source compatibility with the
     old signature but ignored — the Rust engine owns fetching and time. Testing
-    uses the engine's own injectable HTTP client (see ``rust/tests``) plus the
-    end-to-end fixture-server test in ``tests/test_native_run_fetch.py``.
+    uses the engine's own injectable HTTP client (see ``tests/scrape-engine``)
+    plus the end-to-end fixture-server test in ``tests/test_native_run_fetch.py``.
     """
     if progress is None:
         progress = Progress()

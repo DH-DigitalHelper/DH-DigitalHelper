@@ -2,9 +2,9 @@ import io
 
 import pytest
 
-from dhbw_scraper import extract, storage as st
-from dhbw_scraper.config import Config, CrawlConfig, ExtractConfig, Site, StorageConfig
-from dhbw_scraper.progress import Progress
+from scraper import extract, storage as st
+from scraper.config import Config, CrawlConfig, ExtractConfig, Site, StorageConfig
+from scraper.progress import Progress
 
 NOW = "2026-07-14T00:00:00"
 

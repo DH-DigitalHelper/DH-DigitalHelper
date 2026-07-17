@@ -1,7 +1,7 @@
 import io
 import threading
 
-from dhbw_scraper.progress import Progress
+from scraper.progress import Progress
 
 
 class Clock:

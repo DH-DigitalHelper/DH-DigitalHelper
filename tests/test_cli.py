@@ -1,6 +1,6 @@
 import pytest
 
-from dhbw_scraper import cli
+from scraper import cli
 
 
 def test_parser_has_all_subcommands():
