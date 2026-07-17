@@ -605,7 +605,14 @@ def render_html(d: dict) -> str:
         graph_caption = graph_legend = ""
 
     fr = d["freshness"]
-    payload = json.dumps(d, ensure_ascii=False, indent=0)
+    # `</` is neutralised before this lands inside <script>...</script>. json.dumps
+    # escapes quotes and control characters but not a closing tag, and `d` carries
+    # free text straight from the DB -- extractor and crawl_log errors that quote
+    # whatever a scraped page contained. A single `</script>` substring would close
+    # the element early and turn the rest of the payload into live DOM in the
+    # operator's browser. `<\/` is the same string to a JSON parser, so the data
+    # survives intact; every visible sink already goes through _esc().
+    payload = json.dumps(d, ensure_ascii=False, indent=0).replace("</", "<\\/")
 
     return f"""<title>DHBW corpus report</title>
 <style>

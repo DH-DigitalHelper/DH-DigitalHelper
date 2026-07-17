@@ -34,6 +34,37 @@ def _link(conn, src, dst, *, in_domain, site="alpha.de", depth=1):
     )
 
 
+def test_scraped_content_cannot_break_out_of_the_json_island(tmp_path):
+    """The whole analysis dict is json.dumps()'d straight into a <script> block.
+
+    json.dumps escapes quotes and control characters but NOT `</script>`, and the
+    dict carries free-text straight from the DB -- extractor and crawl_log error
+    strings that quote whatever a scraped page contained. One `</script>`
+    substring closes the element early and the rest of the payload becomes live
+    DOM in the operator's browser. Every visible sink in this file escapes with
+    _esc(); this one did not.
+    """
+    conn, db_file = _db(tmp_path)
+    _doc(conn, "https://www.alpha.de/a")
+    payload = '</script><img src=x onerror=alert(1)>'
+    conn.execute(
+        "INSERT INTO raw_docs (content_sha256, source_type, raw_path, bytes, "
+        "first_seen_at, extract_state, extract_error) VALUES (?,?,?,?,?,?,?)",
+        ("sha-bad", "html", "/raw/bad.html", 10, NOW, "error", payload),
+    )
+    conn.commit()
+
+    data = dashboard.collect_analysis(
+        conn, sites=_sites(), min_words=50, db_path=db_file
+    )
+    html = dashboard.render_html(data)
+
+    assert payload not in html, "the raw </script> payload reached the document"
+    assert html.count("</script>") == 1, "only the island's own closing tag may appear"
+    # The data itself must still survive -- escaped, not dropped.
+    assert "onerror" in html
+
+
 def test_graph_payload_has_nodes_edges_and_kinds(tmp_path):
     conn, db_file = _db(tmp_path)
     _doc(conn, "https://www.alpha.de/a")
