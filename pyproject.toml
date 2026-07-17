@@ -8,7 +8,7 @@ dependencies = [
     "trafilatura>=2.1.0",
     # PyMuPDF4LLM converts PDF bytes -> Markdown. It is lightweight (no torch,
     # no ML models) and pulls in pymupdf transitively.
-    "pymupdf4llm>=0.0.17",
+    "pymupdf4llm>=0.3.4",
 ]
 
 [project.scripts]

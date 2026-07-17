@@ -114,3 +114,49 @@ def test_stats_unclassified_ignores_legitimately_null_standort():
     assert row["department_id"] is not None  # 'unknown' still resolves
     assert row["classify_meta"] is not None
     assert st.stats(conn)["unclassified"] == 0  # NOT counted as unclassified
+
+
+def test_run_reclassify_repopulates_without_touching_updated_at():
+    conn = mem()
+    url = "https://www.dhbw-stuttgart.de/fakultaet-wirtschaft/"
+    st.enqueue(conn, url, "dhbw-stuttgart.de", 0, None, NOW)
+    st.mark_url_checked(conn, url, 200, None, None, "c1", True, True, NOW)
+    st.upsert_document(conn, url, "dhbw-stuttgart.de", "html", "c1", doc(), NOW)
+    # Simulate a pre-change row: clear the enrichment columns.
+    conn.execute(
+        "UPDATE documents SET standort_id=NULL, department_id=NULL, "
+        "study_program_id=NULL, classify_meta=NULL WHERE url=?",
+        (url,),
+    )
+    conn.commit()
+    before = conn.execute(
+        "SELECT updated_at FROM documents WHERE url=?", (url,)
+    ).fetchone()["updated_at"]
+
+    result = st.run_reclassify(conn, batch_size=10)
+
+    assert result["reclassified"] == 1
+    row = conn.execute("SELECT * FROM documents WHERE url=?", (url,)).fetchone()
+    dept = conn.execute(
+        "SELECT name FROM departments WHERE id=?", (row["department_id"],)
+    ).fetchone()
+    assert dept["name"] == "wirtschaft"
+    assert row["standort_id"] is not None
+    assert row["updated_at"] == before  # derived metadata: never touched
+
+
+def test_run_reclassify_is_idempotent():
+    conn = mem()
+    url = "https://www.mannheim.dhbw.de/x"
+    st.enqueue(conn, url, "mannheim.dhbw.de", 0, None, NOW)
+    st.mark_url_checked(conn, url, 200, None, None, "c1", True, True, NOW)
+    st.upsert_document(conn, url, "mannheim.dhbw.de", "html", "c1", doc(), NOW)
+    cols = (
+        "SELECT standort_id, department_id, study_program_id, classify_meta "
+        "FROM documents WHERE url=?"
+    )
+    st.run_reclassify(conn, batch_size=10)
+    first = conn.execute(cols, (url,)).fetchone()
+    st.run_reclassify(conn, batch_size=10)
+    second = conn.execute(cols, (url,)).fetchone()
+    assert tuple(first) == tuple(second)

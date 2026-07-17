@@ -1,4 +1,4 @@
-"""Command-line entrypoint: fetch / extract / run / stats / dedup / delta.
+"""Command-line entrypoint: fetch / extract / run / stats / dedup / reclassify / delta.
 
 config.toml is the sole source of tuning values -- no flag overrides any of them.
 The flags here only select what to act on (``--site``, ``--since``, ``-o``) or which
@@ -108,6 +108,16 @@ def _cmd_dedup(args) -> int:
         batch_size=config.dedup.batch_size,
         vacuum=config.dedup.vacuum,
     )
+    print(json.dumps(result, indent=2))
+    conn.close()
+    return 0
+
+
+def _cmd_reclassify(args) -> int:
+    config = _load(args)
+    conn = storage.connect(config.storage.db_file)
+    storage.init_db(conn)
+    result = storage.run_reclassify(conn, batch_size=config.dedup.batch_size)
     print(json.dumps(result, indent=2))
     conn.close()
     return 0
@@ -237,6 +247,14 @@ def build_parser() -> argparse.ArgumentParser:
         "(keep the cleanest URL per distinct extracted text).",
     )
     dd.set_defaults(func=_cmd_dedup)
+
+    rc = sub.add_parser(
+        "reclassify",
+        help="Re-tag every document's Standort/Studienabteilung/Studiengang after a "
+        "taxonomy or CLASSIFY_VERSION change. Idempotent; never touches updated_at. "
+        "Do not run while fetch/extract is running.",
+    )
+    rc.set_defaults(func=_cmd_reclassify)
 
     d = sub.add_parser("delta", help="Emit re-index delta since a timestamp.")
     d.add_argument("--since", required=True)

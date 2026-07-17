@@ -41,6 +41,9 @@ The pipeline runs in two phases, both re-runnable at any time for incremental re
    HTML via [`trafilatura`](https://github.com/adbar/trafilatura), PDF via
    [PyMuPDF4LLM](https://pymupdf.readthedocs.io/en/latest/pymupdf4llm/). Each result passes
    a moderate quality gate (below) before it is materialized into the `documents` table.
+   A blob whose extraction errored is re-queued and retried on every subsequent
+   `extract` run (for both HTML and PDF), so a transient failure or a since-fixed
+   extractor bug never leaves it stranded.
 
 `dhbw-scraper run` does fetch then extract in one command.
 
@@ -84,6 +87,12 @@ uv run maturin develop --release   # build the Rust Phase-1 extension into .venv
 Install [rustup](https://rustup.rs) (the `x86_64-pc-windows-msvc` toolchain) and the
 **Visual Studio Build Tools** with the *Desktop development with C++* workload (this also
 provides the Windows SDK that `rusqlite`'s bundled SQLite needs).
+
+**Quick path:** run `powershell -ExecutionPolicy Bypass -File scripts\install.ps1` from any
+shell. It installs any missing prerequisites via **winget** (uv, Rust/rustup, and the VS
+Build Tools C++ workload — the Build Tools install is multi-GB and prompts for admin/UAC),
+imports the MSVC environment, runs `uv sync --extra dev`, installs the git hooks, and
+smoke-tests the build (`-NoHooks` to skip hooks). The manual steps below are equivalent.
 
 The Rust build needs the MSVC compiler (`cl.exe`/`link.exe`) on `PATH`. Open the **"x64
 Native Tools Command Prompt for VS 2022"** (installed with the Build Tools) — it has that
@@ -229,6 +238,25 @@ uv run dhbw-scraper stats
 `reset-site` takes `--site` (config name or `allowed_domain`, repeatable) and is the only
 destructive command; it prints the per-table delete counts.
 
+## Re-classifying the corpus
+
+Every document is tagged with a **Standort** (campus/satellite), **Studienabteilung**
+(faculty), and **Studiengang** (study program) from deterministic URL/text rules that live
+in [`taxonomy.py`](src/scraper/taxonomy.py) (data) +
+[`classify.py`](src/scraper/classify.py) (logic). New crawls are tagged automatically on
+extract, but the write path only (re)classifies rows it sees as `new`/`changed` — so after
+editing the taxonomy (and bumping `CLASSIFY_VERSION`), re-tag the existing corpus:
+
+```sh
+uv run dhbw-scraper reclassify   # re-tag every document; idempotent
+uv run dhbw-scraper stats        # eyeball by_department / by_standort / unclassified
+```
+
+`reclassify` reads only the URL, title and description (never the page body, whose news
+teasers would otherwise leak a faculty), streams the corpus in `dedup.batch_size` chunks,
+and leaves `updated_at` untouched so it does not spam `delta`. It is idempotent (same rules
+⇒ same tags). Do not run it while a `fetch`/`extract` is in progress.
+
 ## Change detection
 
 Re-running `fetch` is cheap and safe. How much gets re-checked is controlled by
@@ -262,6 +290,12 @@ Otherwise a re-check is a conditional GET:
 - A `404`/`410` response marks the URL (and its materialized document, if any) as
   removed (`present = 0`) rather than deleting it — so `delta` can report the deletion
   to downstream consumers.
+- A **transient** failure — a transport error (timeout / DNS / connection-refused),
+  `408`, `429`, or any `5xx` — leaves the URL as `work_state = 'error'`, and the next
+  `fetch` re-queues and retries it. Set `crawl.retry_transient_errors = false` to freeze
+  error rows instead, and note `recheck = "new-only"` never retries them (an error row
+  has already been fetched). A **permanent** client error (`400`/`401`/`403`/`405`/…) is
+  left as `error` and never auto-retried; `404`/`410` are removed as above, not errored.
 - New raw content is deduplicated by content hash (`raw_docs.content_sha256`): if two
   URLs (or a URL re-appearing after removal) share identical bytes, extraction runs
   once and both URLs get their `documents` row(s) materialized from it.
@@ -277,8 +311,13 @@ An extracted document is accepted into `documents` only if:
 - it isn't a short page dominated by cookie-consent, login-wall, or error/empty-state
   boilerplate (matched conservatively: only short pages carrying several such phrases).
 
-Rejected/errored extractions stay recorded in `raw_docs` (with `reject_reason` /
-`extract_error`) but never reach `documents`.
+Rejected and errored extractions stay recorded in `raw_docs` (with `reject_reason` /
+`extract_error`) but never reach `documents`. A **rejected** extraction is a
+deterministic quality verdict, so it stays terminal — re-running would reject it again.
+An **errored** extraction (an exception on a malformed blob, or a bug since fixed in the
+extractor) is instead re-queued and retried on the next `extract` run, mirroring the
+transient-retry behavior on the fetch side; its `extract_error` is cleared when it is
+re-queued and rewritten if it fails again.
 
 ## robots.txt policy
 
@@ -336,7 +375,8 @@ No CLI flag overrides any of it: the flags that remain select *what* to act on (
 
 - `[[sites]]` — `name`, `seed_url`, `allowed_domain` (one block per site).
 - `[crawl]` — `use_sitemap`, `max_pages`, `max_pages_per_host`, `request_delay_seconds`,
-  `respect_robots` (inert — see above), `workers_per_host`, `recheck`, `user_agent`.
+  `respect_robots` (inert — see above), `workers_per_host`, `recheck`,
+  `retry_transient_errors`, `user_agent`.
 - `[extract]` — `workers`, `min_words`.
 - `[dedup]` — `batch_size`, `vacuum` (used by `dedup`, and by the pass `run` ends with).
   Optional: every key defaults.

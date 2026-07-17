@@ -447,6 +447,49 @@ def test_run_extract_recovers_stranded_in_progress_raw_doc(tmp_path):
     conn2.close()
 
 
+def test_run_extract_retries_errored_raw_doc(tmp_path):
+    """A raw_doc recorded as extract_state='error' (a malformed blob, or a bug
+    since fixed in the extractor) must be retried on the next run rather than
+    stuck forever. run_extract re-queues error rows before spawning workers, so
+    an extractor that now succeeds materializes the document -- and the stale
+    extract_error is cleared so report/dashboard stop counting it."""
+    c = cfg(tmp_path)
+    conn = st.connect(c.storage.db_file)
+    st.init_db(conn)
+    body = b"<html>x</html>"
+    _, path = write_raw(tmp_path, "c1", body)
+    st.upsert_raw_doc(conn, "c1", "html", str(path), len(body), NOW)
+    st.enqueue(conn, "https://www.dhbw.de/a", "www.dhbw.de", 0, None, NOW)
+    st.mark_url_checked(
+        conn, "https://www.dhbw.de/a", 200, None, None, "c1", True, True, NOW
+    )
+    # A prior extract pass recorded this blob as an error.
+    st.save_extraction(conn, "c1", None, False, None, "boom", NOW)
+    row = conn.execute(
+        "SELECT extract_state, extract_error FROM raw_docs WHERE content_sha256='c1'"
+    ).fetchone()
+    assert row["extract_state"] == "error"
+    assert row["extract_error"] == "boom"
+    conn.close()
+
+    counts = extract.run_extract(
+        c, {"html": good_doc, "pdf": good_doc}, clock=lambda: NOW
+    )
+
+    assert counts == {"indexed": 1, "rejected": 0, "error": 0}
+    conn2 = st.connect(c.storage.db_file)
+    row2 = conn2.execute(
+        "SELECT extract_state, extract_error FROM raw_docs WHERE content_sha256='c1'"
+    ).fetchone()
+    assert row2["extract_state"] == "done"
+    assert row2["extract_error"] is None
+    doc = conn2.execute(
+        "SELECT * FROM documents WHERE url='https://www.dhbw.de/a'"
+    ).fetchone()
+    assert doc is not None
+    conn2.close()
+
+
 # ---------------------------------------------------------------------------
 # Per-type claiming (extract-html / extract-pdf)
 # ---------------------------------------------------------------------------
@@ -495,6 +538,23 @@ def test_reset_extract_in_progress_is_scoped_to_source_type(tmp_path):
         ).fetchall()
     }
     assert states == {"html": "pending", "pdf": "in_progress"}
+
+
+def test_reset_extract_errors_is_scoped_to_source_type(tmp_path):
+    conn = _seed_two_types(tmp_path)
+    # both types errored during extraction on two separate passes
+    st.save_extraction(conn, "h" * 64, None, False, None, "boom", NOW)
+    st.save_extraction(conn, "p" * 64, None, False, None, "boom", NOW)
+    # an html retry pass must re-queue ONLY the html row, leaving pdf's error
+    reset = st.reset_extract_errors(conn, source_type="html")
+    assert reset == 1
+    states = {
+        r["source_type"]: r["extract_state"]
+        for r in conn.execute(
+            "SELECT source_type, extract_state FROM raw_docs"
+        ).fetchall()
+    }
+    assert states == {"html": "pending", "pdf": "error"}
 
 
 def test_run_extract_pooled_path_indexes_real_html(tmp_path):

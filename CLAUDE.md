@@ -79,7 +79,9 @@ cargo fmt
 `fetch` (Phase 1) · `extract` / `extract-html` / `extract-pdf` (Phase 2) · `run`
 (fetch → extract → **dedup**) · `stats` · `report` (self-contained read-only HTML
 analysis via [`dashboard.py`](src/scraper/dashboard.py)) · `delta --since <ts>`
-(re-index delta for downstream) · `dedup` · `reset-site --site NAME` (the **only**
+(re-index delta for downstream) · `dedup` · `reclassify` (re-tag the
+Standort/Studienabteilung/Studiengang columns after a taxonomy or `CLASSIFY_VERSION`
+change; idempotent, never touches `updated_at`) · `reset-site --site NAME` (the **only**
 destructive command; wipes a site's queue/crawl_log/documents/links, keeps the raw
 cache). See [`cli.py`](src/scraper/cli.py) and README "Usage".
 

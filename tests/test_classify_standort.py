@@ -50,9 +50,17 @@ def test_horb_satellite_only_under_stuttgart():
 
 
 def test_friedrichshafen_and_bad_mergentheim_satellites():
+    # Friedrichshafen must be matched by a path-anchored slug, not the bare city name.
     assert (
         classify.classify_standort(
-            "https://www.ravensburg.dhbw.de/friedrichshafen/", "ravensburg.dhbw.de"
+            "https://www.ravensburg.dhbw.de/campus-friedrichshafen/",
+            "ravensburg.dhbw.de",
+        )
+        == "ravensburg-friedrichshafen"
+    )
+    assert (
+        classify.classify_standort(
+            "https://www.ravensburg.dhbw.de/fn/studienangebot/", "ravensburg.dhbw.de"
         )
         == "ravensburg-friedrichshafen"
     )
@@ -62,6 +70,22 @@ def test_friedrichshafen_and_bad_mergentheim_satellites():
         )
         == "mosbach-bad-mergentheim"
     )
+
+
+def test_friedrichshafen_company_listing_is_not_a_satellite():
+    # A dual-partner company page saturated with the city name must stay base
+    # ravensburg -- the old bare-substring rule mis-tagged 44/59 FN docs (audit §B3).
+    url = (
+        "https://www.ravensburg.dhbw.de/liste-dualer-partner/unternehmen/"
+        "detailansicht/zf-friedrichshafen-ag-12345/"
+    )
+    assert classify.classify_standort(url, "ravensburg.dhbw.de") == "ravensburg"
+
+
+def test_horb_fileadmin_directory_is_horb_satellite():
+    # /fileadmin/dateien-horb/ material is Horb (audit §B5).
+    url = "https://www.dhbw-stuttgart.de/fileadmin/dateien-horb/studienplan.pdf"
+    assert classify.classify_standort(url, "dhbw-stuttgart.de") == "stuttgart-horb"
 
 
 def test_stuttgart_horbach_page_is_not_horb_satellite():

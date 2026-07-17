@@ -40,6 +40,7 @@ def _engine_config(config) -> dict:
         "request_delay_seconds": c.request_delay_seconds,
         "workers_per_host": c.workers_per_host,
         "recheck": c.recheck,
+        "retry_transient_errors": c.retry_transient_errors,
         "user_agent": c.user_agent,
         "db_file": str(s.db_file),
         "raw_dir": str(s.raw_dir),

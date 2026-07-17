@@ -112,6 +112,11 @@ raw_dir = "raw"
     assert cfg.crawl.max_pages_per_host == 50000
 
 
+def test_load_config_retry_transient_errors_defaults_true(tmp_path):
+    cfg = load_config(_write(tmp_path, "all"))  # _write emits no retry_transient_errors
+    assert cfg.crawl.retry_transient_errors is True
+
+
 def _write_raw(tmp_path, *, crawl="", extract="", dedup=""):
     """Write a minimal config with extra lines spliced into a section, so a test can
     state just the one key it is about."""
@@ -146,6 +151,11 @@ def test_load_config_dedup_section_is_optional(tmp_path):
 def test_load_config_parses_dedup(tmp_path):
     cfg = load_config(_write_raw(tmp_path, dedup="batch_size = 250\nvacuum = false"))
     assert (cfg.dedup.batch_size, cfg.dedup.vacuum) == (250, False)
+
+
+def test_load_config_parses_retry_transient_errors_false(tmp_path):
+    cfg = load_config(_write_raw(tmp_path, crawl="retry_transient_errors = false"))
+    assert cfg.crawl.retry_transient_errors is False
 
 
 @pytest.mark.parametrize(

@@ -1,7 +1,7 @@
 version: 2
 
 # NOTE: commit-message.prefix is required here — this repo enforces Conventional
-# Commits (see .github/workflows/ci.yml's commit-lint job), and Dependabot's default
+# Commits (see .github/workflows/commit-lint.yml), and Dependabot's default
 # "Bump X from A to B" subjects would fail it. `include: "scope"` yields subjects like
 # "chore(deps): bump …" / "ci(deps): bump …", which pass. Minor+patch bumps are grouped
 # into one PR per ecosystem to cut noise; majors still open individually.

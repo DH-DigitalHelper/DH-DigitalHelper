@@ -69,16 +69,22 @@ max_pages = 0                              # per-site page budget (0 = unlimited
 # straight past it and gets cut off. Known traps (buchen.*, moodle.*, ...) are
 # denylisted outright in src/scrape-engine/links.rs; this only catches unknown ones.
 max_pages_per_host = 50000
-request_delay_seconds = 0.0
+request_delay_seconds = 5.0
 respect_robots = false
-workers_per_host = 16
+workers_per_host = 6
 # What a re-run re-checks:
 #   "all"          re-check every already-present URL (conditional GET; a 304 is cheap)
 #   "changed-only" only URLs the sitemap <lastmod> scan flags as changed
 #   "new-only"     only queued URLs never fetched before; never re-download a stored page
 #   "force-full"   like "all", but ignore the stored ETag/Last-Modified so every URL is
 #                  re-downloaded in full. Expensive; for repairing a spoilt crawl.
-recheck = "changed-only"
+recheck = "new-only"
+# Re-queue URLs that failed with a TRANSIENT error (timeout/DNS/conn-refused, 408,
+# 429, or any 5xx) so the next run retries them. Permanently-gone/forbidden URLs are
+# left alone: 404/410 are already marked removed, and 400/401/403/... stay 'error'.
+# Set false to freeze all error rows and never auto-retry. Ignored under
+# recheck = "new-only" (that mode only fetches never-seen URLs).
+retry_transient_errors = true
 user_agent = ""
 
 [extract]

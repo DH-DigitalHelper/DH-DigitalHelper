@@ -41,6 +41,10 @@ class CrawlConfig:
     # is optional; every caller passes fields by keyword, so this trailing position
     # carries no meaning -- keep it that way and the field order stays free to change.
     max_pages_per_host: int = 0
+    # Re-queue transient-error URLs (timeout/DNS/conn-refused, 408, 429, 5xx) on the
+    # next run so they retry; false freezes all error rows. Defaulted (optional key)
+    # and trailing for the same reason as max_pages_per_host above.
+    retry_transient_errors: bool = True
 
 
 @dataclass(frozen=True)
@@ -148,6 +152,7 @@ def load_config(path: Path | None = None) -> Config:
                 crawl_raw, "crawl", "workers_per_host", default=1, minimum=1
             ),
             recheck=recheck,
+            retry_transient_errors=bool(crawl_raw.get("retry_transient_errors", True)),
             user_agent=crawl_raw["user_agent"],
         ),
         extract=ExtractConfig(

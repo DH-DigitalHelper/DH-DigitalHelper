@@ -217,6 +217,40 @@ def test_reset_extract_in_progress_requeues_only_in_progress():
     assert states == {"h1": "pending", "h2": "done", "h3": "rejected", "h4": "error"}
 
 
+def test_reset_extract_errors_requeues_only_errors():
+    conn = mem()
+    assert st.upsert_raw_doc(conn, "h1", "html", "/raw/h1.html", 3, NOW1) is True
+    assert st.upsert_raw_doc(conn, "h2", "html", "/raw/h2.html", 3, NOW1) is True
+    assert st.upsert_raw_doc(conn, "h3", "html", "/raw/h3.html", 3, NOW1) is True
+    assert st.upsert_raw_doc(conn, "h4", "html", "/raw/h4.html", 3, NOW1) is True
+
+    # h1 -> in_progress (claimed but never finished)
+    claimed = st.claim_pending_raw(conn)
+    assert claimed["content_sha256"] == "h1"
+    # h2 -> done, h3 -> rejected (both must be left alone), h4 -> error (re-queued)
+    st.save_extraction(conn, "h2", doc(), True, None, None, NOW1)
+    st.save_extraction(conn, "h3", doc(), False, "too_short", None, NOW1)
+    st.save_extraction(conn, "h4", None, False, None, "boom", NOW1)
+
+    assert st.reset_extract_errors(conn) == 1
+
+    rows = {
+        r["content_sha256"]: r
+        for r in conn.execute(
+            "SELECT content_sha256, extract_state, extract_error FROM raw_docs"
+        ).fetchall()
+    }
+    states = {sha: r["extract_state"] for sha, r in rows.items()}
+    assert states == {
+        "h1": "in_progress",
+        "h2": "done",
+        "h3": "rejected",
+        "h4": "pending",
+    }
+    # the re-queued row's error is cleared so report/dashboard stop counting it
+    assert rows["h4"]["extract_error"] is None
+
+
 def test_urls_for_content_only_present():
     conn = mem()
     st.enqueue(conn, "https://x/a", "x", 0, None, NOW1)

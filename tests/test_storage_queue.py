@@ -305,6 +305,37 @@ def test_requeue_present_urls_only_affects_matching_site():
     assert st.get_url_state(conn, "https://y/a")["work_state"] == "done"
 
 
+def test_requeue_transient_errors_flips_only_transient_error_rows():
+    conn = mem()
+    # Transient-status error rows -> should flip back to pending.
+    transient = (0, 408, 429, 500, 503, 599)
+    for status in transient:
+        u = f"https://x/t{status}"
+        st.enqueue(conn, u, "x", 0, None, NOW)
+        st.mark_url_error(conn, u, status, NOW)
+    # Permanent-status error rows -> must stay error.
+    permanent = (400, 401, 403, 405, 451)
+    for status in permanent:
+        u = f"https://x/p{status}"
+        st.enqueue(conn, u, "x", 0, None, NOW)
+        st.mark_url_error(conn, u, status, NOW)
+    # A done row and a transient error row on another site -> untouched.
+    st.enqueue(conn, "https://x/done", "x", 0, None, NOW)
+    st.mark_url_checked(conn, "https://x/done", 200, None, None, "h1", False, True, NOW)
+    st.enqueue(conn, "https://y/t503", "y", 0, None, NOW)
+    st.mark_url_error(conn, "https://y/t503", 503, NOW)
+
+    count = st.requeue_transient_errors(conn, "x")
+
+    assert count == len(transient)
+    for status in transient:
+        assert st.get_url_state(conn, f"https://x/t{status}")["work_state"] == "pending"
+    for status in permanent:
+        assert st.get_url_state(conn, f"https://x/p{status}")["work_state"] == "error"
+    assert st.get_url_state(conn, "https://x/done")["work_state"] == "done"
+    assert st.get_url_state(conn, "https://y/t503")["work_state"] == "error"
+
+
 def test_set_sitemap_lastmod_lower_value_does_not_overwrite_or_requeue():
     conn = mem()
     st.enqueue(conn, "https://x/a", "x", 0, None, NOW)

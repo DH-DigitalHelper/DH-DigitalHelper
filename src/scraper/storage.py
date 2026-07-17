@@ -395,6 +395,24 @@ def requeue_present_urls(conn, site) -> int:
     return cur.rowcount
 
 
+def requeue_transient_errors(conn, site) -> int:
+    """Parity twin of storage.rs::requeue_transient_errors (crawl seeding is
+    Rust-only; this exists for cross-language parity and unit tests). Flip error
+    rows whose stored HTTP status is transient -- 0 (transport: timeout/DNS/
+    conn-refused), 408, 429, or any 5xx -- back to 'pending' so the next run
+    retries them. Permanent client errors (400/401/403/...) and non-error rows are
+    left untouched; 404/410 never land here (they are marked removed, not error)."""
+    cur = conn.execute(
+        "UPDATE queue SET work_state = 'pending' "
+        "WHERE site = ? AND work_state = 'error' "
+        "AND (http_status = 0 OR http_status = 408 OR http_status = 429 "
+        "OR (http_status >= 500 AND http_status < 600))",
+        (site,),
+    )
+    conn.commit()
+    return cur.rowcount
+
+
 def reset_in_progress(conn) -> int:
     cur = conn.execute(
         "UPDATE queue SET work_state = 'pending' WHERE work_state = 'in_progress'"
@@ -672,6 +690,28 @@ def reset_extract_in_progress(conn, source_type=None) -> int:
     ``extract-html`` recovery pass never steals the ``in_progress`` rows a
     concurrently running ``extract-pdf`` pass has legitimately claimed."""
     sql = "UPDATE raw_docs SET extract_state = 'pending' WHERE extract_state = 'in_progress'"
+    params: tuple = ()
+    if source_type is not None:
+        sql += " AND source_type = ?"
+        params = (source_type,)
+    cur = conn.execute(sql, params)
+    conn.commit()
+    return cur.rowcount
+
+
+def reset_extract_errors(conn, source_type=None) -> int:
+    """Re-queue raw_docs whose extraction errored, so the next extract run retries
+    them (for both html and pdf).
+
+    Clears ``extract_error`` too: ``report``/``dashboard`` count errors by
+    ``extract_error IS NOT NULL``, so a re-queued row must not keep showing as
+    errored -- a successful retry rewrites it to NULL and a repeat failure rewrites
+    the fresh message. Scoped to ``source_type`` like :func:`reset_extract_in_progress`,
+    so an ``extract-html`` pass never re-queues an ``extract-pdf`` pass's rows."""
+    sql = (
+        "UPDATE raw_docs SET extract_state = 'pending', extract_error = NULL "
+        "WHERE extract_state = 'error'"
+    )
     params: tuple = ()
     if source_type is not None:
         sql += " AND source_type = ?"
@@ -1099,3 +1139,39 @@ def run_dedup(
         "before": before,
         "after": after,
     }
+
+
+def run_reclassify(conn, batch_size: int = 500) -> dict:
+    """Re-run :func:`classify.classify` over every document row and rewrite the four
+    enrichment columns (``standort_id`` / ``department_id`` / ``study_program_id`` /
+    ``classify_meta``). Run this after editing ``taxonomy.py`` / bumping
+    ``CLASSIFY_VERSION`` -- the Phase-2 write path only (re)classifies rows it
+    ``new``/``changed``, so an unchanged corpus keeps stale tags otherwise.
+
+    Idempotent (same rules ⇒ same ids) and it **never touches ``updated_at``** --
+    classification is derived metadata, so a reclassify must not spam :func:`delta`.
+    Keyset-paginated by the PRIMARY KEY ``id`` (a single O(n) forward pass, like
+    :func:`run_dedup`); only ``batch_size`` rows are resident at once, and the huge
+    ``text`` column is never read (classification is URL + title + description only).
+    Do NOT run concurrently with fetch/extract -- all three write ``documents``.
+    """
+    updated = 0
+    last_id = ""
+    while True:
+        rows = conn.execute(
+            "SELECT id, url, site, title, metadata FROM documents "
+            "WHERE id > ? ORDER BY id LIMIT ?",
+            (last_id, batch_size),
+        ).fetchall()
+        if not rows:
+            break
+        with write_txn(conn):
+            for r in rows:
+                doc = {
+                    "title": r["title"],
+                    "metadata": json.loads(r["metadata"]) if r["metadata"] else None,
+                }
+                _set_classification(conn, r["id"], r["url"], r["site"], doc)
+        updated += len(rows)
+        last_id = rows[-1]["id"]
+    return {"reclassified": updated}

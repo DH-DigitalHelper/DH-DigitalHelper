@@ -149,6 +149,13 @@ pub fn run_with_client<C: HttpClient>(
         if config.rechecks_all() {
             storage::requeue_present_urls(&conn, &site.allowed_domain)?;
         }
+        // Retry URLs that failed transiently (rate limit / 5xx / timeout / DNS) on
+        // the last run. Skipped under new-only: an error row has last_checked_at
+        // set, so load_pending(only_new=true) would drop it from the frontier yet
+        // leave it stranded in 'pending'.
+        if config.retry_transient_errors && !config.only_new() {
+            storage::requeue_transient_errors(&conn, &site.allowed_domain)?;
+        }
     }
 
     let mut inits = Vec::new();

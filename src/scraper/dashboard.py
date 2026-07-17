@@ -17,7 +17,7 @@ import html
 import json
 import math
 import time
-from collections import Counter, defaultdict
+from collections import Counter, defaultdict, deque
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -54,6 +54,149 @@ def _percentiles(sorted_vals: list[int], ps: tuple[int, ...]) -> dict[str, int]:
         else:
             out[str(p)] = sorted_vals[min(n - 1, int(p / 100 * n))]
     return out
+
+
+# Crawl-discovery-tree caps. Rendering details kept in code (like _WC_BUCKETS and
+# the old host-graph's max_nodes=24), not config.toml -- they bound the payload
+# embedded in the static report, not the crawl.
+_TREE_MAX_CHILDREN = 40  # fan-out per node before the tail folds into "+K more"
+_TREE_MAX_NODES_PER_SITE = 3000  # per-site node budget (breadth-first)
+_TREE_DEFAULT_DOMAIN = "www.dhbw.de"  # campus selected on first load
+
+
+def _rel(url: str) -> tuple[str, str]:
+    """``(path[?query], host)`` for a URL -- the compact per-node key. The host is
+    kept separately so the client can rebuild the absolute URL for tooltips without
+    repeating the scheme+host on every node."""
+    sp = urlsplit(url)
+    rel = sp.path or "/"
+    if sp.query:
+        rel += "?" + sp.query
+    return rel, sp.netloc.lower()
+
+
+def _build_tree(items, max_children: int, max_nodes: int):
+    """Build one site's discovery tree from ``(url, discovered_from, state)`` rows.
+
+    Returns ``(nodes, host, truncated, total)`` or ``None`` when nothing survives
+    pruning. ``nodes[0]`` is a synthetic root; each real node is
+    ``{"u": path[?query], "p": parent index, "st": state}`` (+ ``"h"`` host override
+    when a node's host differs from the site host). Emitted breadth-first, so a
+    node's parent always precedes it and a suffix cut keeps every index valid.
+    """
+    state_of = {}
+    parent_of = {}
+    for url, parent, state in items:
+        state_of[url] = state
+        parent_of[url] = parent
+    if not state_of:
+        return None
+
+    ROOT = None  # sentinel parent for seeds / cross-site orphans
+    children: dict = defaultdict(list)
+    for url in state_of:
+        p = parent_of[url]
+        children[p if p in state_of else ROOT].append(url)
+
+    site_host = Counter(_rel(u)[1] for u in state_of).most_common(1)[0][0]
+
+    # Keep a node iff its subtree contains a `done` node -- drops error/pending
+    # dead-end leaves (trap tails) but never severs the path to a real page.
+    keep: set = set()
+    size: dict = {}
+    for seed in children[ROOT]:
+        stack = [(seed, False)]
+        while stack:
+            url, done = stack.pop()
+            if done:
+                kids = [c for c in children.get(url, ()) if c in keep]
+                if state_of.get(url) == "done" or kids:
+                    keep.add(url)
+                    size[url] = 1 + sum(size[c] for c in kids)
+            else:
+                stack.append((url, True))
+                stack.extend((c, False) for c in children.get(url, ()))
+
+    if not keep:
+        return None
+
+    def kept_children(url):
+        cs = [c for c in children.get(url, ()) if c in keep]
+        cs.sort(key=lambda c: (-size[c], c))  # largest subtrees first, then stable
+        return cs
+
+    nodes = [{"u": "", "p": -1, "st": "root"}]
+    truncated = False
+    dq = deque((c, 0) for c in kept_children(ROOT))
+    while dq:
+        if len(nodes) >= max_nodes:
+            truncated = True
+            break
+        url, pidx = dq.popleft()
+        rel, host = _rel(url)
+        rec = {"u": rel, "p": pidx, "st": state_of.get(url, "done")}
+        if host != site_host:
+            rec["h"] = host
+        idx = len(nodes)
+        nodes.append(rec)
+
+        kids = kept_children(url)
+        for c in kids[:max_children]:
+            dq.append((c, idx))
+        hidden = len(kids) - max_children
+        if hidden > 0:
+            if len(nodes) < max_nodes:
+                nodes.append({"u": f"+{hidden} more", "p": idx, "st": "more"})
+            else:
+                truncated = True
+
+    return nodes, site_host, truncated, len(keep)
+
+
+def _discovery_trees(
+    rows, sites, *, max_children=_TREE_MAX_CHILDREN, max_nodes=_TREE_MAX_NODES_PER_SITE
+) -> dict:
+    """Assemble one collapsible crawl-discovery tree per site from ``queue`` rows.
+
+    ``rows`` yields ``(url, site, discovered_from, depth, work_state)``; ``site`` is
+    the stored ``allowed_domain``. Only crawled (in-domain) URLs live in ``queue``,
+    so every tree is DHBW-only by construction. See :func:`_build_tree` for the
+    per-site reduction (prune / child cap / node cap).
+
+    Returns ``{"sites": [{name, host, nodes, truncated, total}], "default": idx}``
+    ordered by config, with the central portal selected by default.
+    """
+    domain2name = {s.allowed_domain: s.name for s in sites}
+    order = {s.allowed_domain: i for i, s in enumerate(sites)}
+
+    by_site: dict = defaultdict(list)
+    for url, site, parent, _depth, state in rows:
+        by_site[site].append((url, parent, state))
+
+    out = []
+    for domain, items in by_site.items():
+        built = _build_tree(items, max_children, max_nodes)
+        if built is None:
+            continue
+        nodes, host, truncated, total = built
+        out.append(
+            {
+                "domain": domain,
+                "name": domain2name.get(domain, domain),
+                "host": host,
+                "nodes": nodes,
+                "truncated": truncated,
+                "total": total,
+            }
+        )
+
+    out.sort(key=lambda s: (order.get(s["domain"], len(order)), s["name"]))
+    default = next(
+        (i for i, s in enumerate(out) if s["domain"] == _TREE_DEFAULT_DOMAIN), 0
+    )
+    for s in out:
+        del s["domain"]  # internal ordering key only
+    return {"sites": out, "default": default}
 
 
 def collect_analysis(conn, *, sites, min_words: int, db_path: Path) -> dict:
@@ -264,68 +407,17 @@ def collect_analysis(conn, *, sites, min_words: int, db_path: Path) -> dict:
         else docs_present
     )
 
-    # Single pass over the edge list: external-host tally (for the table below)
-    # plus the host-level aggregated graph (nodes = hosts, weighted cross-host
-    # edges). Self-links (src host == dst host) size the node rather than draw an
-    # edge; a host seen as a source is one we crawled ("site") vs external-only.
-    ext_hosts = Counter()
-    edge_w: Counter = Counter()  # (src_host, dst_host) -> weight, cross-host only
-    out_deg, in_deg, self_w = Counter(), Counter(), Counter()
-    crawled: set[str] = set()
-    for src, dst, in_dom in q(
-        "SELECT s.url, d.url, l.in_domain FROM links l "
-        "JOIN urls s ON s.id = l.src_id "
-        "JOIN urls d ON d.id = l.dst_id"
-    ):
-        sh, dh = _host(src), _host(dst)
-        if not sh or not dh:
-            continue
-        if not in_dom:
-            ext_hosts[dh] += 1
-        crawled.add(sh)
-        if sh == dh:
-            self_w[sh] += 1
-            continue
-        edge_w[(sh, dh)] += 1
-        out_deg[sh] += 1
-        in_deg[dh] += 1
+    # Top external link targets: hosts we linked to but did not follow
+    # (in_domain=0). Streams only the ~1.4M external edges, not the full 15M.
+    ext_hosts = Counter(
+        _host(u)
+        for (u,) in q(
+            "SELECT d.url FROM links l JOIN urls d ON d.id = l.dst_id "
+            "WHERE l.in_domain = 0"
+        )
+    )
+    ext_hosts.pop("", None)
     links["top_external"] = [{"host": h, "n": n} for h, n in ext_hosts.most_common(20)]
-
-    max_nodes = 24
-    deg = Counter(
-        {
-            h: out_deg[h] + in_deg[h] + self_w[h]
-            for h in set(out_deg) | set(in_deg) | set(self_w)
-        }
-    )
-    top = [h for h, _ in deg.most_common(max_nodes)]
-    node_idx = {h: i for i, h in enumerate(top)}
-    graph_nodes = [
-        {
-            "host": h,
-            "kind": "site" if h in crawled else "external",
-            "out": out_deg[h],
-            "in": in_deg[h],
-            "self": self_w[h],
-            "deg": deg[h],
-        }
-        for h in top
-    ]
-    graph_edges = sorted(
-        (
-            {"s": node_idx[a], "t": node_idx[b], "w": w}
-            for (a, b), w in edge_w.items()
-            if a in node_idx and b in node_idx
-        ),
-        key=lambda e: -e["w"],
-    )
-    links["graph"] = {
-        "nodes": graph_nodes,
-        "edges": graph_edges,
-        "n_hosts": len(deg),
-        "n_edges_total": sum(edge_w.values()),
-        "n_edges_shown": sum(e["w"] for e in graph_edges),
-    }
 
     # ---- per-host (spider-trap view) ----------------------------------------
     hostc = Counter()
@@ -344,6 +436,11 @@ def collect_analysis(conn, *, sites, min_words: int, db_path: Path) -> dict:
         }
         for h, n in hostc.most_common(25)
     ]
+
+    # ---- crawl discovery tree (per-site, DHBW-only by construction) ----------
+    discovery = _discovery_trees(
+        q("SELECT url, site, discovered_from, depth, work_state FROM queue"), sites
+    )
 
     # ---- freshness -----------------------------------------------------------
     def rng(col, table, where=""):
@@ -384,6 +481,7 @@ def collect_analysis(conn, *, sites, min_words: int, db_path: Path) -> dict:
         "errors_by_site": errors_by_site,
         "links": links,
         "hosts": hosts,
+        "discovery": discovery,
         "freshness": freshness,
     }
     data["findings"] = _findings(data)

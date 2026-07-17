@@ -33,10 +33,9 @@ repos:
   # trufflehog is NOT installed by uv/maturin: the Nix devShell provides it
   # (pkgs.trufflehog); on Windows install it once with one of —
   #     scoop install trufflehog
-  #     winget install trufflesecurity.trufflehog
   #     # or a release binary: https://github.com/trufflesecurity/trufflehog/releases
-  # CI re-runs the same scan server-side (.github/workflows/ci.yml) so a missed
-  # local install still can't merge a leaked secret.
+  # CI re-runs the same scan server-side (.github/workflows/secret-scan.yml) so a
+  # missed local install still can't merge a leaked secret.
   - repo: local
     hooks:
       - id: trufflehog

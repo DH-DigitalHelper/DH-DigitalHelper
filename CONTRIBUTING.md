@@ -80,10 +80,18 @@ MSVC env. (`pytest` on push does **not** need it: the extension is already built
 
 ## CI
 
-[`.github/workflows/ci.yml`](./.github/workflows/ci.yml) runs on every push and pull request
-on a Linux runner: ruff lint + format check, `rustfmt --check`, clippy (`-D warnings`),
-`pytest`, and `cargo test`. Pull requests additionally get their commit subjects validated
-against Conventional Commits. Green CI is required before merge.
+CI is split by concern across three Linux workflows; green CI is required before merge:
+
+- [`ci.yml`](./.github/workflows/ci.yml) — lint & test, on pull requests and pushes
+  to `main`: ruff lint + format check, `rustfmt --check`, clippy (`-D warnings`),
+  `pytest`, and `cargo test`.
+- [`commit-lint.yml`](./.github/workflows/commit-lint.yml) — validates every PR
+  commit subject against Conventional Commits.
+- [`secret-scan.yml`](./.github/workflows/secret-scan.yml) — TruffleHog scan of the
+  PR's diff, the server-side backstop to the local `trufflehog` hook.
+
+The two PR-only workflows run on pull requests; a push to a PR branch triggers only
+the pull_request event, so `ci.yml` runs once per push rather than twice.
 
 ## Dependency updates
 

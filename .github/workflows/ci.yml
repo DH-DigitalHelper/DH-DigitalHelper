@@ -1,9 +1,9 @@
 name: CI
 
 on:
-  push:
-    branches: ["**"]
   pull_request:
+  push:
+    branches: [main]
 
 # Cancel superseded runs on the same ref.
 concurrency:
@@ -14,13 +14,7 @@ jobs:
   lint-and-test:
     name: Lint & test (Linux)
     runs-on: ubuntu-latest
-    # This job runs the EXACT hooks git runs locally — .pre-commit-config.yaml is
-    # the single source of truth for lint/format/test. Don't re-list ruff/rustfmt/
-    # clippy/pytest/cargo-test here; add or change them in the pre-commit config.
     env:
-      # The Rust test binaries link libpython — the crate omits `extension-module`
-      # on purpose so `cargo test` can link (see Cargo.toml). Point pyo3 at the
-      # uv-managed interpreter (README "Windows" covers the local equivalent).
       PYO3_PYTHON: ${{ github.workspace }}/.venv/bin/python
     steps:
       - uses: actions/checkout@v7
@@ -57,70 +51,8 @@ jobs:
           PYLIB="$(.venv/bin/python -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))')"
           echo "LD_LIBRARY_PATH=$PYLIB:${LD_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
 
-      # ── Commit-stage hooks: hygiene + ruff (lint & format) + rustfmt. Fails if
-      # any --fix/format hook would change a file. trufflehog is SKIPped here —
-      # the secret-scan job below scans the PR's full base..head range, which the
-      # local `--since-commit HEAD` hook can't. ──
       - name: Pre-commit hooks (hygiene, ruff, rustfmt)
-        env:
-          SKIP: trufflehog
         run: uv run pre-commit run --all-files --show-diff-on-failure --color always
 
-      # ── Push-stage hooks: pytest (always) + clippy + cargo test (Rust). ──
       - name: Pre-push hooks (pytest, clippy, cargo test)
         run: uv run pre-commit run --hook-stage pre-push --all-files --show-diff-on-failure --color always
-
-  commit-lint:
-    name: Conventional commits (PR)
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Validate PR commit subjects
-        shell: bash
-        env:
-          BASE: ${{ github.event.pull_request.base.sha }}
-          HEAD: ${{ github.event.pull_request.head.sha }}
-        run: |
-          # Range validation the commit-msg `conventional-pre-commit` hook can't do
-          # server-side: it checks one message at a time; here we check every commit
-          # the PR adds. Subject line: type(scope)!: description
-          pattern='^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([^)]+\))?!?: .+'
-          fail=0
-          # --no-merges: merge commits are exempt from the convention.
-          while IFS= read -r subject; do
-            [ -z "$subject" ] && continue
-            if ! printf '%s' "$subject" | grep -Eq "$pattern"; then
-              echo "::error::Non-conventional commit subject: $subject"
-              fail=1
-            fi
-          done < <(git log --no-merges --format=%s "$BASE..$HEAD")
-          if [ "$fail" -ne 0 ]; then
-            echo "Commit subjects must follow Conventional Commits (feat:, fix:, chore: …)."
-            exit 1
-          fi
-          echo "All commit subjects follow Conventional Commits."
-
-  secret-scan:
-    name: Secret scan (TruffleHog)
-    runs-on: ubuntu-latest
-    # PR-gated: every change reaches main through a PR, so this blocks a leaked
-    # secret from merging even when the local pre-commit `trufflehog` hook was
-    # bypassed (git commit --no-verify) or never installed. On pull_request the
-    # action auto-scans the PR's base..head range and fails on any finding — the
-    # server-side counterpart to the local `--since-commit HEAD` hook.
-    if: github.event_name == 'pull_request'
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0 # full history so the base..head diff resolves
-
-      - name: TruffleHog secret scan
-        # Unpinned @main per TruffleHog's docs; pin to a release SHA/tag if you
-        # want a reproducible, supply-chain-hardened reference.
-        uses: trufflesecurity/trufflehog@main
-        with:
-          extra_args: --results=verified,unknown

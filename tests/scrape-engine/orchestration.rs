@@ -162,6 +162,7 @@ fn config(dir: &std::path::Path) -> RunConfig {
         request_delay_seconds: 0.0,
         workers_per_host: 4,
         recheck: "all".into(),
+        retry_transient_errors: true,
         user_agent: "test".into(),
         db_file: dir.join("db.sqlite3").to_string_lossy().into_owned(),
         raw_dir: dir.join("raw").to_string_lossy().into_owned(),
@@ -836,6 +837,7 @@ fn per_host_budget_caps_single_host() {
         request_delay_seconds: 0.0,
         workers_per_host: 4,
         recheck: "all".into(),
+        retry_transient_errors: true,
         user_agent: "test".into(),
         db_file: tmp.path().join("db.sqlite3").to_string_lossy().into_owned(),
         raw_dir: tmp.path().join("raw").to_string_lossy().into_owned(),
@@ -923,6 +925,7 @@ fn frontier_load_drops_preseeded_trap() {
         request_delay_seconds: 0.0,
         workers_per_host: 2,
         recheck: "all".into(),
+        retry_transient_errors: true,
         user_agent: "test".into(),
         db_file: db_path.to_string_lossy().into_owned(),
         raw_dir: tmp.path().join("raw").to_string_lossy().into_owned(),
@@ -958,4 +961,208 @@ fn frontier_load_drops_preseeded_trap() {
         )
         .unwrap();
     assert_eq!(still_pending, 1, "trap row left pending, untouched");
+}
+
+// ---- transient-error retry on re-run ---------------------------------------
+
+/// Run a first crawl in `dir` where the seed links to `path` and `path` answers
+/// `status`, so it lands in the queue as an error row. Uses run id "run-1".
+fn first_error_run(dir: &std::path::Path, path: &str, status: u16) {
+    let mut cfg = config(dir);
+    cfg.use_sitemap = false;
+    let url = format!("http://site.test{path}");
+    let seed = format!(r#"<html><body>seed <a href="{path}">c</a></body></html>"#);
+    let client = MockClient::from_pages(vec![
+        ("http://site.test/startseite", Page::html(&seed)),
+        (&url, Page::html("temporarily unavailable").status(status)),
+    ]);
+    run_with_client(cfg, "run-1".into(), ProgressSink::new(None), client).expect("first crawl");
+}
+
+fn error_row(conn: &rusqlite::Connection, url: &str) -> (String, i64) {
+    conn.query_row(
+        "SELECT work_state, http_status FROM queue WHERE url=?",
+        [url],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    )
+    .unwrap()
+}
+
+fn refetched_in_run(conn: &rusqlite::Connection, run_id: &str, url: &str) -> bool {
+    let n: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM crawl_log WHERE run_id=? AND url=?",
+            [run_id, url],
+            |r| r.get(0),
+        )
+        .unwrap();
+    n > 0
+}
+
+/// A transient failure (503) is re-queued on the next run and, if it now
+/// succeeds, becomes a normal present document.
+#[test]
+fn transient_error_is_retried_on_rerun() {
+    let tmp = tempfile::tempdir().unwrap();
+    first_error_run(tmp.path(), "/flap", 503);
+
+    let conn = rusqlite::Connection::open(tmp.path().join("db.sqlite3")).unwrap();
+    let (state, status) = error_row(&conn, "http://site.test/flap");
+    assert_eq!(state, "error", "a 503 is a transient error");
+    assert_eq!(status, 503);
+
+    // Run 2: /flap is healthy now. The seeding requeue should retry it.
+    let mut cfg2 = config(tmp.path());
+    cfg2.use_sitemap = false;
+    let seed = r#"<html><body>seed <a href="/flap">f</a></body></html>"#;
+    run_with_client(
+        cfg2,
+        "run-2".into(),
+        ProgressSink::new(None),
+        MockClient::from_pages(vec![
+            ("http://site.test/startseite", Page::html(seed)),
+            (
+                "http://site.test/flap",
+                Page::html("<html><body>back up now</body></html>"),
+            ),
+        ]),
+    )
+    .expect("second crawl");
+
+    let (state, present, sha): (String, i64, Option<String>) = conn
+        .query_row(
+            "SELECT work_state, present, content_sha256 FROM queue
+             WHERE url='http://site.test/flap'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .unwrap();
+    assert_eq!(
+        state, "done",
+        "the transient error was retried and recovered"
+    );
+    assert_eq!(present, 1);
+    assert!(sha.is_some(), "the recovered page stored its content");
+    assert!(
+        refetched_in_run(&conn, "run-2", "http://site.test/flap"),
+        "run 2 must have actually re-fetched /flap"
+    );
+}
+
+/// A permanent client error (403) is NOT re-queued, even on a recheck=all run and
+/// even if the URL would now serve 200.
+#[test]
+fn permanent_error_is_not_retried_on_rerun() {
+    let tmp = tempfile::tempdir().unwrap();
+    first_error_run(tmp.path(), "/forbidden", 403);
+
+    let conn = rusqlite::Connection::open(tmp.path().join("db.sqlite3")).unwrap();
+    let (state, status) = error_row(&conn, "http://site.test/forbidden");
+    assert_eq!(state, "error");
+    assert_eq!(status, 403);
+
+    // Run 2: it would now serve 200, but a 403 is permanent -> must not be retried.
+    let mut cfg2 = config(tmp.path());
+    cfg2.use_sitemap = false;
+    let seed = r#"<html><body>seed <a href="/forbidden">x</a></body></html>"#;
+    run_with_client(
+        cfg2,
+        "run-2".into(),
+        ProgressSink::new(None),
+        MockClient::from_pages(vec![
+            ("http://site.test/startseite", Page::html(seed)),
+            (
+                "http://site.test/forbidden",
+                Page::html("<html><body>now allowed</body></html>"),
+            ),
+        ]),
+    )
+    .expect("second crawl");
+
+    assert_eq!(
+        error_row(&conn, "http://site.test/forbidden").0,
+        "error",
+        "a 403 must stay error across re-runs"
+    );
+    assert!(
+        !refetched_in_run(&conn, "run-2", "http://site.test/forbidden"),
+        "a permanent error must not be re-fetched"
+    );
+}
+
+/// retry_transient_errors=false freezes error rows: even a 503 is left alone.
+#[test]
+fn retry_transient_errors_false_freezes_error_rows() {
+    let tmp = tempfile::tempdir().unwrap();
+    first_error_run(tmp.path(), "/flap", 503);
+
+    let conn = rusqlite::Connection::open(tmp.path().join("db.sqlite3")).unwrap();
+    assert_eq!(error_row(&conn, "http://site.test/flap").0, "error");
+
+    let mut cfg2 = config(tmp.path());
+    cfg2.use_sitemap = false;
+    cfg2.retry_transient_errors = false;
+    let seed = r#"<html><body>seed <a href="/flap">f</a></body></html>"#;
+    run_with_client(
+        cfg2,
+        "run-2".into(),
+        ProgressSink::new(None),
+        MockClient::from_pages(vec![
+            ("http://site.test/startseite", Page::html(seed)),
+            (
+                "http://site.test/flap",
+                Page::html("<html><body>back up now</body></html>"),
+            ),
+        ]),
+    )
+    .expect("second crawl");
+
+    assert_eq!(
+        error_row(&conn, "http://site.test/flap").0,
+        "error",
+        "the toggle being off must freeze the transient error"
+    );
+    assert!(
+        !refetched_in_run(&conn, "run-2", "http://site.test/flap"),
+        "with the toggle off nothing is retried"
+    );
+}
+
+/// recheck=new-only never retries error rows (they have last_checked_at set), so
+/// the transient requeue is skipped there.
+#[test]
+fn new_only_does_not_retry_transient_errors() {
+    let tmp = tempfile::tempdir().unwrap();
+    first_error_run(tmp.path(), "/flap", 503);
+
+    let conn = rusqlite::Connection::open(tmp.path().join("db.sqlite3")).unwrap();
+    assert_eq!(error_row(&conn, "http://site.test/flap").0, "error");
+
+    let mut cfg2 = config(tmp.path());
+    cfg2.use_sitemap = false;
+    cfg2.recheck = "new-only".into();
+    let seed = r#"<html><body>seed <a href="/flap">f</a></body></html>"#;
+    run_with_client(
+        cfg2,
+        "run-2".into(),
+        ProgressSink::new(None),
+        MockClient::from_pages(vec![
+            ("http://site.test/startseite", Page::html(seed)),
+            (
+                "http://site.test/flap",
+                Page::html("<html><body>back up now</body></html>"),
+            ),
+        ]),
+    )
+    .expect("second crawl");
+
+    assert_eq!(
+        error_row(&conn, "http://site.test/flap").0,
+        "error",
+        "new-only must not retry an already-checked error row"
+    );
+    assert!(
+        !refetched_in_run(&conn, "run-2", "http://site.test/flap"),
+        "new-only must not re-fetch the error row"
+    );
 }

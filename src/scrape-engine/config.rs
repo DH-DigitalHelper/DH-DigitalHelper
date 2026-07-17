@@ -29,6 +29,7 @@ pub struct RunConfig {
     pub request_delay_seconds: f64,
     pub workers_per_host: i64,
     pub recheck: String,
+    pub retry_transient_errors: bool,
     pub user_agent: String,
     pub db_file: String,
     pub raw_dir: String,

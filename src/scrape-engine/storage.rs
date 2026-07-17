@@ -339,6 +339,30 @@ pub fn requeue_present_urls(conn: &Connection, site: &str) -> rusqlite::Result<u
     )
 }
 
+/// Re-queue error rows whose stored HTTP status is transient (worth retrying):
+/// transport failures (status 0 = timeout/DNS/conn-refused), 408, 429, and any
+/// 5xx. Permanent client errors (400/401/403/405/451, …) stay 'error'; 404/410
+/// never land here (they are marked removed, not error). Validators and
+/// last_checked_at are left untouched, so a row that once succeeded retries as a
+/// cheap conditional GET while a never-fetched one does a full GET.
+pub fn requeue_transient_errors(conn: &Connection, site: &str) -> rusqlite::Result<usize> {
+    conn.execute(
+        "UPDATE queue SET work_state = 'pending'
+         WHERE site = ? AND work_state = 'error'
+           AND (http_status = 0 OR http_status = 408 OR http_status = 429
+                OR (http_status >= 500 AND http_status < 600))",
+        [site],
+    )
+}
+
+/// Whether an error row's HTTP status is transient, i.e. worth retrying on a
+/// re-run. Kept in lock-step with the SQL predicate in `requeue_transient_errors`
+/// (SQLite can't call this); a unit test pins the two together. status 0 is the
+/// transport-error sentinel (timeout / DNS / connection-refused).
+pub fn is_transient_status(status: i64) -> bool {
+    status == 0 || status == 408 || status == 429 || (500..600).contains(&status)
+}
+
 /// Recover rows stranded 'in_progress' by a crashed prior run.
 pub fn reset_in_progress(conn: &Connection) -> rusqlite::Result<usize> {
     conn.execute(
@@ -978,5 +1002,81 @@ mod tests {
         let (etag, lm) = validators(&conn);
         assert_eq!(etag.as_deref(), Some("\"v2\""));
         assert_eq!(lm.as_deref(), Some("Tue, 02 Jan 2026 00:00:00 GMT"));
+    }
+
+    /// requeue_transient_errors re-pends only error rows whose http_status is
+    /// transient, scoped to the given site; permanent errors, done rows, and other
+    /// sites are left untouched.
+    #[test]
+    fn requeue_transient_errors_repends_only_transient_statuses() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_db(&conn).unwrap();
+
+        let insert = |url: &str, site: &str, state: &str, status: i64| {
+            conn.execute(
+                "INSERT INTO queue (url, site, work_state, http_status, present,
+                     first_seen_at, last_checked_at)
+                 VALUES (?, ?, ?, ?, 1, '2026-07-16T00:00:00', '2026-07-16T00:00:00')",
+                params![url, site, state, status],
+            )
+            .unwrap();
+        };
+
+        let transient = [0_i64, 408, 429, 500, 503, 599];
+        for s in transient {
+            insert(&format!("https://x.de/t{s}"), "x.de", "error", s);
+        }
+        let permanent = [400_i64, 401, 403, 405, 451];
+        for s in permanent {
+            insert(&format!("https://x.de/p{s}"), "x.de", "error", s);
+        }
+        // A done row and a transient-status error row on a different site: untouched.
+        insert("https://x.de/done", "x.de", "done", 200);
+        insert("https://y.de/t503", "y.de", "error", 503);
+
+        let n = requeue_transient_errors(&conn, "x.de").unwrap();
+        assert_eq!(n, transient.len(), "only the transient x.de rows flip");
+
+        let state_of = |url: &str| -> String {
+            conn.query_row("SELECT work_state FROM queue WHERE url = ?", [url], |r| {
+                r.get(0)
+            })
+            .unwrap()
+        };
+        for s in transient {
+            assert_eq!(
+                state_of(&format!("https://x.de/t{s}")),
+                "pending",
+                "status {s} is transient and must be re-queued"
+            );
+        }
+        for s in permanent {
+            assert_eq!(
+                state_of(&format!("https://x.de/p{s}")),
+                "error",
+                "status {s} is permanent and must stay error"
+            );
+        }
+        assert_eq!(state_of("https://x.de/done"), "done", "done row untouched");
+        assert_eq!(
+            state_of("https://y.de/t503"),
+            "error",
+            "other site must be untouched"
+        );
+    }
+
+    /// The Rust predicate must agree with the SQL in requeue_transient_errors so
+    /// the two classifications cannot silently drift.
+    #[test]
+    fn is_transient_status_matches_the_sql() {
+        for s in [0, 408, 429, 500, 503, 599] {
+            assert!(is_transient_status(s), "status {s} should be transient");
+        }
+        for s in [200, 400, 401, 403, 404, 410, 451, 600] {
+            assert!(
+                !is_transient_status(s),
+                "status {s} should not be transient"
+            );
+        }
     }
 }

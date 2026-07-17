@@ -140,12 +140,15 @@ def run_extract(
     # claim_pending_raw only ever sees 'pending' rows and such a blob would never
     # be retried or materialized. The reset is scoped to this pass's source_type
     # so a concurrent pass of the other type keeps its own in_progress claims.
-    # init_db is idempotent/safe here and mirrors run_fetch, so a fresh DB
-    # returns empty counts instead of erroring on missing tables.
+    # We also re-queue 'error' rows so a blob that failed extraction (malformed
+    # PDF/HTML, a since-fixed extractor bug) is retried on every run rather than
+    # being stuck forever. init_db is idempotent/safe here and mirrors run_fetch,
+    # so a fresh DB returns empty counts instead of erroring on missing tables.
     recovery_conn = storage.connect(config.storage.db_file)
     try:
         storage.init_db(recovery_conn)
         storage.reset_extract_in_progress(recovery_conn, source_type)
+        storage.reset_extract_errors(recovery_conn, source_type)
     finally:
         recovery_conn.close()
 
