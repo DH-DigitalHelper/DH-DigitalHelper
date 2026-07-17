@@ -13,7 +13,15 @@ def cfg(tmp_path):
     return Config(
         root=tmp_path,
         sites=[Site("dhbw", "https://www.dhbw.de", "www.dhbw.de")],
-        crawl=CrawlConfig(True, 0, 0.0, False, 1, "all", "ua"),
+        crawl=CrawlConfig(
+            use_sitemap=True,
+            max_pages=0,
+            request_delay_seconds=0.0,
+            respect_robots=False,
+            workers_per_host=1,
+            recheck="all",
+            user_agent="ua",
+        ),
         extract=ExtractConfig(2, 50),
         storage=StorageConfig(tmp_path / "db.sqlite3", tmp_path / "raw"),
     )

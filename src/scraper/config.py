@@ -27,8 +27,9 @@ class CrawlConfig:
     workers_per_host: int
     recheck: str
     user_agent: str
-    # Per-hostname page budget (0 = unlimited). Optional/defaulted so callers that
-    # predate it (e.g. test fixtures) still construct a valid config.
+    # Per-hostname page budget (0 = unlimited). Defaulted because the config.toml key
+    # is optional; every caller passes fields by keyword, so this trailing position
+    # carries no meaning -- keep it that way and the field order stays free to change.
     max_pages_per_host: int = 0
 
 
