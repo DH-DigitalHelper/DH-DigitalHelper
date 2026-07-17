@@ -82,8 +82,15 @@ analysis via [`dashboard.py`](src/scraper/dashboard.py)) · `delta --since <ts>`
 (re-index delta for downstream) · `dedup` · `backfill-links` (rebuild the sparse link
 graph from local raw HTML, no network) · `reset-site --site NAME` (the **only**
 destructive command; wipes a site's queue/crawl_log/documents/links, keeps the raw
-cache). All accept `--config PATH`. See [`cli.py`](src/scraper/cli.py) and README
-"Usage" for flags. Note `--max-pages` is a **per-site** budget, not a global cap.
+cache). See [`cli.py`](src/scraper/cli.py) and README "Usage".
+
+**`config.toml` is the sole source of tuning values — no CLI flag overrides it.** The
+only flags are operational: global `--config PATH`; `--site NAME` on
+`fetch`/`run`/`reset-site`; `--since` on `delta`; `-o`/`--open` on `report`. Adding a
+`--max-pages`-style override flag is a regression, not a feature — to vary a run, edit
+`config.toml` or keep a second file and pass `--config` (it is global, so it goes
+*before* the subcommand). Note `crawl.max_pages` is a **per-site** budget, not a global
+cap.
 
 ## Conventions
 
@@ -96,7 +103,9 @@ cache). All accept `--config PATH`. See [`cli.py`](src/scraper/cli.py) and READM
   kept for auditability). The scraper identifies via a configurable `user_agent`
   instead — crawl politely via `request_delay_seconds` / `workers_per_host`.
 - All tuning lives in [`config.toml`](./config.toml) (`[[sites]]`, `[crawl]`,
-  `[extract]`, `[storage]`); many `[crawl]` knobs are overridable per-run via `fetch`/`run` flags.
+  `[extract]`, `[dedup]`, `[storage]`) and **only** there; `load_config` range-checks
+  every numeric key, so bad values fail at load naming the key rather than being floored
+  by the engine.
 - `data/` DB and raw cache are gitignored (only `data/.gitkeep` is tracked).
 
 ## graphify

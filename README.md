@@ -140,9 +140,12 @@ uv run pre-commit install --install-hooks
 
 ## Usage
 
+Every tuning value lives in [`config.toml`](./config.toml) and **no flag overrides any of
+them** — to change how a run behaves, edit the file, then:
+
 ```sh
-# Small bounded run to sanity-check things end to end:
-uv run dhbw-scraper run --max-pages 5
+# Fetch -> extract -> dedup:
+uv run dhbw-scraper run
 
 # Inspect what landed in the database:
 uv run dhbw-scraper stats
@@ -154,16 +157,17 @@ uv run dhbw-scraper delta --since 2026-07-01T00:00:00
 Run phases separately when useful (e.g. re-extract without re-fetching):
 
 ```sh
-uv run dhbw-scraper fetch --max-pages 5   # phase 1: crawl + download
-uv run dhbw-scraper extract --workers 4   # phase 2: extract + quality-gate
+uv run dhbw-scraper fetch     # phase 1: crawl + download
+uv run dhbw-scraper extract   # phase 2: extract + quality-gate
 ```
 
-Note that `--max-pages` (and `crawl.max_pages` in `config.toml`) is a **per-site** budget, not a
-global cap: with two `[[sites]]` configured, `--max-pages 5` allows up to 5 new pages from
+To sanity-check things end to end without crawling the whole corpus, set a small
+`crawl.max_pages` in `config.toml` first. Note it is a **per-site** budget, not a global
+cap: with the eleven `[[sites]]` configured, `max_pages = 5` allows up to 5 new pages from
 *each* site, not 5 total.
 
-Distinct from the per-site budget, `crawl.max_pages_per_host` (default `50000`, `0` =
-unlimited) caps how many pages any **single hostname** may contribute. It is a
+Distinct from the per-site budget, `crawl.max_pages_per_host` (`50000` in the shipped
+config, `0` = unlimited) caps how many pages any **single hostname** may contribute. It is a
 defense-in-depth backstop against a runaway subdomain — e.g. a booking or calendar
 webapp whose URLs explode combinatorially — monopolizing a site's crawl the way the
 `buchen.dhbw-vs.de` Meeting Room Booking System once did (~940k permutations in one run).
@@ -172,49 +176,50 @@ and is cut off, with the skipped count reported in the run summary (never silent
 truncated). Known traps (`buchen.*`, `moodle.*`, `elearning.*`, Solr search, …) are
 denylisted outright in `src/scrape-engine/links.rs`; the per-host cap only catches *unknown* ones.
 
-`fetch` and `run` also accept:
+`fetch` and `run` accept exactly one flag, because it selects *what* to crawl rather than
+tuning *how*:
 
 - `--site NAME` — crawl only the named site(s), matched by config `name` **or**
   `allowed_domain` (repeatable). Scopes both the sitemap refresh and the crawl to the
   selected site(s), leaving the others untouched — use it to re-crawl one campus in
   isolation.
-- `--max-pages-per-host N` — override `crawl.max_pages_per_host` for this run (`0` =
-  unlimited).
-- `--workers-per-host N` — concurrent fetch workers per host, overriding
-  `crawl.workers_per_host` from `config.toml` for this invocation. Each host still shares
-  one `request_delay_seconds` rate limiter across its workers, so raising this speeds up
-  a run without hammering any single site.
-- `--request-delay SECONDS` — per-host delay between requests, overriding
-  `crawl.request_delay_seconds`. Raise it (and lower `--workers-per-host`) to crawl a
-  server politely and avoid connection-level failures.
-- `--changed-only` — restrict re-checks to URLs the sitemap `<lastmod>` flags as changed
-  (same as `recheck = "changed-only"` in config, for one run).
-- `--full` — re-check every present URL and ignore stored `ETag`/`Last-Modified`
-  validators, forcing a full re-download.
-- `--new-only` — fetch only queued URLs never fetched before (and everything they link
-  to); never re-download a page already in the store (same as `recheck = "new-only"`).
 
-`--changed-only`, `--full`, and `--new-only` are mutually exclusive. With none of them,
-the command falls back to `crawl.recheck` from `config.toml`.
+Page budgets, worker counts, request delay, and which URLs get re-checked all come from
+`config.toml` and only from there — see [Configuration](#configuration).
 
 All commands accept a top-level `--config PATH` to point at a `config.toml` other than
-the one discovered by walking up from the current directory.
+the one discovered by walking up from the current directory. That is also how you keep
+several profiles side by side (a gentler `config.polite.toml`, say) now that per-run
+flags are gone. It is a **global** flag, so it goes *before* the subcommand.
 
 ### Re-crawling a single site from scratch
 
 When a site's stored crawl is spoilt — e.g. an old run drowned in a spider trap and never
-reached the real content — reset just that site and re-crawl it in isolation:
+reached the real content — reset just that site and re-crawl it in isolation.
+
+A small institutional server drops connections under an aggressive crawl, so this one
+wants gentler settings than the corpus-wide defaults. Tuning lives only in `config.toml`,
+so either edit `[crawl]` in place and put it back afterwards, or keep a second file for
+the job:
+
+```toml
+# config.recover.toml — same [[sites]] and [storage] as config.toml, gentler [crawl].
+[crawl]
+workers_per_host = 4          # instead of 16
+request_delay_seconds = 0.5   # instead of 0.0
+recheck = "new-only"          # after a reset every row is new, so this crawls it all
+user_agent = "..."            # keep in sync with config.toml
+```
 
 ```sh
 # 1. Delete the site's queue / crawl_log / documents / links rows so it re-seeds clean.
 #    The content-addressed raw_docs cache is kept, so unchanged pages are not re-extracted.
 uv run dhbw-scraper reset-site --site villingen_schwenningen
 
-# 2. Re-crawl ONLY that site, politely. On a fresh reset every row is new, so the default
-#    recheck=new-only crawls the whole site. Known traps (buchen.*, …) are blocked and the
-#    per-host cap is a backstop; --request-delay + a lower --workers-per-host avoid the
-#    connection failures an aggressive crawl provokes on a small institutional server.
-uv run dhbw-scraper fetch --site villingen_schwenningen --workers-per-host 4 --request-delay 0.5
+# 2. Re-crawl ONLY that site, with the gentler profile. Known traps (buchen.*, …) are
+#    denylisted outright; crawl.max_pages_per_host is the backstop against unknown ones.
+#    --config is global, so it goes before the subcommand.
+uv run dhbw-scraper --config config.recover.toml fetch --site villingen_schwenningen
 
 # 3. Extract the new content, then confirm the recovery.
 uv run dhbw-scraper extract
@@ -261,7 +266,7 @@ uv run pytest
 ## Change detection
 
 Re-running `fetch` is cheap and safe. How much gets re-checked is controlled by
-`crawl.recheck` (or the `--changed-only`/`--full` flags, see above):
+`crawl.recheck`, and only by it — there is no flag for this:
 
 - `recheck = "all"` (default) — every already-present URL is re-checked each run.
 - `recheck = "changed-only"` — only URLs the sitemap `<lastmod>` scan flags as candidates
@@ -270,8 +275,12 @@ Re-running `fetch` is cheap and safe. How much gets re-checked is controlled by
   in the store is never re-downloaded even if a change signal fires. Newly-discovered
   links are still followed, so the crawl cascades forward into all new pages. Use this to
   drain remaining un-fetched work after a partial crawl without re-checking the corpus.
+- `recheck = "force-full"` — like `"all"`, but the stored `ETag`/`Last-Modified`
+  validators are **not** sent, so every re-checked URL is downloaded in full instead of
+  revalidating to a cheap `304`. Expensive by design: reach for it to repair a corpus
+  whose stored bytes are suspect, not for routine re-runs.
 
-Either way, a re-check is a conditional GET:
+Otherwise a re-check is a conditional GET:
 
 - Every re-checked URL sends its stored `ETag`/`Last-Modified` validators; a `304`
   response short-circuits to `unchanged` with no download.
@@ -281,8 +290,9 @@ Either way, a re-check is a conditional GET:
 - Sitemaps are re-scanned on every `fetch` and their `<lastmod>` timestamps drive
   re-queueing: a URL whose sitemap `lastmod` has advanced is reset to `pending` even if
   its HTTP validators didn't trip.
-- `--full` skips sending the stored validators altogether, so every re-checked URL is
-  downloaded fresh regardless of whether the server would have answered `304`.
+- `recheck = "force-full"` skips sending the stored validators altogether, so every
+  re-checked URL is downloaded fresh regardless of whether the server would have
+  answered `304`.
 - A `404`/`410` response marks the URL (and its materialized document, if any) as
   removed (`present = 0`) rather than deleting it — so `delta` can report the deletion
   to downstream consumers.
@@ -354,13 +364,26 @@ stay in sync without re-processing the whole corpus each time.
 
 ## Configuration
 
-All knobs live in [`config.toml`](./config.toml): the two `[[sites]]` (`seed_url`,
-`allowed_domain`), `[crawl]` (sitemap use, `max_pages`, `request_delay_seconds`,
-`respect_robots`, `workers_per_host`, `recheck`, `user_agent`), `[extract]` (`workers`,
-`min_words`), and `[storage]` (`db_file`, `raw_dir`). `workers_per_host` and `recheck`
-can be overridden per-run without editing the file via the `fetch`/`run` flags
-`--workers-per-host`, `--changed-only`, and `--full` (see [Usage](#usage) and
-[Change detection](#change-detection) above).
+[`config.toml`](./config.toml) is the **single source of truth** for every tuning value.
+No CLI flag overrides any of it: the flags that remain select *what* to act on (`--site`,
+`--since`, `-o`) or *which file* to read (`--config PATH`).
+
+- `[[sites]]` — `name`, `seed_url`, `allowed_domain` (one block per site).
+- `[crawl]` — `use_sitemap`, `max_pages`, `max_pages_per_host`, `request_delay_seconds`,
+  `respect_robots` (inert — see above), `workers_per_host`, `recheck`, `user_agent`.
+- `[extract]` — `workers`, `min_words`.
+- `[dedup]` — `batch_size`, `vacuum` (used by `dedup`, and by the pass `run` ends with).
+  Optional: every key defaults.
+- `[storage]` — `db_file`, `raw_dir`.
+
+Values are range-checked at load, so a typo fails immediately and by name instead of
+being silently floored deep inside the engine: `workers_per_host` and `extract.workers`
+must be `>= 1`, `request_delay_seconds >= 0`, and the page/word budgets must be
+non-negative — `0` means *unlimited* for `max_pages`/`max_pages_per_host`, so it stays
+legal.
+
+To vary a run without editing the file, copy it and pass `--config PATH` — see
+[Re-crawling a single site from scratch](#re-crawling-a-single-site-from-scratch) above.
 
 ## Project layout
 
