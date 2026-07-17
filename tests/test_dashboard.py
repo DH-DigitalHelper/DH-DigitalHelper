@@ -26,11 +26,18 @@ def _doc(conn, url, *, site="alpha.de", words=120):
     )
 
 
+def _uid(conn, url):
+    """Intern a URL into the `urls` dictionary and return its id (mirrors the Rust
+    writer's interner)."""
+    conn.execute("INSERT OR IGNORE INTO urls(url) VALUES (?)", (url,))
+    return conn.execute("SELECT id FROM urls WHERE url=?", (url,)).fetchone()[0]
+
+
 def _link(conn, src, dst, *, in_domain, site="alpha.de", depth=1):
     conn.execute(
-        "INSERT OR IGNORE INTO links (src_url, dst_url, site, in_domain, depth, first_seen_at) "
+        "INSERT OR IGNORE INTO links (src_id, dst_id, site, in_domain, depth, first_seen_at) "
         "VALUES (?,?,?,?,?,?)",
-        (src, dst, site, 1 if in_domain else 0, depth, NOW),
+        (_uid(conn, src), _uid(conn, dst), site, 1 if in_domain else 0, depth, NOW),
     )
 
 

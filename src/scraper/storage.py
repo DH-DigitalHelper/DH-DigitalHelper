@@ -113,22 +113,32 @@ CREATE INDEX IF NOT EXISTS idx_documents_present ON documents(present);
 -- DB the documents table lacks text_sha256 until _migrate's ALTER adds it, so a
 -- CREATE INDEX in this batch (which runs before _migrate) would fail.
 
--- Outbound link graph: every <a href> a crawled page emits, in-domain and
--- external alike. Written by the Rust Phase-1 crawler (see src/scrape-engine/storage.rs,
--- which keeps this DDL in sync). Following stays in-domain (in_domain=1 marks a
--- follow candidate); external/cross-campus edges are recorded, never crawled.
--- This is additive: no Phase-2 query reads it. queue.discovered_from is kept as
--- the first-discoverer for back-compat.
+-- URL dictionary: every distinct endpoint that appears in `links`, stored once.
+-- `links` references these ids (no declared FK, matching the rest of the schema,
+-- e.g. documents.content_sha256). Written by the Rust Phase-1 writer's interner and
+-- read back by the Phase-2 dashboard, which JOINs `urls` to recover src/dst text.
+CREATE TABLE IF NOT EXISTS urls (
+    id  INTEGER PRIMARY KEY,
+    url TEXT NOT NULL UNIQUE
+);
+
+-- Outbound link graph: every <a href> a crawled page emits, in-domain and external
+-- alike. src_id/dst_id reference urls(id) (interned to cut the multi-million-edge
+-- graph from storing full URL text twice per row + in the PK + dst index). Written by
+-- the Rust Phase-1 crawler (see src/scrape-engine/storage.rs, which keeps this DDL in
+-- sync). Following stays in-domain (in_domain=1 marks a follow candidate);
+-- external/cross-campus edges are recorded, never crawled. Read back by the Phase-2
+-- dashboard via urls JOINs. queue.discovered_from keeps the first-discoverer.
 CREATE TABLE IF NOT EXISTS links (
-    src_url       TEXT NOT NULL,
-    dst_url       TEXT NOT NULL,
+    src_id        INTEGER NOT NULL,
+    dst_id        INTEGER NOT NULL,
     site          TEXT NOT NULL,
     in_domain     INTEGER NOT NULL,
     depth         INTEGER NOT NULL,
     first_seen_at TEXT NOT NULL,
-    PRIMARY KEY (src_url, dst_url)
+    PRIMARY KEY (src_id, dst_id)
 );
-CREATE INDEX IF NOT EXISTS idx_links_dst ON links(dst_url);
+CREATE INDEX IF NOT EXISTS idx_links_dst  ON links(dst_id);
 CREATE INDEX IF NOT EXISTS idx_links_site ON links(site);
 """
 

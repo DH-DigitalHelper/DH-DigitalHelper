@@ -10,6 +10,7 @@
 //! `pending -> done/error/removed` transitions are persisted. A crash therefore
 //! re-does only the pages that were in flight, which is idempotent.
 
+use std::collections::HashMap;
 use std::io;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -113,19 +114,30 @@ CREATE INDEX IF NOT EXISTS idx_documents_present ON documents(present);
 -- "no such column" -- and take every statement after it down with it. Mirrors
 -- the same reasoning in storage.py::SCHEMA.
 
--- Outbound link graph: every <a href> a crawled page emits, in-domain and
--- external alike. Following stays in-domain (in_domain=1 marks a follow
--- candidate); external/cross-campus edges are recorded, never crawled.
+-- URL dictionary: every distinct endpoint that appears in `links`, stored once.
+-- `links` references these ids (no declared FK, matching the rest of the schema,
+-- e.g. documents.content_sha256). Written by the Rust Phase-1 writer's interner and
+-- read back by the Phase-2 dashboard, which JOINs `urls` to recover src/dst text.
+CREATE TABLE IF NOT EXISTS urls (
+    id  INTEGER PRIMARY KEY,
+    url TEXT NOT NULL UNIQUE
+);
+
+-- Outbound link graph: every <a href> a crawled page emits, in-domain and external
+-- alike. src_id/dst_id reference urls(id) (interned to cut the multi-million-edge
+-- graph from storing full URL text twice per row + in the PK + dst index). Following
+-- stays in-domain (in_domain=1 marks a follow candidate); external/cross-campus edges
+-- are recorded, never crawled. Phase-2 reads this via urls JOINs.
 CREATE TABLE IF NOT EXISTS links (
-    src_url       TEXT NOT NULL,
-    dst_url       TEXT NOT NULL,
+    src_id        INTEGER NOT NULL,
+    dst_id        INTEGER NOT NULL,
     site          TEXT NOT NULL,
     in_domain     INTEGER NOT NULL,
     depth         INTEGER NOT NULL,
     first_seen_at TEXT NOT NULL,
-    PRIMARY KEY (src_url, dst_url)
+    PRIMARY KEY (src_id, dst_id)
 );
-CREATE INDEX IF NOT EXISTS idx_links_dst ON links(dst_url);
+CREATE INDEX IF NOT EXISTS idx_links_dst  ON links(dst_id);
 CREATE INDEX IF NOT EXISTS idx_links_site ON links(site);
 "#;
 
@@ -482,16 +494,69 @@ pub fn enqueue_many(conn: &Connection, rows: &[QueueInsert]) -> rusqlite::Result
     Ok(inserted)
 }
 
-/// INSERT OR IGNORE the full outbound edge set for one page.
-pub fn insert_links(conn: &Connection, edges: &[LinkEdge]) -> rusqlite::Result<()> {
-    let mut stmt = conn.prepare(
-        "INSERT OR IGNORE INTO links (src_url, dst_url, site, in_domain, depth, first_seen_at)
+/// Interns URL strings to `urls` ids, caching the mapping in memory for the lifetime
+/// of a run so repeated endpoints (a homepage that is the `dst` of thousands of edges;
+/// a `src` repeated across all its own edges) don't re-hit the DB. Owned by the single
+/// writer `Coordinator` (see writer.rs).
+///
+/// Rollback safety: the cache only ever grows from *committed* `urls` rows. A `urls`
+/// row inserted in a batch that later rolls back dies with the process, because any
+/// write error aborts the whole run (see `writer.rs::apply_completes`). So a mid-batch
+/// rollback can never leave an observed cache/DB divergence, and the next run starts
+/// fresh, repopulating the cache from committed rows via the SELECT fallback.
+#[derive(Default)]
+pub struct UrlInterner {
+    cache: HashMap<String, i64>,
+}
+
+impl UrlInterner {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Resolve `url` to its `urls.id`, inserting it if new. `prepare_cached` so the
+    /// two statements compile once and reuse across every batch of the run.
+    fn intern(&mut self, conn: &Connection, url: &str) -> rusqlite::Result<i64> {
+        if let Some(&id) = self.cache.get(url) {
+            return Ok(id);
+        }
+        // Fast path: INSERT ... RETURNING gives the id when the row is new. On a
+        // conflict (already interned) it returns no row, so fall back to a SELECT --
+        // which fires at most once per distinct URL per run thanks to the cache.
+        let mut ins = conn.prepare_cached(
+            "INSERT INTO urls(url) VALUES(?1) ON CONFLICT(url) DO NOTHING RETURNING id",
+        )?;
+        let id = match ins.query_row([url], |r| r.get::<_, i64>(0)) {
+            Ok(id) => id,
+            Err(rusqlite::Error::QueryReturnedNoRows) => {
+                let mut sel = conn.prepare_cached("SELECT id FROM urls WHERE url = ?1")?;
+                sel.query_row([url], |r| r.get(0))?
+            }
+            Err(e) => return Err(e),
+        };
+        self.cache.insert(url.to_string(), id);
+        Ok(id)
+    }
+}
+
+/// INSERT OR IGNORE the full outbound edge set for one page, interning each endpoint
+/// to a `urls` id first. Runs on the caller's transaction, so the `urls` rows land in
+/// the same atomic batch as the edges.
+pub fn insert_links(
+    conn: &Connection,
+    interner: &mut UrlInterner,
+    edges: &[LinkEdge],
+) -> rusqlite::Result<()> {
+    let mut stmt = conn.prepare_cached(
+        "INSERT OR IGNORE INTO links (src_id, dst_id, site, in_domain, depth, first_seen_at)
          VALUES (?, ?, ?, ?, ?, ?)",
     )?;
     for e in edges {
+        let src_id = interner.intern(conn, &e.src)?;
+        let dst_id = interner.intern(conn, &e.dst)?;
         stmt.execute(params![
-            e.src,
-            e.dst,
+            src_id,
+            dst_id,
             e.site,
             e.in_domain as i64,
             e.depth,
@@ -663,6 +728,101 @@ mod tests {
             cols.iter().any(|c| c == "text_sha256"),
             "documents is missing text_sha256; columns = {cols:?}"
         );
+    }
+
+    /// A fresh DB must come up with the `urls` dictionary and an id-based `links`
+    /// table -- never the legacy text columns. Parity partner to
+    /// `documents_schema_has_text_sha256_column`.
+    #[test]
+    fn links_schema_is_id_based() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_db(&conn).unwrap();
+
+        let urls_cols: Vec<String> = conn
+            .prepare("PRAGMA table_info(urls)")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
+        assert!(urls_cols.iter().any(|c| c == "id"), "urls needs id");
+        assert!(urls_cols.iter().any(|c| c == "url"), "urls needs url");
+
+        let cols: Vec<String> = conn
+            .prepare("PRAGMA table_info(links)")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
+        assert!(
+            cols.iter().any(|c| c == "src_id"),
+            "links needs src_id; got {cols:?}"
+        );
+        assert!(
+            cols.iter().any(|c| c == "dst_id"),
+            "links needs dst_id; got {cols:?}"
+        );
+        assert!(
+            !cols.iter().any(|c| c == "src_url"),
+            "links must not keep the legacy src_url; got {cols:?}"
+        );
+    }
+
+    /// `insert_links` interns each endpoint once and writes id edges; re-inserting the
+    /// same edge is a PK no-op, and the external edge is recoverable by dst URL.
+    #[test]
+    fn insert_links_interns_urls_and_writes_id_edges() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_db(&conn).unwrap();
+        let mut interner = UrlInterner::new();
+        let edges = vec![
+            LinkEdge {
+                src: "http://a.test/1".into(),
+                dst: "http://a.test/2".into(),
+                site: "a.test".into(),
+                in_domain: true,
+                depth: 1,
+                first_seen_at: "2026-07-17T00:00:00".into(),
+            },
+            LinkEdge {
+                src: "http://a.test/1".into(),
+                dst: "http://ext.test/x".into(),
+                site: "a.test".into(),
+                in_domain: false,
+                depth: 1,
+                first_seen_at: "2026-07-17T00:00:00".into(),
+            },
+        ];
+        insert_links(&conn, &mut interner, &edges).unwrap();
+
+        // 3 distinct endpoints, 2 edges.
+        let n_urls: i64 = conn
+            .query_row("SELECT COUNT(*) FROM urls", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(n_urls, 3);
+        let n_edges: i64 = conn
+            .query_row("SELECT COUNT(*) FROM links", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(n_edges, 2);
+
+        // The external edge is recoverable by dst URL, with in_domain=0.
+        let in_dom: i64 = conn
+            .query_row(
+                "SELECT l.in_domain FROM links l JOIN urls d ON d.id = l.dst_id
+                 WHERE d.url = 'http://ext.test/x'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(in_dom, 0);
+
+        // Re-inserting the same edges is a no-op (INSERT OR IGNORE on the PK).
+        insert_links(&conn, &mut interner, &edges).unwrap();
+        let n_edges2: i64 = conn
+            .query_row("SELECT COUNT(*) FROM links", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(n_edges2, 2);
     }
 
     fn seed_checked_row(conn: &Connection) {

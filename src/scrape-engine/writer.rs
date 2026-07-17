@@ -280,6 +280,10 @@ pub struct Coordinator {
     sites: Vec<SiteState>,
     progress: ProgressSink,
     last_paint: Option<std::time::Instant>,
+    /// URL -> `urls.id` cache, shared across every batch of this run so repeated
+    /// endpoints don't re-hit the DB. Lives here (not in `insert_links`) precisely so
+    /// it survives between batches.
+    url_ids: storage::UrlInterner,
 }
 
 impl Coordinator {
@@ -319,6 +323,7 @@ impl Coordinator {
             sites,
             progress,
             last_paint: None,
+            url_ids: storage::UrlInterner::new(),
         }
     }
 
@@ -407,9 +412,12 @@ impl Coordinator {
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         {
             let c: &Connection = &tx;
+            // `&mut self.url_ids` is a disjoint field borrow from `self.conn` (already
+            // moved into `tx`), same as the `self.sites[..]` reads below it.
+            let interner = &mut self.url_ids;
             for b in &completes {
                 let site_name = self.sites[b.site_idx].name.clone();
-                apply_one(c, &self.run_id, &site_name, b)?;
+                apply_one(c, interner, &self.run_id, &site_name, b)?;
             }
         }
         tx.commit()?;
@@ -475,8 +483,15 @@ impl Coordinator {
     }
 }
 
-/// Apply one page's writes within an open transaction `c`.
-fn apply_one(c: &Connection, run_id: &str, site: &str, b: &PageBatch) -> rusqlite::Result<()> {
+/// Apply one page's writes within an open transaction `c`. `interner` is the run's
+/// shared URL->id cache, used when writing edges.
+fn apply_one(
+    c: &Connection,
+    interner: &mut storage::UrlInterner,
+    run_id: &str,
+    site: &str,
+    b: &PageBatch,
+) -> rusqlite::Result<()> {
     match &b.mark {
         UrlMark::Checked {
             http_status,
@@ -522,7 +537,7 @@ fn apply_one(c: &Connection, run_id: &str, site: &str, b: &PageBatch) -> rusqlit
         storage::enqueue_many(c, &rows)?;
     }
     if !b.edges.is_empty() {
-        storage::insert_links(c, &b.edges)?;
+        storage::insert_links(c, interner, &b.edges)?;
     }
     if let Some(rd) = &b.raw_doc {
         let is_new =

@@ -146,7 +146,8 @@ def test_run_fetch_crawls_and_writes_shared_db(tmp_path, server):
         assert n == 0, absent
 
     ext = conn.execute(
-        "SELECT in_domain FROM links WHERE dst_url=?", ("http://example.invalid/x",)
+        "SELECT l.in_domain FROM links l JOIN urls d ON d.id = l.dst_id WHERE d.url=?",
+        ("http://example.invalid/x",),
     ).fetchone()
     assert ext is not None and ext["in_domain"] == 0
 

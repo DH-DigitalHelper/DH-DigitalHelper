@@ -261,7 +261,9 @@ fn crawls_cascade_records_edges_and_seeds_from_sitemap() {
     // (in_domain=0) and the trap (recorded but never followed).
     let ext: i64 = conn
         .query_row(
-            "SELECT in_domain FROM links WHERE src_url=? AND dst_url=?",
+            "SELECT l.in_domain FROM links l
+                 JOIN urls s ON s.id = l.src_id JOIN urls d ON d.id = l.dst_id
+             WHERE s.url=? AND d.url=?",
             ["http://site.test/startseite", "http://external.test/x"],
             |r| r.get(0),
         )
@@ -269,7 +271,7 @@ fn crawls_cascade_records_edges_and_seeds_from_sitemap() {
     assert_eq!(ext, 0, "external edge recorded with in_domain=0");
     let trap: i64 = conn
         .query_row(
-            "SELECT COUNT(*) FROM links WHERE dst_url=?",
+            "SELECT COUNT(*) FROM links l JOIN urls d ON d.id = l.dst_id WHERE d.url=?",
             ["http://site.test/calendar/view.php?view=month&time=1"],
             |r| r.get(0),
         )
@@ -343,7 +345,8 @@ fn raw_cache_write_failure_never_orphans_a_page() {
     );
     let edges: i64 = conn
         .query_row(
-            "SELECT COUNT(*) FROM links WHERE src_url = 'http://site.test/startseite'",
+            "SELECT COUNT(*) FROM links l JOIN urls s ON s.id = l.src_id
+             WHERE s.url = 'http://site.test/startseite'",
             [],
             |r| r.get(0),
         )
@@ -421,7 +424,8 @@ fn off_domain_redirect_content_is_not_stored() {
     // ... and no links from the foreign page leak into our graph.
     let edges: i64 = conn
         .query_row(
-            "SELECT COUNT(*) FROM links WHERE src_url='http://site.test/go'",
+            "SELECT COUNT(*) FROM links l JOIN urls s ON s.id = l.src_id
+             WHERE s.url='http://site.test/go'",
             [],
             |r| r.get(0),
         )
@@ -713,7 +717,9 @@ fn a_304_re_emits_edges_from_the_cached_blob() {
     );
     let seed_to_a: i64 = conn
         .query_row(
-            "SELECT COUNT(*) FROM links WHERE src_url=? AND dst_url='http://site.test/a'",
+            "SELECT COUNT(*) FROM links l
+                 JOIN urls s ON s.id = l.src_id JOIN urls d ON d.id = l.dst_id
+             WHERE s.url=? AND d.url='http://site.test/a'",
             [seed],
             |r| r.get(0),
         )

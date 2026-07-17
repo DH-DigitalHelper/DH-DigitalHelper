@@ -106,16 +106,21 @@ def test_reset_site_deletes_only_target_site_and_keeps_raw_docs():
         {"title": "B", "text": "beta " * 60, "markdown": "mdB", "word_count": 60},
         NOW,
     )
+
+    def _uid(u):
+        conn.execute("INSERT OR IGNORE INTO urls(url) VALUES (?)", (u,))
+        return conn.execute("SELECT id FROM urls WHERE url=?", (u,)).fetchone()[0]
+
     with st.write_txn(conn):
         conn.execute(
-            "INSERT INTO links (src_url, dst_url, site, in_domain, depth, first_seen_at)"
+            "INSERT INTO links (src_id, dst_id, site, in_domain, depth, first_seen_at)"
             " VALUES (?,?,?,?,?,?)",
-            ("https://a/1", "https://a/2", "a.de", 1, 1, NOW),
+            (_uid("https://a/1"), _uid("https://a/2"), "a.de", 1, 1, NOW),
         )
         conn.execute(
-            "INSERT INTO links (src_url, dst_url, site, in_domain, depth, first_seen_at)"
+            "INSERT INTO links (src_id, dst_id, site, in_domain, depth, first_seen_at)"
             " VALUES (?,?,?,?,?,?)",
-            ("https://b/1", "https://b/2", "b.de", 1, 1, NOW),
+            (_uid("https://b/1"), _uid("https://b/2"), "b.de", 1, 1, NOW),
         )
     # Content-addressed raw cache (NOT site-scoped) must survive the reset.
     st.upsert_raw_doc(conn, "h1", "html", "/raw/h1.html", 10, NOW)

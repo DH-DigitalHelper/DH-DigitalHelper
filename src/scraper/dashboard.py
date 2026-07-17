@@ -251,13 +251,14 @@ def collect_analysis(conn, *, sites, min_words: int, db_path: Path) -> dict:
         "total": links_total,
         "in_domain": one("SELECT count(*) FROM links WHERE in_domain=1"),
         "external": one("SELECT count(*) FROM links WHERE in_domain=0"),
-        "distinct_src": one("SELECT count(DISTINCT src_url) FROM links"),
-        "distinct_dst": one("SELECT count(DISTINCT dst_url) FROM links"),
+        "distinct_src": one("SELECT count(DISTINCT src_id) FROM links"),
+        "distinct_dst": one("SELECT count(DISTINCT dst_id) FROM links"),
     }
     links["docs_no_out"] = (
         one(
             "SELECT count(*) FROM documents d WHERE present=1 "
-            "AND NOT EXISTS (SELECT 1 FROM links l WHERE l.src_url=d.url)"
+            "AND NOT EXISTS (SELECT 1 FROM urls u JOIN links l ON l.src_id=u.id "
+            "WHERE u.url=d.url)"
         )
         if links_total
         else docs_present
@@ -271,7 +272,11 @@ def collect_analysis(conn, *, sites, min_words: int, db_path: Path) -> dict:
     edge_w: Counter = Counter()  # (src_host, dst_host) -> weight, cross-host only
     out_deg, in_deg, self_w = Counter(), Counter(), Counter()
     crawled: set[str] = set()
-    for src, dst, in_dom in q("SELECT src_url, dst_url, in_domain FROM links"):
+    for src, dst, in_dom in q(
+        "SELECT s.url, d.url, l.in_domain FROM links l "
+        "JOIN urls s ON s.id = l.src_id "
+        "JOIN urls d ON d.id = l.dst_id"
+    ):
         sh, dh = _host(src), _host(dst)
         if not sh or not dh:
             continue
