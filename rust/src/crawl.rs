@@ -360,7 +360,9 @@ fn build_batch(
                 site_idx,
                 url: item.url.clone(),
                 now,
-                mark: UrlMark::Removed,
+                mark: UrlMark::Removed {
+                    http_status: status,
+                },
                 followable: Vec::new(),
                 edges: Vec::new(),
                 raw_doc: None,

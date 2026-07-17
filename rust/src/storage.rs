@@ -466,7 +466,12 @@ pub fn mark_url_error(
     Ok(())
 }
 
-pub fn mark_url_removed(conn: &Connection, url: &str, now: &str) -> rusqlite::Result<()> {
+pub fn mark_url_removed(
+    conn: &Connection,
+    url: &str,
+    http_status: i64,
+    now: &str,
+) -> rusqlite::Result<()> {
     // Clearing the validators is load-bearing, not tidiness. Keeping them let a
     // removed page that a sitemap <lastmod> advance re-pended still send
     // If-None-Match and get a 304 -- and the 304 branch marks present:true while
@@ -476,10 +481,10 @@ pub fn mark_url_removed(conn: &Connection, url: &str, now: &str) -> rusqlite::Re
     // which lands on the 2xx path where `!present` makes content_outcome report
     // `changed`, re-emitting the raw-doc hand-off and resurrecting the document.
     conn.execute(
-        "UPDATE queue SET work_state='done', present=0, http_status=404,
+        "UPDATE queue SET work_state='done', present=0, http_status=?,
              etag=NULL, last_modified=NULL,
              last_checked_at=?, last_changed_at=? WHERE url=?",
-        params![now, now, url],
+        params![http_status, now, now, url],
     )?;
     Ok(())
 }
@@ -759,7 +764,7 @@ mod tests {
         let conn = Connection::open_in_memory().unwrap();
         seed_checked_row(&conn);
 
-        mark_url_removed(&conn, "https://x.de/p", "2026-07-17T00:00:00").unwrap();
+        mark_url_removed(&conn, "https://x.de/p", 404, "2026-07-17T00:00:00").unwrap();
 
         let (etag, lm) = validators(&conn);
         assert_eq!(

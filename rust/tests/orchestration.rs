@@ -38,6 +38,12 @@ impl Page {
         self.final_url = Some(final_url.into());
         self
     }
+
+    /// Respond with this status instead of 200.
+    fn status(mut self, status: u16) -> Self {
+        self.status = status;
+        self
+    }
 }
 
 #[derive(Clone)]
@@ -528,6 +534,50 @@ fn empty_body_2xx_keeps_previously_stored_content() {
         )
         .unwrap();
     assert_eq!(orphans, 0, "the kept digest must still resolve to its blob");
+}
+
+/// 410 Gone is a stronger, permanent signal than 404, but both were collapsed to
+/// http_status=404 on the queue row, so the stored state could not distinguish
+/// "deliberately withdrawn" from "missing right now". crawl_log kept the true
+/// status all along -- only the queue row lied about it.
+#[test]
+fn gone_410_is_recorded_as_410_not_404() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut cfg = config(tmp.path());
+    cfg.use_sitemap = false;
+    let client = MockClient::from_pages(vec![
+        (
+            "http://site.test/startseite",
+            Page::html(r#"<html><body>seed <a href="/gone">g</a></body></html>"#),
+        ),
+        (
+            "http://site.test/gone",
+            Page::html("<html><body>gone for good</body></html>").status(410),
+        ),
+    ]);
+
+    run_with_client(
+        cfg,
+        "run-410".into(),
+        false,
+        ProgressSink::new(None),
+        client,
+    )
+    .expect("crawl run");
+
+    let conn = rusqlite::Connection::open(tmp.path().join("db.sqlite3")).unwrap();
+    let (status, present): (i64, i64) = conn
+        .query_row(
+            "SELECT http_status, present FROM queue WHERE url='http://site.test/gone'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(
+        status, 410,
+        "a 410 must be stored as 410, not flattened to 404"
+    );
+    assert_eq!(present, 0, "410 still removes the page");
 }
 
 #[test]

@@ -38,7 +38,11 @@ pub enum UrlMark {
         changed: bool,
         present: bool,
     },
-    Removed,
+    /// The page is gone. Carries the status that said so (404 vs 410), since the
+    /// two mean different things and the queue row is the durable record.
+    Removed {
+        http_status: i64,
+    },
     Error {
         http_status: Option<i64>,
     },
@@ -458,8 +462,8 @@ fn apply_one(c: &Connection, run_id: &str, site: &str, b: &PageBatch) -> rusqlit
                 &b.now,
             )?;
         }
-        UrlMark::Removed => {
-            storage::mark_url_removed(c, &b.url, &b.now)?;
+        UrlMark::Removed { http_status } => {
+            storage::mark_url_removed(c, &b.url, *http_status, &b.now)?;
             storage::mark_document_removed(c, &b.url, &b.now)?;
         }
         UrlMark::Error { http_status } => {
