@@ -161,7 +161,9 @@ fn crawls_cascade_records_edges_and_seeds_from_sitemap() {
         "http://site.test/calendar/view.php?view=month&time=1",
     ] {
         let n: i64 = conn
-            .query_row("SELECT COUNT(*) FROM queue WHERE url=?", [absent], |r| r.get(0))
+            .query_row("SELECT COUNT(*) FROM queue WHERE url=?", [absent], |r| {
+                r.get(0)
+            })
             .unwrap();
         assert_eq!(n, 0, "{absent} must not be enqueued");
     }
@@ -171,10 +173,7 @@ fn crawls_cascade_records_edges_and_seeds_from_sitemap() {
     let ext: i64 = conn
         .query_row(
             "SELECT in_domain FROM links WHERE src_url=? AND dst_url=?",
-            [
-                "http://site.test/startseite",
-                "http://external.test/x",
-            ],
+            ["http://site.test/startseite", "http://external.test/x"],
             |r| r.get(0),
         )
         .unwrap();
@@ -203,13 +202,62 @@ fn crawls_cascade_records_edges_and_seeds_from_sitemap() {
     assert_eq!(files, 5);
 }
 
+/// A raw-cache write failure must never leave a page claiming a stored digest it
+/// has no bytes for: `queue.content_sha256` is the change-detection key, so
+/// advancing it without a `raw_docs` row makes the page read as Unchanged forever
+/// while Phase 2 never sees it — a silent, permanent hole in the corpus.
+#[test]
+fn raw_cache_write_failure_never_orphans_a_page() {
+    let tmp = tempfile::tempdir().unwrap();
+    // Put a regular file exactly where RawCache must create its directory, so
+    // every `create_dir_all` inside RawCache::write fails deterministically.
+    std::fs::write(tmp.path().join("raw"), b"not a directory").unwrap();
+
+    let counts = run_with_client(
+        config(tmp.path()),
+        "run-rawfail".into(),
+        false,
+        ProgressSink::new(None),
+        fixture(),
+    )
+    .expect("a raw-write failure must not abort the whole crawl");
+
+    let conn = rusqlite::Connection::open(tmp.path().join("db.sqlite3")).unwrap();
+    let orphans: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM queue q
+             WHERE q.present = 1 AND q.content_sha256 IS NOT NULL
+               AND NOT EXISTS (
+                   SELECT 1 FROM raw_docs r WHERE r.content_sha256 = q.content_sha256
+               )",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(
+        orphans, 0,
+        "a page whose bytes were never cached must not advertise a stored digest"
+    );
+
+    // And the failure must be loud rather than counted as a successful fetch.
+    let c = &counts["site.test"];
+    assert_eq!(c.new, 0, "nothing was stored, so nothing is 'new'");
+    assert!(c.error > 0, "raw-write failures must surface as errors");
+}
+
 #[test]
 fn max_pages_caps_total_fetches() {
     let tmp = tempfile::tempdir().unwrap();
     let mut cfg = config(tmp.path());
     cfg.max_pages = 2;
-    let counts = run_with_client(cfg, "run-cap".into(), false, ProgressSink::new(None), fixture())
-        .expect("crawl run");
+    let counts = run_with_client(
+        cfg,
+        "run-cap".into(),
+        false,
+        ProgressSink::new(None),
+        fixture(),
+    )
+    .expect("crawl run");
     assert_eq!(counts["site.test"].fetched, 2, "max_pages caps fetches");
 }
 
@@ -223,9 +271,14 @@ fn second_run_new_only_fetches_nothing() {
     // A new-only re-run must not re-fetch any already-checked URL.
     let mut cfg = config(tmp.path());
     cfg.recheck = "new-only".into();
-    let second =
-        run_with_client(cfg, "run-2".into(), false, ProgressSink::new(None), fixture())
-            .expect("crawl run");
+    let second = run_with_client(
+        cfg,
+        "run-2".into(),
+        false,
+        ProgressSink::new(None),
+        fixture(),
+    )
+    .expect("crawl run");
     assert_eq!(second["site.test"].fetched, 0, "nothing new to fetch");
 }
 
@@ -269,11 +322,19 @@ fn per_host_budget_caps_single_host() {
         ("http://good.test/a", "text/html", "<body>ga</body>"),
         ("http://good.test/b", "text/html", "<body>gb</body>"),
     ]);
-    let counts =
-        run_with_client(cfg, "run-perhost".into(), false, ProgressSink::new(None), client)
-            .expect("crawl run");
+    let counts = run_with_client(
+        cfg,
+        "run-perhost".into(),
+        false,
+        ProgressSink::new(None),
+        client,
+    )
+    .expect("crawl run");
     // seed hub(1) + flood(2, capped) + good(2) = 5
-    assert_eq!(counts["test"].fetched, 5, "per-host cap limits total fetched");
+    assert_eq!(
+        counts["test"].fetched, 5,
+        "per-host cap limits total fetched"
+    );
 
     let conn = rusqlite::Connection::open(tmp.path().join("db.sqlite3")).unwrap();
     let done = |like: &str| -> i64 {
@@ -345,8 +406,14 @@ fn frontier_load_drops_preseeded_trap() {
             "<body>studium</body>",
         ),
     ]);
-    run_with_client(cfg, "run-trap".into(), false, ProgressSink::new(None), client)
-        .expect("crawl run");
+    run_with_client(
+        cfg,
+        "run-trap".into(),
+        false,
+        ProgressSink::new(None),
+        client,
+    )
+    .expect("crawl run");
 
     let conn = rusqlite::Connection::open(&db_path).unwrap();
     let logged: i64 = conn

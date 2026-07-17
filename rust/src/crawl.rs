@@ -16,7 +16,7 @@ use crate::outcome::{content_outcome, Outcome};
 use crate::progress::ProgressSink;
 use crate::storage::{self, now_iso, FrontierItem, LinkEdge, RawCache};
 use crate::writer::{
-    ClaimResult, Coordinator, CrawlLogRow, Counts, FollowCandidate, PageBatch, RawDocUpsert,
+    ClaimResult, Coordinator, Counts, CrawlLogRow, FollowCandidate, PageBatch, RawDocUpsert,
     SiteInit, UrlMark, WriterMsg,
 };
 
@@ -158,8 +158,7 @@ pub fn run_with_client<C: HttpClient>(
         // Drop any already-queued trap URLs (legacy rows, sitemap entries, pages
         // enqueued before a trap rule existed) so the block is authoritative on the
         // frontier, not only at discovery time (see the follow filter in build_batch).
-        let mut frontier =
-            storage::load_pending(&conn, &site.allowed_domain, config.only_new())?;
+        let mut frontier = storage::load_pending(&conn, &site.allowed_domain, config.only_new())?;
         frontier.retain(|it| !is_trap_url(&it.url));
         let seen = storage::all_urls(&conn, &site.allowed_domain)?;
         inits.push(SiteInit {
@@ -386,8 +385,7 @@ fn build_batch(
 
     // html | pdf
     let digest = storage::sha256_hex(&result.data);
-    let (outcome, changed) =
-        content_outcome(item.content_sha256.as_deref(), item.present, &digest);
+    let (outcome, changed) = content_outcome(item.content_sha256.as_deref(), item.present, &digest);
 
     let mut followable = Vec::new();
     let mut edges = Vec::new();
@@ -422,7 +420,35 @@ fn build_batch(
                 raw_path: path.to_string_lossy().into_owned(),
                 bytes: result.data.len() as i64,
             }),
-            Err(_) => None, // a raw-write failure downgrades to no hand-off, not a crash
+            // The digest advance and the raw hand-off must be atomic. Marking the
+            // page done with the *new* digest while its bytes are missing would
+            // make every later crawl compare equal and report Unchanged, so the
+            // page would never be re-downloaded and Phase 2 would never see it —
+            // a silent, permanent hole. Fail loudly instead and leave
+            // content_sha256 alone so the row still describes what is on disk.
+            Err(e) => {
+                return PageBatch {
+                    site_idx,
+                    url: item.url.clone(),
+                    now,
+                    mark: UrlMark::Error {
+                        http_status: Some(200),
+                    },
+                    followable: Vec::new(),
+                    edges: Vec::new(),
+                    raw_doc: None,
+                    log: CrawlLogRow {
+                        final_url: result.final_url.clone(),
+                        status: Some(200),
+                        content_type: Some(result.content_type.clone()),
+                        sha256: None,
+                        bytes: result.data.len() as i64,
+                        kind: Some(kind.to_string()),
+                        error: Some(format!("raw cache write failed: {e}")),
+                    },
+                    outcome: Outcome::Error,
+                };
+            }
         }
     } else {
         None
