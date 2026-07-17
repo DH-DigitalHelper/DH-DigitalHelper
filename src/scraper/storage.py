@@ -17,7 +17,7 @@ from itertools import groupby
 from pathlib import Path
 from urllib.parse import parse_qsl, urlsplit
 
-from . import classify, pdf_title, taxonomy
+from . import classify, lang, pdf_title, taxonomy
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS queue (
@@ -1180,3 +1180,110 @@ def run_reclassify(conn, batch_size: int = 500) -> dict:
         updated += len(rows)
         last_id = rows[-1]["id"]
     return {"reclassified": updated}
+
+
+def _backfill_title(row, cache, ext_for) -> str | None:
+    """Best title for a title-less document: for a PDF, the cached blob's cleaned
+    embedded metadata title, else -- and for HTML -- the URL basename."""
+    if row["source_type"] == "pdf":
+        path = cache.path_for(row["content_sha256"], ext_for("pdf"))
+        try:
+            data = path.read_bytes()
+        except OSError:
+            data = None
+        if data is not None:
+            from . import pdf_extract
+
+            cleaned = pdf_title.clean(pdf_extract._meta_title(data))
+            if cleaned:
+                return cleaned
+    return pdf_title.from_url(row["url"])
+
+
+def run_backfill(conn, raw_dir, batch_size: int = 500) -> dict:
+    """One-time repair of the three dead metadata fields over the *existing* corpus,
+    in one keyset-paginated pass over present ``documents``. Idempotent and it
+    **never touches ``updated_at``** (derived metadata must not spam :func:`delta`),
+    exactly like :func:`run_dedup` / :func:`run_reclassify`. Re-crawl/re-extract
+    cannot do this: none of these fields changes ``text_sha256``, so an unchanged
+    doc takes the no-op branch of :func:`_upsert_document`.
+
+    * ``lang``: detect from the stored ``text`` where NULL (skip if undetectable).
+    * ``final_url``: the true redirect target from ``crawl_log``, taken from the
+      genuine full fetch (``status=200``) of the exact bytes this doc holds
+      (``url`` + ``sha256``); the ``status=200`` filter keeps a later 304 recheck
+      (which logs ``final_url == url``) from masking the real redirect. Docs with no
+      matching full-fetch row keep ``final_url == url`` -- never NULL, never wrong.
+    * ``title``: for a title-less doc, a PDF's cleaned embedded metadata title (from
+      the re-opened cached blob) else the URL basename; HTML uses the URL basename.
+
+    Do NOT run concurrently with fetch/extract -- all three write ``documents``.
+    """
+    from . import fetch as fetchmod
+
+    cache = RawCache(raw_dir)
+
+    # Step A: (url, sha256) -> final_url, built by streaming crawl_log once (never
+    # resident) and keeping only keys that belong to a present doc. Later rows (a
+    # larger id, i.e. a more recent fetch of those exact bytes) win.
+    doc_keys = {
+        (r["url"], r["content_sha256"])
+        for r in conn.execute(
+            "SELECT url, content_sha256 FROM documents WHERE present=1"
+        )
+    }
+    final_by_key: dict = {}
+    for r in conn.execute(
+        # status=200 selects genuine full-fetch rows only. A 304 recheck also logs
+        # sha256 == the cached content digest but with final_url == the request URL
+        # (see scrape-engine/crawl.rs build_batch, 304 branch), so without this filter
+        # a later 304 would overwrite the real redirect this doc's bytes resolved to.
+        "SELECT url, sha256, final_url FROM crawl_log "
+        "WHERE sha256 IS NOT NULL AND final_url IS NOT NULL AND status = 200 "
+        "ORDER BY id"
+    ):
+        key = (r["url"], r["sha256"])
+        if key in doc_keys:
+            final_by_key[key] = r["final_url"]
+
+    # Step B: keyset pass over present docs (single O(n) forward scan by PK id).
+    counts = {"lang": 0, "final_url": 0, "titles": 0, "scanned": 0}
+    last_id = ""
+    while True:
+        rows = conn.execute(
+            "SELECT id, url, source_type, content_sha256, text, title, lang, final_url "
+            "FROM documents WHERE present=1 AND id > ? ORDER BY id LIMIT ?",
+            (last_id, batch_size),
+        ).fetchall()
+        if not rows:
+            break
+        pending = []  # (sets, id) computed outside the write lock
+        for r in rows:
+            counts["scanned"] += 1
+            sets: dict = {}
+            if r["lang"] is None:
+                detected = lang.detect(r["text"])
+                if detected is not None:
+                    sets["lang"] = detected
+            fu = final_by_key.get((r["url"], r["content_sha256"]))
+            if fu is not None and fu != r["final_url"]:
+                sets["final_url"] = fu
+            if not r["title"]:
+                new_title = _backfill_title(r, cache, fetchmod.ext_for)
+                if new_title:
+                    sets["title"] = new_title
+            if sets:
+                counts["lang"] += "lang" in sets
+                counts["final_url"] += "final_url" in sets
+                counts["titles"] += "title" in sets
+                pending.append((sets, r["id"]))
+        if pending:
+            with write_txn(conn):
+                for sets, doc_id in pending:
+                    assignments = ", ".join(f"{col}=?" for col in sets)
+                    conn.execute(
+                        f"UPDATE documents SET {assignments} WHERE id=?",
+                        (*sets.values(), doc_id),
+                    )
+        last_id = rows[-1]["id"]
+    return counts
