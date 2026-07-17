@@ -404,9 +404,15 @@ pub fn mark_url_checked(
             ],
         )?;
     } else {
+        // COALESCE, not a plain assignment: an unchanged response that simply
+        // omitted its validators must not erase the ones we already hold. These
+        // sites emit ETag/Last-Modified erratically, and dropping a stored
+        // validator costs a full body on every subsequent crawl. A response that
+        // *does* carry a validator still refreshes it.
         conn.execute(
-            "UPDATE queue SET work_state='done', http_status=?, etag=?,
-                 last_modified=?, present=?, last_checked_at=? WHERE url=?",
+            "UPDATE queue SET work_state='done', http_status=?,
+                 etag=COALESCE(?, etag), last_modified=COALESCE(?, last_modified),
+                 present=?, last_checked_at=? WHERE url=?",
             params![http_status, etag, last_modified, present as i64, now, url],
         )?;
     }
@@ -643,5 +649,82 @@ mod tests {
             cols.iter().any(|c| c == "text_sha256"),
             "documents is missing text_sha256; columns = {cols:?}"
         );
+    }
+
+    fn seed_checked_row(conn: &Connection) {
+        init_db(conn).unwrap();
+        conn.execute(
+            "INSERT INTO queue (url, site, work_state, etag, last_modified,
+                 content_sha256, present, first_seen_at)
+             VALUES ('https://x.de/p', 'x.de', 'pending', '\"v1\"',
+                 'Mon, 01 Jan 2026 00:00:00 GMT', 'aaa', 1, '2026-07-16T00:00:00')",
+            [],
+        )
+        .unwrap();
+    }
+
+    fn validators(conn: &Connection) -> (Option<String>, Option<String>) {
+        conn.query_row(
+            "SELECT etag, last_modified FROM queue WHERE url = 'https://x.de/p'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap()
+    }
+
+    /// These sites serve flaky validators: the same page answers 200 with an ETag
+    /// one run and without one the next. If the validator-less response erases the
+    /// stored ETag, the next crawl can no longer send If-None-Match and re-downloads
+    /// the full body every single run — which defeats the whole incremental design.
+    #[test]
+    fn unchanged_check_without_validators_preserves_stored_ones() {
+        let conn = Connection::open_in_memory().unwrap();
+        seed_checked_row(&conn);
+
+        mark_url_checked(
+            &conn,
+            "https://x.de/p",
+            200,
+            None, // response carried no ETag ...
+            None, // ... and no Last-Modified
+            Some("aaa"),
+            false, // unchanged
+            true,
+            "2026-07-17T00:00:00",
+        )
+        .unwrap();
+
+        let (etag, lm) = validators(&conn);
+        assert_eq!(etag.as_deref(), Some("\"v1\""), "stored ETag must survive");
+        assert_eq!(
+            lm.as_deref(),
+            Some("Mon, 01 Jan 2026 00:00:00 GMT"),
+            "stored Last-Modified must survive"
+        );
+    }
+
+    /// The flip side: a response that *does* carry validators still refreshes them,
+    /// so preserving-on-None must not turn into never-updating.
+    #[test]
+    fn unchanged_check_with_validators_refreshes_them() {
+        let conn = Connection::open_in_memory().unwrap();
+        seed_checked_row(&conn);
+
+        mark_url_checked(
+            &conn,
+            "https://x.de/p",
+            200,
+            Some("\"v2\""),
+            Some("Tue, 02 Jan 2026 00:00:00 GMT"),
+            Some("aaa"),
+            false,
+            true,
+            "2026-07-17T00:00:00",
+        )
+        .unwrap();
+
+        let (etag, lm) = validators(&conn);
+        assert_eq!(etag.as_deref(), Some("\"v2\""));
+        assert_eq!(lm.as_deref(), Some("Tue, 02 Jan 2026 00:00:00 GMT"));
     }
 }
