@@ -262,6 +262,52 @@ async fn worker<C: HttpClient>(
     }
 }
 
+/// Rebuild a page's outbound edges from the copy of its body already on disk.
+///
+/// A 304 says the bytes are unchanged — and we still have them — yet the branch
+/// used to emit no edges at all. Once a page has stored validators every later
+/// crawl revalidates it as 304, so the link graph froze at whatever single
+/// full-body fetch last touched each page and nothing in-band could repair it;
+/// that gap is the entire reason the offline `backfill-links` command exists.
+/// Re-deriving here costs no network and keeps the graph current per revalidation.
+///
+/// Keyed on the `.html` blob exactly as `backfill` is: a PDF's blob is stored as
+/// `.pdf` and simply will not be found, which is correct — PDFs emit no edges.
+/// A missing or unreadable blob yields no edges, mirroring backfill's
+/// `raw_missing` skip. The base is `item.url`; `FrontierItem` carries no
+/// `final_url`, so a redirected page's edges resolve against its request URL —
+/// the same low-severity divergence `backfill` documents, and harmless because
+/// edges are written INSERT OR IGNORE.
+fn edges_from_cached_blob(
+    item: &FrontierItem,
+    site_name: &str,
+    cache: &RawCache,
+    now: &str,
+) -> Vec<LinkEdge> {
+    let Some(sha) = item.content_sha256.as_deref() else {
+        return Vec::new();
+    };
+    let Ok(data) = std::fs::read(cache.path_for(sha, ext_for("html"))) else {
+        return Vec::new();
+    };
+    let html = String::from_utf8_lossy(&data);
+    let depth = item.depth + 1;
+    discover_all_links(&html, &item.url)
+        .into_iter()
+        .map(|dst| {
+            let in_dom = in_domain(&dst, site_name);
+            LinkEdge {
+                src: item.url.clone(),
+                dst,
+                site: site_name.to_string(),
+                in_domain: in_dom,
+                depth,
+                first_seen_at: now.to_string(),
+            }
+        })
+        .collect()
+}
+
 /// Turn a fetch result into the page's complete write-batch. Mirrors the branch
 /// structure of the Python `process_url`. The content-addressed raw file (if the
 /// page changed) is written here, worker-side and lock-free, before the batch is
@@ -275,8 +321,10 @@ fn build_batch(
 ) -> PageBatch {
     let now = now_iso();
 
-    // 304 Not Modified: nothing downloaded.
+    // 304 Not Modified: nothing downloaded — but the bytes are still on disk, so
+    // the outbound edges can be rebuilt for free (see edges_from_cached_blob).
     if result.not_modified() {
+        let edges = edges_from_cached_blob(item, site_name, cache, &now);
         return PageBatch {
             site_idx,
             url: item.url.clone(),
@@ -297,7 +345,7 @@ fn build_batch(
                 present: true,
             },
             followable: Vec::new(),
-            edges: Vec::new(),
+            edges,
             raw_doc: None,
             log: CrawlLogRow {
                 final_url: item.url.clone(),

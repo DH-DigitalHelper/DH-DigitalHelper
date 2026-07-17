@@ -678,6 +678,82 @@ fn a_304_adopts_its_rotated_etag() {
     );
 }
 
+/// Once a page has stored validators, every later crawl revalidates it as 304 --
+/// and the 304 branch emitted no edges at all. So the link graph froze at
+/// whatever single full-body fetch last touched each page, and nothing in-band
+/// could ever repair it (that is why the offline `backfill-links` command has to
+/// exist). The bytes are already on disk, so a 304 can rebuild them for free.
+#[test]
+fn a_304_re_emits_edges_from_the_cached_blob() {
+    let tmp = tempfile::tempdir().unwrap();
+    let seed = "http://site.test/startseite";
+    let pages = || {
+        MockClient::from_pages(vec![
+            (
+                seed,
+                Page::html(r#"<html><body>seed <a href="/a">a</a></body></html>"#).etag("\"s1\""),
+            ),
+            (
+                "http://site.test/a",
+                Page::html(r#"<html><body>a <a href="/b">b</a></body></html>"#).etag("\"a1\""),
+            ),
+            (
+                "http://site.test/b",
+                Page::html("<html><body>b leaf</body></html>").etag("\"b1\""),
+            ),
+        ])
+    };
+
+    let mut cfg = config(tmp.path());
+    cfg.use_sitemap = false;
+    run_with_client(cfg, "run-1".into(), false, ProgressSink::new(None), pages())
+        .expect("first crawl");
+
+    let conn = rusqlite::Connection::open(tmp.path().join("db.sqlite3")).unwrap();
+    let before: i64 = conn
+        .query_row("SELECT COUNT(*) FROM links", [], |r| r.get(0))
+        .unwrap();
+    assert!(
+        before > 0,
+        "precondition: the full-body crawl recorded edges"
+    );
+
+    // Simulate the rot: the graph is gone while the pages are still `done` with
+    // validators, so every re-crawl can only 304 them.
+    conn.execute("DELETE FROM links", []).unwrap();
+
+    let mut cfg2 = config(tmp.path());
+    cfg2.use_sitemap = false;
+    let counts = run_with_client(
+        cfg2,
+        "run-2".into(),
+        false,
+        ProgressSink::new(None),
+        pages(),
+    )
+    .expect("second crawl");
+    assert!(
+        counts["site.test"].unchanged > 0,
+        "precondition: the re-crawl really did revalidate as 304"
+    );
+
+    let after: i64 = conn
+        .query_row("SELECT COUNT(*) FROM links", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(
+        after, before,
+        "a 304 must re-emit the page's edges from its cached blob"
+    );
+    let seed_to_a: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM links WHERE src_url=? AND dst_url='http://site.test/a'",
+            [seed],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(seed_to_a, 1, "the specific edge is back");
+}
+
 #[test]
 fn max_pages_caps_total_fetches() {
     let tmp = tempfile::tempdir().unwrap();
