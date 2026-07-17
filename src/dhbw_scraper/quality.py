@@ -14,7 +14,13 @@ import re
 # the old "fraction of lines that START with a bullet AND contain a link" rule,
 # which missed inline links and non-bulleted link bars entirely.
 _NAV_LINK_RATIO = 0.6
-_LINK_ANCHOR = re.compile(r"\[([^\]]*)\]\([^)]*\)")
+# `(?<!!)` excludes images: an image is `![alt](url)`, whose `[alt](url)` tail
+# matches a bare link pattern. Counting those alt words put images in the
+# numerator while word_count (derived from `text`, which has images stripped)
+# left them out of the denominator -- comparing two different documents, with a
+# ratio that could even exceed 1.0, so an image-heavy page carrying real prose
+# was rejected as nav-only.
+_LINK_ANCHOR = re.compile(r"(?<!!)\[([^\]]*)\]\([^)]*\)")
 
 # --- login / cookie / empty-state boilerplate ---------------------------------
 # Curated high-signal marker phrases (German first, English second), matched

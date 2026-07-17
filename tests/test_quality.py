@@ -17,6 +17,28 @@ def test_rejects_nav_only_link_lists():
     assert ok is False and "boilerplate" in reason
 
 
+def test_image_alt_text_does_not_trip_the_nav_gate():
+    """`_LINK_ANCHOR` matches the `[alt](url)` inside an image's `![alt](url)`.
+
+    The numerator therefore counted image alt words, while the denominator
+    (word_count, taken from `text`) has images stripped out entirely -- so the
+    ratio measured two different documents and could even exceed 1.0. An
+    image-heavy page carrying real prose was rejected as nav-only boilerplate.
+    """
+    md = "".join(
+        f"![Ausfuehrliche Bildbeschreibung Nummer {i}](https://x/img{i}.png)\n"
+        for i in range(20)
+    )
+    prose = "Dies ist ein echter Absatz mit nuetzlichem Inhalt. " * 12
+    md += "\n" + prose
+    # `text` is what html_extract produces: images dropped, prose kept.
+    doc = {"text": prose.strip(), "markdown": md}
+
+    accepted, reason = evaluate(doc, min_words=50)
+
+    assert accepted is True, f"image-heavy but prose-bearing page rejected: {reason}"
+
+
 def test_accepts_real_prose():
     text = "This is a real paragraph of useful content. " * 10
     ok, reason = evaluate({"text": text, "markdown": text}, min_words=50)
