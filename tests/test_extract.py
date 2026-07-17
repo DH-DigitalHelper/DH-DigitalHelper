@@ -3,7 +3,14 @@ import io
 import pytest
 
 from scraper import extract, storage as st
-from scraper.config import Config, CrawlConfig, ExtractConfig, Site, StorageConfig
+from scraper.config import (
+    Config,
+    CrawlConfig,
+    DedupConfig,
+    ExtractConfig,
+    Site,
+    StorageConfig,
+)
 from scraper.progress import Progress
 
 NOW = "2026-07-14T00:00:00"
@@ -23,6 +30,7 @@ def cfg(tmp_path):
             user_agent="ua",
         ),
         extract=ExtractConfig(2, 50),
+        dedup=DedupConfig(),
         storage=StorageConfig(tmp_path / "db.sqlite3", tmp_path / "raw"),
     )
 

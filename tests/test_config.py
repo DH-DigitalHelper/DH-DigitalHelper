@@ -1,8 +1,9 @@
+import re
 from pathlib import Path
 
 import pytest
 
-from scraper.config import load_config
+from scraper.config import DedupConfig, load_config
 
 
 def test_load_config_parses_sites_and_sections(tmp_path: Path):
@@ -109,3 +110,76 @@ raw_dir = "raw"
     )
     cfg = load_config(tmp_path / "config.toml")
     assert cfg.crawl.max_pages_per_host == 50000
+
+
+def _write_raw(tmp_path, *, crawl="", extract="", dedup=""):
+    """Write a minimal config with extra lines spliced into a section, so a test can
+    state just the one key it is about."""
+    (tmp_path / "config.toml").write_text(
+        f"""
+[[sites]]
+name = "x"
+seed_url = "https://x/"
+allowed_domain = "x"
+[crawl]
+user_agent = "ua"
+{crawl}
+[extract]
+{extract}
+[dedup]
+{dedup}
+[storage]
+db_file = "db.sqlite3"
+raw_dir = "raw"
+""",
+        encoding="utf-8",
+    )
+    return tmp_path / "config.toml"
+
+
+def test_load_config_dedup_section_is_optional(tmp_path):
+    """Every [dedup] key defaults, so a config predating the section stays valid."""
+    cfg = load_config(_write(tmp_path, "all"))  # _write emits no [dedup]
+    assert cfg.dedup == DedupConfig(batch_size=500, vacuum=True)
+
+
+def test_load_config_parses_dedup(tmp_path):
+    cfg = load_config(_write_raw(tmp_path, dedup="batch_size = 250\nvacuum = false"))
+    assert (cfg.dedup.batch_size, cfg.dedup.vacuum) == (250, False)
+
+
+@pytest.mark.parametrize(
+    "section,body,key",
+    [
+        ("crawl", "workers_per_host = 0", "crawl.workers_per_host"),
+        ("crawl", "workers_per_host = -1", "crawl.workers_per_host"),
+        ("crawl", "request_delay_seconds = -0.5", "crawl.request_delay_seconds"),
+        ("crawl", "max_pages = -1", "crawl.max_pages"),
+        ("crawl", "max_pages_per_host = -1", "crawl.max_pages_per_host"),
+        ("extract", "workers = 0", "extract.workers"),
+        ("extract", "min_words = -1", "extract.min_words"),
+        ("dedup", "batch_size = 0", "dedup.batch_size"),
+    ],
+)
+def test_load_config_rejects_out_of_range(tmp_path, section, body, key):
+    """The message must name the offending key -- the whole point of validating here
+    rather than letting the engine silently floor it."""
+    with pytest.raises(ValueError, match=re.escape(key)):
+        load_config(_write_raw(tmp_path, **{section: body}))
+
+
+@pytest.mark.parametrize(
+    "section,body",
+    [
+        ("crawl", "max_pages = 0"),  # 0 = unlimited, legal
+        ("crawl", "max_pages_per_host = 0"),  # 0 = unlimited, legal
+        ("crawl", "request_delay_seconds = 0.0"),  # no delay, legal
+        ("crawl", "workers_per_host = 1"),  # the floor itself
+        ("extract", "min_words = 0"),  # no word gate, legal
+        ("dedup", "batch_size = 1"),  # the floor itself
+    ],
+)
+def test_load_config_accepts_boundary_values(tmp_path, section, body):
+    """0 is meaningful for the budgets (= unlimited), so the floors must not be 1.
+    The shipped config.toml sets max_pages = 0."""
+    load_config(_write_raw(tmp_path, **{section: body}))

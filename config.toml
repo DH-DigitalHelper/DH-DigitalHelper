@@ -85,6 +85,17 @@ user_agent = ""
 workers = 12
 min_words = 50
 
+# Corpus dedup pass (`dhbw-scraper dedup`, and the tail of `run`).
+[dedup]
+# Rows per batch when backfilling documents.text_sha256. Keyset-paginated by id, so
+# only this many extracted texts are resident at once -- lower it on a memory-tight
+# box, raise it to trade memory for fewer round trips.
+batch_size = 500
+# VACUUM after retiring duplicates, handing the freed pages back to the filesystem.
+# Set false to skip the (blocking, whole-DB) rewrite; the space is then reclaimed by
+# a later VACUUM instead.
+vacuum = true
+
 [storage]
 db_file = "data/scraper.sqlite3"
 raw_dir = "data/raw"

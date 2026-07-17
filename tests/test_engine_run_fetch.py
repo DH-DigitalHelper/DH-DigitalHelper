@@ -26,6 +26,7 @@ from scraper import crawl  # noqa: E402
 from scraper.config import (  # noqa: E402
     Config,
     CrawlConfig,
+    DedupConfig,
     ExtractConfig,
     Site,
     StorageConfig,
@@ -92,6 +93,7 @@ def _config(tmp_path, host: str, recheck="all", max_pages=0) -> Config:
             user_agent="test-agent",
         ),
         extract=ExtractConfig(workers=1, min_words=3),
+        dedup=DedupConfig(),
         storage=StorageConfig(
             db_file=tmp_path / "db.sqlite3", raw_dir=tmp_path / "raw"
         ),
