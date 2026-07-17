@@ -153,7 +153,9 @@ def run_extract(
     n_workers = max(1, config.extract.workers)
 
     if extractors is not None:
-        _run_threaded(config, extractors, clock, progress, source_type, counts, n_workers)
+        _run_threaded(
+            config, extractors, clock, progress, source_type, counts, n_workers
+        )
     else:
         _run_pooled(config, clock, progress, source_type, counts, n_workers)
 

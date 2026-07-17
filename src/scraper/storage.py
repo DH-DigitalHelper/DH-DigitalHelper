@@ -859,7 +859,9 @@ def stats(conn) -> dict:
     }
 
 
-def run_dedup(conn, batch_size: int = 500, vacuum: bool = True, now: str | None = None) -> dict:
+def run_dedup(
+    conn, batch_size: int = 500, vacuum: bool = True, now: str | None = None
+) -> dict:
     """Backfill ``text_sha256`` and retire duplicate documents, keeping the
     single cleanest URL (see :func:`_canonical_key`) per distinct extracted text.
 
@@ -908,7 +910,9 @@ def run_dedup(conn, batch_size: int = 500, vacuum: bool = True, now: str | None 
         if not rows:
             break
         # Hash outside the write lock (CPU-heavy); write the batch in one txn.
-        todo = [(text_hash(r["text"]), r["id"]) for r in rows if r["text_sha256"] is None]
+        todo = [
+            (text_hash(r["text"]), r["id"]) for r in rows if r["text_sha256"] is None
+        ]
         if todo:
             with write_txn(conn):
                 for h, doc_id in todo:
@@ -957,9 +961,9 @@ def run_dedup(conn, batch_size: int = 500, vacuum: bool = True, now: str | None 
         # pass churned the table" signal. `--no-vacuum` skips it on a large corpus.
         conn.execute("VACUUM")
 
-    after = conn.execute(
-        "SELECT COUNT(*) c FROM documents WHERE present=1"
-    ).fetchone()["c"]
+    after = conn.execute("SELECT COUNT(*) c FROM documents WHERE present=1").fetchone()[
+        "c"
+    ]
     return {
         "backfilled": backfilled,
         "groups": groups,

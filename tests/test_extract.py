@@ -134,9 +134,7 @@ def test_extract_one_ignores_stale_raw_path_from_another_machine(tmp_path):
     )
 
     assert outcome == "indexed"
-    raw = conn.execute(
-        "SELECT * FROM raw_docs WHERE content_sha256='c1'"
-    ).fetchone()
+    raw = conn.execute("SELECT * FROM raw_docs WHERE content_sha256='c1'").fetchone()
     assert raw["extract_error"] is None
 
 
@@ -205,12 +203,22 @@ def test_extract_dedups_byte_different_urls_with_same_text(tmp_path):
     )
     st.enqueue(conn, "https://www.dhbw.de/firmen/?cHash=x", "www.dhbw.de", 0, None, NOW)
     st.mark_url_checked(
-        conn, "https://www.dhbw.de/firmen/?cHash=x", 200, None, None, "c2", True, True, NOW
+        conn,
+        "https://www.dhbw.de/firmen/?cHash=x",
+        200,
+        None,
+        None,
+        "c2",
+        True,
+        True,
+        NOW,
     )
     conn.close()
 
     # good_doc ignores its input bytes -> both blobs extract to the same text.
-    counts = extract.run_extract(c, {"html": good_doc, "pdf": good_doc}, clock=lambda: NOW)
+    counts = extract.run_extract(
+        c, {"html": good_doc, "pdf": good_doc}, clock=lambda: NOW
+    )
     assert counts == {"indexed": 2, "rejected": 0, "error": 0}
 
     conn2 = st.connect(c.storage.db_file)

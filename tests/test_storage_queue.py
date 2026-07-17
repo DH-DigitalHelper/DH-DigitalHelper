@@ -58,21 +58,53 @@ def test_reset_site_deletes_only_target_site_and_keeps_raw_docs():
     st.enqueue(conn, "https://a/2", "a.de", 1, None, NOW)
     st.enqueue(conn, "https://b/1", "b.de", 0, None, NOW)
     st.record_fetch(
-        conn, "run1", "https://a/1", "https://a/1", "a.de",
-        200, "text/html", "h1", 10, "html", "new", None, NOW,
+        conn,
+        "run1",
+        "https://a/1",
+        "https://a/1",
+        "a.de",
+        200,
+        "text/html",
+        "h1",
+        10,
+        "html",
+        "new",
+        None,
+        NOW,
     )
     st.record_fetch(
-        conn, "run1", "https://b/1", "https://b/1", "b.de",
-        200, "text/html", "h2", 10, "html", "new", None, NOW,
+        conn,
+        "run1",
+        "https://b/1",
+        "https://b/1",
+        "b.de",
+        200,
+        "text/html",
+        "h2",
+        10,
+        "html",
+        "new",
+        None,
+        NOW,
     )
     # Distinct texts so the corpus dedup doesn't collapse the two docs.
     st.upsert_document(
-        conn, "https://a/1", "a.de", "html", "h1",
-        {"title": "A", "text": "alpha " * 60, "markdown": "mdA", "word_count": 60}, NOW,
+        conn,
+        "https://a/1",
+        "a.de",
+        "html",
+        "h1",
+        {"title": "A", "text": "alpha " * 60, "markdown": "mdA", "word_count": 60},
+        NOW,
     )
     st.upsert_document(
-        conn, "https://b/1", "b.de", "html", "h2",
-        {"title": "B", "text": "beta " * 60, "markdown": "mdB", "word_count": 60}, NOW,
+        conn,
+        "https://b/1",
+        "b.de",
+        "html",
+        "h2",
+        {"title": "B", "text": "beta " * 60, "markdown": "mdB", "word_count": 60},
+        NOW,
     )
     with st.write_txn(conn):
         conn.execute(

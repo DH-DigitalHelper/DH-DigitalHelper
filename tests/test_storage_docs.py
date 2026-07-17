@@ -249,8 +249,12 @@ def test_canonical_key_prefers_fewest_params_then_shortest():
 
 def test_upsert_document_populates_text_sha256():
     conn = mem()
-    st.upsert_document(conn, "https://x/a", "x", "html", "c1", doc("some text " * 20), NOW1)
-    row = conn.execute("SELECT text_sha256 FROM documents WHERE url='https://x/a'").fetchone()
+    st.upsert_document(
+        conn, "https://x/a", "x", "html", "c1", doc("some text " * 20), NOW1
+    )
+    row = conn.execute(
+        "SELECT text_sha256 FROM documents WHERE url='https://x/a'"
+    ).fetchone()
     assert row["text_sha256"] == st.text_hash("some text " * 20)
 
 
@@ -260,7 +264,9 @@ def test_upsert_duplicate_variant_creates_no_row():
     variant = "https://x/dualis/?cHash=abc"
     assert st.upsert_document(conn, base, "x", "html", "c1", doc(), NOW1) == "new"
     # same text via a messier URL -> deduped away, no row written
-    assert st.upsert_document(conn, variant, "x", "html", "c2", doc(), NOW2) == "duplicate"
+    assert (
+        st.upsert_document(conn, variant, "x", "html", "c2", doc(), NOW2) == "duplicate"
+    )
     urls = [r["url"] for r in conn.execute("SELECT url FROM documents").fetchall()]
     assert urls == [base]
 
@@ -310,9 +316,9 @@ def test_retired_duplicate_is_reported_as_a_deletion():
 
     d = st.delta(conn, since=NOW1)
     assert base in {u["url"] for u in d["upserts"]}
-    assert variant in {x["url"] for x in d["deletions"]}, (
-        "the retired duplicate must be reported so downstream drops the orphan"
-    )
+    assert variant in {
+        x["url"] for x in d["deletions"]
+    }, "the retired duplicate must be reported so downstream drops the orphan"
     # ... and it must be gone from the live corpus, not merely flagged.
     assert st.stats(conn)["documents"] == 1
 
@@ -330,10 +336,14 @@ def test_re_retiring_a_duplicate_does_not_re_emit_the_deletion():
     base = "https://x/p/"
     variant = "https://x/p/?cHash=abc"
     st.upsert_document(conn, variant, "x", "html", "c2", doc(), NOW1)
-    st.upsert_document(conn, base, "x", "html", "c1", doc(), NOW2)  # variant retired @NOW2
+    st.upsert_document(
+        conn, base, "x", "html", "c1", doc(), NOW2
+    )  # variant retired @NOW2
 
     # Same URL, same text, NEW bytes -> lands in the duplicate branch again.
-    assert st.upsert_document(conn, variant, "x", "html", "c3", doc(), NOW3) == "duplicate"
+    assert (
+        st.upsert_document(conn, variant, "x", "html", "c3", doc(), NOW3) == "duplicate"
+    )
 
     row = conn.execute(
         "SELECT present, updated_at FROM documents WHERE url=?", (variant,)
@@ -355,7 +365,9 @@ def test_retired_duplicate_can_become_canonical_again():
 
     # The variant now carries DIFFERENT text, so it is nobody's duplicate.
     assert (
-        st.upsert_document(conn, variant, "x", "html", "c3", doc("fresh text " * 30), NOW3)
+        st.upsert_document(
+            conn, variant, "x", "html", "c3", doc("fresh text " * 30), NOW3
+        )
         == "changed"
     )
     row = conn.execute("SELECT * FROM documents WHERE url=?", (variant,)).fetchone()
@@ -423,7 +435,9 @@ def test_migration_adds_text_sha256_to_preexisting_db():
     cols = {r["name"] for r in conn.execute("PRAGMA table_info(documents)")}
     assert "text_sha256" in cols
     # the legacy row survives, its new column NULL until `dedup` backfills it
-    row = conn.execute("SELECT text_sha256 FROM documents WHERE url='https://x/a'").fetchone()
+    row = conn.execute(
+        "SELECT text_sha256 FROM documents WHERE url='https://x/a'"
+    ).fetchone()
     assert row["text_sha256"] is None
 
 

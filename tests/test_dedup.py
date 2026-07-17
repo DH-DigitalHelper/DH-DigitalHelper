@@ -130,8 +130,12 @@ def test_dedup_does_not_bump_updated_at(tmp_path):
 
     st.run_dedup(conn)
 
-    row = conn.execute("SELECT updated_at FROM documents WHERE url='https://x/a'").fetchone()
-    assert row["updated_at"] == NOW1  # backfill is metadata-only, never a content change
+    row = conn.execute(
+        "SELECT updated_at FROM documents WHERE url='https://x/a'"
+    ).fetchone()
+    assert (
+        row["updated_at"] == NOW1
+    )  # backfill is metadata-only, never a content change
 
 
 def test_dedup_keeps_cleanest_across_present_only(tmp_path):
@@ -151,6 +155,7 @@ def test_dedup_keeps_cleanest_across_present_only(tmp_path):
     }
     assert present == {"https://x/live/?cHash=z"}
     # the tombstone still exists (carries the deletion signal)
-    assert conn.execute(
-        "SELECT COUNT(*) c FROM documents WHERE present=0"
-    ).fetchone()["c"] == 1
+    assert (
+        conn.execute("SELECT COUNT(*) c FROM documents WHERE present=0").fetchone()["c"]
+        == 1
+    )

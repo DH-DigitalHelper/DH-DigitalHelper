@@ -79,7 +79,13 @@ def fetch(
         if exc.code == 304:
             return FetchResult(url, url, 304, "", b"")
         return FetchResult(url, url, exc.code, "", b"", error=f"HTTP {exc.code}")
-    except (urllib.error.URLError, TimeoutError, ValueError, http.client.InvalidURL, http.client.IncompleteRead) as exc:
+    except (
+        urllib.error.URLError,
+        TimeoutError,
+        ValueError,
+        http.client.InvalidURL,
+        http.client.IncompleteRead,
+    ) as exc:
         return FetchResult(url, url, 0, "", b"", error=str(exc))
 
 
