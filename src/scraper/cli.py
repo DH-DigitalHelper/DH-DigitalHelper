@@ -1,5 +1,11 @@
 """Command-line entrypoint: fetch / extract / run / stats / dedup / delta /
-backfill-links."""
+backfill-links.
+
+config.toml is the sole source of tuning values -- no flag overrides any of them.
+The flags here only select what to act on (``--site``, ``--since``, ``-o``) or which
+file to read (``--config``). Adding a ``--max-pages``-style override would put a
+value in two places again; keep a second config.toml and pass ``--config`` instead.
+"""
 
 from __future__ import annotations
 
@@ -40,21 +46,9 @@ def _resolve_sites(config, names):
 def _cmd_fetch(args) -> int:
     config = _load(args)
     if args.site:
+        # The only thing the CLI still changes about a run, and it selects *which*
+        # sites to crawl -- never *how*. Every tuning value comes from config.toml.
         object.__setattr__(config, "sites", _resolve_sites(config, args.site))
-    if args.max_pages is not None:
-        object.__setattr__(config.crawl, "max_pages", args.max_pages)
-    if args.max_pages_per_host is not None:
-        object.__setattr__(config.crawl, "max_pages_per_host", args.max_pages_per_host)
-    if args.workers_per_host is not None:
-        object.__setattr__(config.crawl, "workers_per_host", args.workers_per_host)
-    if args.request_delay is not None:
-        object.__setattr__(config.crawl, "request_delay_seconds", args.request_delay)
-    if args.changed_only:
-        object.__setattr__(config.crawl, "recheck", "changed-only")
-    elif args.new_only:
-        object.__setattr__(config.crawl, "recheck", "new-only")
-    elif args.full:
-        object.__setattr__(config.crawl, "recheck", "force-full")
     results = crawl.run_fetch(config, _run_id())
     for site, counts in results.items():
         print(f"[{site}] " + " ".join(f"{k}={v}" for k, v in counts.items()))
@@ -63,8 +57,6 @@ def _cmd_fetch(args) -> int:
 
 def _run_extract(args, source_type) -> int:
     config = _load(args)
-    if args.workers is not None:
-        object.__setattr__(config.extract, "workers", args.workers)
     counts = extract.run_extract(config, source_type=source_type)
     print(" ".join(f"{k}={v}" for k, v in counts.items()))
     return 0
@@ -109,14 +101,13 @@ def _cmd_delta(args) -> int:
 
 
 def _cmd_dedup(args) -> int:
-    # getattr defaults let `run` invoke this without owning the dedup-only flags.
     config = _load(args)
     conn = storage.connect(config.storage.db_file)
     storage.init_db(conn)
     result = storage.run_dedup(
         conn,
-        batch_size=getattr(args, "batch_size", 500),
-        vacuum=not getattr(args, "no_vacuum", False),
+        batch_size=config.dedup.batch_size,
+        vacuum=config.dedup.vacuum,
     )
     print(json.dumps(result, indent=2))
     conn.close()
@@ -176,55 +167,15 @@ def _cmd_reset_site(args) -> int:
     return 0
 
 
-def _add_crawl_args(p) -> None:
-    """Shared fetch-override flags for the ``fetch`` and ``run`` subcommands, kept
-    in one place so the two never drift."""
-    p.add_argument("--max-pages", type=int, default=None)
+def _add_site_arg(p) -> None:
+    """The one flag ``fetch`` and ``run`` share, kept in one place so the two never
+    drift. It selects *what* to crawl; everything about *how* comes from config.toml."""
     p.add_argument(
         "--site",
         action="append",
         metavar="NAME",
         help="Crawl only this site (config name or allowed_domain); repeatable. "
         "Scopes both sitemap refresh and crawling to the selected site(s).",
-    )
-    p.add_argument(
-        "--max-pages-per-host",
-        type=int,
-        default=None,
-        metavar="N",
-        help="Per-hostname page budget for this run (0 = unlimited; overrides "
-        "crawl.max_pages_per_host). Backstop against a single runaway subdomain.",
-    )
-    p.add_argument(
-        "--workers-per-host",
-        type=int,
-        default=None,
-        help="Concurrent fetch workers per host (overrides config crawl.workers_per_host).",
-    )
-    p.add_argument(
-        "--request-delay",
-        type=float,
-        default=None,
-        metavar="SECONDS",
-        help="Per-host delay between requests, in seconds "
-        "(overrides crawl.request_delay_seconds).",
-    )
-    recheck = p.add_mutually_exclusive_group()
-    recheck.add_argument(
-        "--changed-only",
-        action="store_true",
-        help="Only re-check sitemap-advertised changed URLs (recheck=changed-only).",
-    )
-    recheck.add_argument(
-        "--new-only",
-        action="store_true",
-        help="Only fetch queued URLs never fetched before; never re-download "
-        "already-stored pages (recheck=new-only).",
-    )
-    recheck.add_argument(
-        "--full",
-        action="store_true",
-        help="Re-check all present URLs and ignore stored validators (force full re-download).",
     )
 
 
@@ -236,24 +187,20 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     f = sub.add_parser("fetch", help="Phase 1: crawl + download.")
-    _add_crawl_args(f)
+    _add_site_arg(f)
     f.set_defaults(func=_cmd_fetch)
 
     e = sub.add_parser("extract", help="Phase 2: extract + quality-gate (HTML + PDF).")
-    e.add_argument("--workers", type=int, default=None)
     e.set_defaults(func=_cmd_extract)
 
     eh = sub.add_parser("extract-html", help="Phase 2: extract HTML docs only.")
-    eh.add_argument("--workers", type=int, default=None)
     eh.set_defaults(func=_cmd_extract_html)
 
     ep = sub.add_parser("extract-pdf", help="Phase 2: extract PDF docs only.")
-    ep.add_argument("--workers", type=int, default=None)
     ep.set_defaults(func=_cmd_extract_pdf)
 
     r = sub.add_parser("run", help="fetch then extract.")
-    _add_crawl_args(r)
-    r.add_argument("--workers", type=int, default=None)
+    _add_site_arg(r)
     r.set_defaults(func=_cmd_run)
 
     s = sub.add_parser("stats", help="Print DB counts.")
@@ -296,12 +243,6 @@ def build_parser() -> argparse.ArgumentParser:
         "dedup",
         help="Backfill text_sha256 and hard-delete duplicate documents "
         "(keep the cleanest URL per distinct extracted text).",
-    )
-    dd.add_argument("--batch-size", type=int, default=500)
-    dd.add_argument(
-        "--no-vacuum",
-        action="store_true",
-        help="Skip the reclaiming VACUUM after deleting duplicates.",
     )
     dd.set_defaults(func=_cmd_dedup)
 
