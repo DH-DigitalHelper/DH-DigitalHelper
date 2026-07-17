@@ -22,7 +22,14 @@ _LINK = re.compile(r"\[([^\]]*)\]\([^)]*\)")  # links: keep the anchor text
 _EMPHASIS = re.compile(r"(\*\*|\*|__|_|`)")  # bold/italic/inline-code markers
 _HEADING = re.compile(r"^\s{0,3}#{1,6}\s+", re.MULTILINE)  # "### " prefixes
 _BLOCKQUOTE = re.compile(r"^\s{0,3}>\s?", re.MULTILINE)  # "> " prefixes
-_LIST_MARKER = re.compile(r"^\s*(?:[-*+]|\d+\.)\s+", re.MULTILINE)  # bullets/numbers
+# Bullets only. A leading "N." is deliberately NOT stripped: `_HEADING` runs
+# first, so "## 1. Semester" reaches this rule as a line starting "1. " and is
+# indistinguishable from an ordered-list item -- the ordinal was being deleted,
+# indexing the heading as bare "Semester". For DHBW module/semester content that
+# ordinal IS the meaning ("1. Semester" vs "2. Semester" both became "Semester"),
+# and an ordered-list number is legitimate content anyway, so keeping it costs a
+# faithful word or two and buys back a searchable distinction.
+_LIST_MARKER = re.compile(r"^\s*[-*+]\s+", re.MULTILINE)
 # Horizontal rules AND markdown table separator rows (`| --- | :--- |`): without
 # the optional pipes these rows survived, and `|` -> space then left a run of
 # bare `---` tokens that split() counts as words.
