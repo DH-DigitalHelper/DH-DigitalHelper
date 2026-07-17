@@ -141,8 +141,12 @@ impl HttpClient for ReqwestClient {
                 status: 304,
                 content_type: String::new(),
                 data: Vec::new(),
-                etag: None,
-                last_modified: None,
+                // Carry the 304's own validators through: a server may answer
+                // "unchanged" while rotating its ETag, and dropping the new one
+                // here would make the next crawl revalidate with a stale value
+                // the server can no longer match -- costing a full body.
+                etag,
+                last_modified,
                 error: None,
             };
         }

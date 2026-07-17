@@ -283,8 +283,15 @@ fn build_batch(
             now,
             mark: UrlMark::Checked {
                 http_status: 304,
-                etag: item.etag.clone(),
-                last_modified: item.last_modified.clone(),
+                // A 304 may rotate its validator: "unchanged, but revalidate with
+                // this next time". Prefer what it told us and fall back to what we
+                // already hold, or the next crawl re-sends a validator the server
+                // no longer matches and gets a full body for nothing.
+                etag: result.etag.clone().or_else(|| item.etag.clone()),
+                last_modified: result
+                    .last_modified
+                    .clone()
+                    .or_else(|| item.last_modified.clone()),
                 content_sha256: item.content_sha256.clone(),
                 changed: false,
                 present: true,

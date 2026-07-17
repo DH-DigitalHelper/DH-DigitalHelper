@@ -22,6 +22,12 @@ struct Page {
     /// Set to model a redirect: reqwest follows it and reports where the bytes
     /// actually came from, which may be a different host than was requested.
     final_url: Option<String>,
+    /// The ETag this page serves with its body.
+    etag: Option<String>,
+    /// When true, a request whose If-None-Match matches `etag` gets a 304.
+    revalidates: bool,
+    /// The ETag the 304 itself carries — a server that rotated its validator.
+    etag_on_304: Option<String>,
 }
 
 impl Page {
@@ -42,6 +48,19 @@ impl Page {
     /// Respond with this status instead of 200.
     fn status(mut self, status: u16) -> Self {
         self.status = status;
+        self
+    }
+
+    /// Serve this ETag, and answer 304 to a matching conditional GET.
+    fn etag(mut self, etag: &str) -> Self {
+        self.etag = Some(etag.into());
+        self.revalidates = true;
+        self
+    }
+
+    /// The 304 rotates its validator to this new ETag.
+    fn rotates_etag_to(mut self, etag: &str) -> Self {
+        self.etag_on_304 = Some(etag.into());
         self
     }
 }
@@ -92,6 +111,20 @@ impl HttpClient for MockClient {
                 error: Some("HTTP 404".into()),
             };
         };
+        // Conditional GET: a matching validator revalidates to 304 with no body.
+        // The 304 may carry a rotated ETag of its own.
+        if page.revalidates && req.etag.is_some() && req.etag == page.etag {
+            return FetchResult {
+                url: req.url.clone(),
+                final_url: req.url,
+                status: 304,
+                content_type: String::new(),
+                data: Vec::new(),
+                etag: page.etag_on_304.clone(),
+                last_modified: None,
+                error: None,
+            };
+        }
         let status = if page.status == 0 { 200 } else { page.status };
         // Mirrors ReqwestClient: a non-2xx still yields an error string, a 2xx does not.
         let error = if (200..300).contains(&status) {
@@ -105,7 +138,7 @@ impl HttpClient for MockClient {
             status,
             content_type: page.content_type.clone(),
             data: page.body.clone(),
-            etag: None,
+            etag: page.etag.clone(),
             last_modified: None,
             error,
         }
@@ -578,6 +611,71 @@ fn gone_410_is_recorded_as_410_not_404() {
         "a 410 must be stored as 410, not flattened to 404"
     );
     assert_eq!(present, 0, "410 still removes the page");
+}
+
+/// A 304 may carry a *new* ETag: the server is telling us the content is
+/// unchanged but its validator has rotated. Discarding it means the next crawl
+/// re-sends the stale validator, the server can no longer match it, and it
+/// answers a full 200 body -- so the page silently stops revalidating cheaply.
+#[test]
+fn a_304_adopts_its_rotated_etag() {
+    let tmp = tempfile::tempdir().unwrap();
+    let page = "http://site.test/p";
+    let seed = r#"<html><body>seed <a href="/p">p</a></body></html>"#;
+
+    // Run 1: the page hands out ETag "v1".
+    let mut cfg = config(tmp.path());
+    cfg.use_sitemap = false;
+    run_with_client(
+        cfg,
+        "run-1".into(),
+        false,
+        ProgressSink::new(None),
+        MockClient::from_pages(vec![
+            ("http://site.test/startseite", Page::html(seed)),
+            (
+                page,
+                Page::html("<html><body>body</body></html>").etag("\"v1\""),
+            ),
+        ]),
+    )
+    .expect("first crawl");
+
+    let conn = rusqlite::Connection::open(tmp.path().join("db.sqlite3")).unwrap();
+    let stored: Option<String> = conn
+        .query_row("SELECT etag FROM queue WHERE url=?", [page], |r| r.get(0))
+        .unwrap();
+    assert_eq!(stored.as_deref(), Some("\"v1\""), "precondition");
+
+    // Run 2: the conditional GET matches, so we get a 304 -- but the server has
+    // rotated its validator to "v2" and says so on the 304 itself.
+    let mut cfg2 = config(tmp.path());
+    cfg2.use_sitemap = false;
+    run_with_client(
+        cfg2,
+        "run-2".into(),
+        false,
+        ProgressSink::new(None),
+        MockClient::from_pages(vec![
+            ("http://site.test/startseite", Page::html(seed)),
+            (
+                page,
+                Page::html("<html><body>body</body></html>")
+                    .etag("\"v1\"")
+                    .rotates_etag_to("\"v2\""),
+            ),
+        ]),
+    )
+    .expect("second crawl");
+
+    let after: Option<String> = conn
+        .query_row("SELECT etag FROM queue WHERE url=?", [page], |r| r.get(0))
+        .unwrap();
+    assert_eq!(
+        after.as_deref(),
+        Some("\"v2\""),
+        "a 304's rotated ETag must be adopted, not thrown away"
+    );
 }
 
 #[test]
