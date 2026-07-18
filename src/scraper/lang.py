@@ -10,6 +10,13 @@ from __future__ import annotations
 
 # Below this many characters there is not enough signal to trust a guess.
 _MIN_CHARS = 20
+# Classify only a leading sample of this many characters. py3langid accumulates its
+# byte-n-gram feature counts in a uint16 array, so a document long enough for one
+# feature to occur > 65535 times raises OverflowError (hit live on a huge PDF during
+# a corpus backfill). A cap well under that limit makes the overflow impossible (a
+# count can't exceed the input length) and keeps detection fast on large PDFs -- a
+# few thousand characters already identify the language.
+_MAX_CHARS = 10_000
 # py3langid returns a normalized probability in [0, 1] with norm_probs=True; below
 # this the top language is a coin-flip, so we decline to label rather than mislabel.
 _MIN_CONFIDENCE = 0.5
@@ -36,7 +43,13 @@ def detect(text: str | None) -> str | None:
     stripped = text.strip()
     if len(stripped) < _MIN_CHARS:
         return None
-    code, prob = _get_identifier().classify(stripped)
+    try:
+        code, prob = _get_identifier().classify(stripped[:_MAX_CHARS])
+    except Exception:
+        # Best-effort over a messy real-world corpus: a detector failure on one
+        # document must not abort a whole-corpus backfill. Unknown language (None)
+        # is an already-supported outcome downstream.
+        return None
     if prob < _MIN_CONFIDENCE:
         return None
     return code.lower()
