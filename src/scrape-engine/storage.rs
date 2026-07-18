@@ -1,14 +1,4 @@
-//! SQLite persistence for Phase 1: schema, content-addressed raw cache, and the
-//! low-level write operations composed by the single writer task.
-//!
-//! The schema is kept byte-for-byte in sync with the Python `storage.py::SCHEMA`
-//! (both create `IF NOT EXISTS`, so either side may initialise a fresh DB). The
-//! only addition over the historical schema is the `links` edge table.
-//!
-//! Unlike the old Python path there is no per-claim `work_state='in_progress'`
-//! write: the frontier lives in memory (see `writer.rs`), and only terminal
-//! `pending -> done/error/removed` transitions are persisted. A crash therefore
-//! re-does only the pages that were in flight, which is idempotent.
+//! SQLite persistence for Phase 1: schema, content-addressed raw cache, and the low-level write operations composed by the single writer task.
 
 use std::collections::HashMap;
 use std::io;
@@ -141,8 +131,7 @@ CREATE INDEX IF NOT EXISTS idx_links_dst  ON links(dst_id);
 CREATE INDEX IF NOT EXISTS idx_links_site ON links(site);
 "#;
 
-/// A queue row loaded into the in-memory frontier, carrying the stored change-
-/// detection validators so a worker can issue a conditional GET.
+/// A queue row loaded into the in-memory frontier, carrying the stored change-detection validators so a worker can issue a conditional GET.
 #[derive(Debug, Clone)]
 pub struct FrontierItem {
     pub url: String,
@@ -164,8 +153,7 @@ pub struct LinkEdge {
     pub first_seen_at: String,
 }
 
-/// A discovered followable link to enqueue: `(url, site, depth, discovered_from,
-/// first_seen_at)`.
+/// A discovered followable link to enqueue.
 #[derive(Debug, Clone)]
 pub struct QueueInsert {
     pub url: String,
@@ -195,22 +183,20 @@ pub fn now_iso() -> String {
     format_utc(secs)
 }
 
-/// Convert a Unix timestamp (seconds) to `YYYY-MM-DDTHH:MM:SS` UTC using Howard
-/// Hinnant's days-from-civil algorithm (no external date dependency).
+/// Convert a Unix timestamp (seconds) to YYYY-MM-DDTHH:MM:SS UTC.
 fn format_utc(secs: u64) -> String {
     let days = (secs / 86_400) as i64;
     let rem = secs % 86_400;
     let (hh, mm, ss) = (rem / 3600, (rem % 3600) / 60, rem % 60);
-    // days since 1970-01-01 -> civil date
     let z = days + 719_468;
     let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
-    let doe = z - era * 146_097; // [0, 146096]
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365; // [0, 399]
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
     let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100); // [0, 365]
-    let mp = (5 * doy + 2) / 153; // [0, 11]
-    let d = doy - (153 * mp + 2) / 5 + 1; // [1, 31]
-    let m = if mp < 10 { mp + 3 } else { mp - 9 }; // [1, 12]
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
     let year = if m <= 2 { y + 1 } else { y };
     format!("{year:04}-{m:02}-{d:02}T{hh:02}:{mm:02}:{ss:02}")
 }
@@ -231,20 +217,11 @@ pub fn init_db(conn: &Connection) -> rusqlite::Result<()> {
     migrate(conn)
 }
 
-/// Forward-only, idempotent migrations for a DB that predates a column, mirroring
-/// `storage.py::_migrate` so either side can open what the other created.
-///
-/// Column presence is introspected rather than tracked via `user_version`, so this
-/// is a no-op whether the column arrived via `SCHEMA` (fresh DB) or an earlier
-/// ALTER. `ALTER TABLE ADD COLUMN` with a NULL default is an O(1) metadata-only
-/// change in SQLite -- instant even on a multi-GB file.
+/// Forward-only, idempotent migrations for a DB that predates a column.
 fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     if !has_column(conn, "documents", "text_sha256")? {
         conn.execute_batch("ALTER TABLE documents ADD COLUMN text_sha256 TEXT")?;
     }
-    // Only safe once the column is guaranteed to exist. Composite so the dedup
-    // lookup `text_sha256=? AND present=1` is a seek rather than a scan via the
-    // low-selectivity present index (see storage.py::_migrate).
     conn.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_documents_text_sha256
              ON documents(text_sha256, present)",
@@ -262,13 +239,10 @@ fn has_column(conn: &Connection, table: &str, column: &str) -> rusqlite::Result<
     Ok(false)
 }
 
-/// Checkpoint the WAL into the main DB and leave it truncated, so the Python
-/// Phase-2 reader opens a fully consistent file. Best-effort.
+/// Checkpoint the WAL into the main DB and leave it truncated, best-effort.
 pub fn checkpoint_truncate(conn: &Connection) {
     let _ = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
 }
-
-// ---- seeding ---------------------------------------------------------------
 
 /// Enqueue a URL (seed), leaving an existing row untouched (INSERT OR IGNORE).
 pub fn enqueue(
@@ -287,8 +261,7 @@ pub fn enqueue(
     Ok(n > 0)
 }
 
-/// Record a sitemap `<lastmod>` for `url`, re-queuing it only if the value
-/// strictly advanced. Faithful port of Python `set_sitemap_lastmod`.
+/// Record a sitemap <lastmod> for url, re-queuing it only if the value strictly advanced.
 pub fn set_sitemap_lastmod(
     conn: &Connection,
     url: &str,
@@ -339,12 +312,7 @@ pub fn requeue_present_urls(conn: &Connection, site: &str) -> rusqlite::Result<u
     )
 }
 
-/// Re-queue error rows whose stored HTTP status is transient (worth retrying):
-/// transport failures (status 0 = timeout/DNS/conn-refused), 408, 429, and any
-/// 5xx. Permanent client errors (400/401/403/405/451, …) stay 'error'; 404/410
-/// never land here (they are marked removed, not error). Validators and
-/// last_checked_at are left untouched, so a row that once succeeded retries as a
-/// cheap conditional GET while a never-fetched one does a full GET.
+/// Re-queue error rows whose stored HTTP status is transient (worth retrying).
 pub fn requeue_transient_errors(conn: &Connection, site: &str) -> rusqlite::Result<usize> {
     conn.execute(
         "UPDATE queue SET work_state = 'pending'
@@ -355,10 +323,7 @@ pub fn requeue_transient_errors(conn: &Connection, site: &str) -> rusqlite::Resu
     )
 }
 
-/// Whether an error row's HTTP status is transient, i.e. worth retrying on a
-/// re-run. Kept in lock-step with the SQL predicate in `requeue_transient_errors`
-/// (SQLite can't call this); a unit test pins the two together. status 0 is the
-/// transport-error sentinel (timeout / DNS / connection-refused).
+/// Whether an error row's HTTP status is transient, i.e. worth retrying on a re-run.
 pub fn is_transient_status(status: i64) -> bool {
     status == 0 || status == 408 || status == 429 || (500..600).contains(&status)
 }
@@ -371,8 +336,7 @@ pub fn reset_in_progress(conn: &Connection) -> rusqlite::Result<usize> {
     )
 }
 
-/// Load the frontier for a site: all 'pending' rows (optionally only those never
-/// fetched, for recheck=new-only), ordered depth then url.
+/// Load the frontier for a site: all 'pending' rows, ordered depth then url.
 pub fn load_pending(
     conn: &Connection,
     site: &str,
@@ -401,15 +365,12 @@ pub fn load_pending(
     rows.collect()
 }
 
-/// All known URLs for a site (any state) — seeds the in-memory dedup set so the
-/// heap never re-adds a URL that already exists, mirroring INSERT OR IGNORE.
+/// All known URLs for a site (any state), seeding the in-memory dedup set.
 pub fn all_urls(conn: &Connection, site: &str) -> rusqlite::Result<Vec<String>> {
     let mut stmt = conn.prepare("SELECT url FROM queue WHERE site = ?")?;
     let rows = stmt.query_map([site], |r| r.get::<_, String>(0))?;
     rows.collect()
 }
-
-// ---- per-page terminal writes (composed inside one transaction) ------------
 
 #[allow(clippy::too_many_arguments)]
 pub fn mark_url_checked(
@@ -440,11 +401,6 @@ pub fn mark_url_checked(
             ],
         )?;
     } else {
-        // COALESCE, not a plain assignment: an unchanged response that simply
-        // omitted its validators must not erase the ones we already hold. These
-        // sites emit ETag/Last-Modified erratically, and dropping a stored
-        // validator costs a full body on every subsequent crawl. A response that
-        // *does* carry a validator still refreshes it.
         conn.execute(
             "UPDATE queue SET work_state='done', http_status=?,
                  etag=COALESCE(?, etag), last_modified=COALESCE(?, last_modified),
@@ -474,14 +430,6 @@ pub fn mark_url_removed(
     http_status: i64,
     now: &str,
 ) -> rusqlite::Result<()> {
-    // Clearing the validators is load-bearing, not tidiness. Keeping them let a
-    // removed page that a sitemap <lastmod> advance re-pended still send
-    // If-None-Match and get a 304 -- and the 304 branch marks present:true while
-    // touching neither documents nor raw_docs, so the row ended up present=1
-    // against documents.present=0: "present" yet missing from the corpus, and
-    // never re-materialized. With no validator the next fetch must be a full GET,
-    // which lands on the 2xx path where `!present` makes content_outcome report
-    // `changed`, re-emitting the raw-doc hand-off and resurrecting the document.
     conn.execute(
         "UPDATE queue SET work_state='done', present=0, http_status=?,
              etag=NULL, last_modified=NULL,
@@ -518,16 +466,7 @@ pub fn enqueue_many(conn: &Connection, rows: &[QueueInsert]) -> rusqlite::Result
     Ok(inserted)
 }
 
-/// Interns URL strings to `urls` ids, caching the mapping in memory for the lifetime
-/// of a run so repeated endpoints (a homepage that is the `dst` of thousands of edges;
-/// a `src` repeated across all its own edges) don't re-hit the DB. Owned by the single
-/// writer `Coordinator` (see writer.rs).
-///
-/// Rollback safety: the cache only ever grows from *committed* `urls` rows. A `urls`
-/// row inserted in a batch that later rolls back dies with the process, because any
-/// write error aborts the whole run (see `writer.rs::apply_completes`). So a mid-batch
-/// rollback can never leave an observed cache/DB divergence, and the next run starts
-/// fresh, repopulating the cache from committed rows via the SELECT fallback.
+/// Interns URL strings to urls ids, caching the mapping in memory for the lifetime of a run.
 #[derive(Default)]
 pub struct UrlInterner {
     cache: HashMap<String, i64>,
@@ -538,15 +477,11 @@ impl UrlInterner {
         Self::default()
     }
 
-    /// Resolve `url` to its `urls.id`, inserting it if new. `prepare_cached` so the
-    /// two statements compile once and reuse across every batch of the run.
+    /// Resolve url to its urls.id, inserting it if new.
     fn intern(&mut self, conn: &Connection, url: &str) -> rusqlite::Result<i64> {
         if let Some(&id) = self.cache.get(url) {
             return Ok(id);
         }
-        // Fast path: INSERT ... RETURNING gives the id when the row is new. On a
-        // conflict (already interned) it returns no row, so fall back to a SELECT --
-        // which fires at most once per distinct URL per run thanks to the cache.
         let mut ins = conn.prepare_cached(
             "INSERT INTO urls(url) VALUES(?1) ON CONFLICT(url) DO NOTHING RETURNING id",
         )?;
@@ -563,9 +498,7 @@ impl UrlInterner {
     }
 }
 
-/// INSERT OR IGNORE the full outbound edge set for one page, interning each endpoint
-/// to a `urls` id first. Runs on the caller's transaction, so the `urls` rows land in
-/// the same atomic batch as the edges.
+/// INSERT OR IGNORE the full outbound edge set for one page, interning each endpoint to a urls id first.
 pub fn insert_links(
     conn: &Connection,
     interner: &mut UrlInterner,
@@ -590,8 +523,7 @@ pub fn insert_links(
     Ok(())
 }
 
-/// Insert a raw_docs row if absent (race-safe). Returns true iff newly inserted
-/// (caller requeues extraction otherwise).
+/// Insert a raw_docs row if absent (race-safe), returning true iff newly inserted.
 pub fn upsert_raw_doc(
     conn: &Connection,
     content_sha256: &str,
@@ -657,8 +589,6 @@ pub fn record_fetch(
     Ok(())
 }
 
-// ---- content-addressed raw cache -------------------------------------------
-
 static TMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// Content-addressed store for downloaded bytes under `root`.
@@ -681,9 +611,7 @@ impl RawCache {
         self.root.join(format!("{digest}{ext}"))
     }
 
-    /// Write `data` at its content-addressed path (idempotent). Uses a unique
-    /// temp file + rename so a concurrent Phase-2 reader never sees a partial
-    /// file. Returns `(digest, path)`.
+    /// Write data at its content-addressed path (idempotent), returning (digest, path).
     pub fn write(&self, data: &[u8], ext: &str) -> io::Result<(String, PathBuf)> {
         let digest = sha256_hex(data);
         let path = self.path_for(&digest, ext);
@@ -704,7 +632,6 @@ impl RawCache {
         match std::fs::rename(&tmp, &path) {
             Ok(()) => Ok((digest, path)),
             Err(_) if path.is_file() => {
-                // Another worker won the race with identical bytes.
                 let _ = std::fs::remove_file(&tmp);
                 Ok((digest, path))
             }
@@ -723,7 +650,6 @@ mod tests {
     #[test]
     fn format_utc_matches_known_epochs() {
         assert_eq!(format_utc(0), "1970-01-01T00:00:00");
-        // 2026-07-16T00:00:00Z = 1_784_160_000
         assert_eq!(format_utc(1_784_160_000), "2026-07-16T00:00:00");
     }
 
@@ -737,8 +663,6 @@ mod tests {
 
     #[test]
     fn documents_schema_has_text_sha256_column() {
-        // Keeps the Rust SCHEMA in parity with Python's dedup column so a
-        // fresh Rust-created DB and a Python-migrated one have identical shape.
         let conn = Connection::open_in_memory().unwrap();
         init_db(&conn).unwrap();
         let cols: Vec<String> = conn
@@ -754,9 +678,7 @@ mod tests {
         );
     }
 
-    /// A fresh DB must come up with the `urls` dictionary and an id-based `links`
-    /// table -- never the legacy text columns. Parity partner to
-    /// `documents_schema_has_text_sha256_column`.
+    /// A fresh DB must come up with the urls dictionary and an id-based links table.
     #[test]
     fn links_schema_is_id_based() {
         let conn = Connection::open_in_memory().unwrap();
@@ -793,8 +715,7 @@ mod tests {
         );
     }
 
-    /// `insert_links` interns each endpoint once and writes id edges; re-inserting the
-    /// same edge is a PK no-op, and the external edge is recoverable by dst URL.
+    /// insert_links interns each endpoint once and writes id edges.
     #[test]
     fn insert_links_interns_urls_and_writes_id_edges() {
         let conn = Connection::open_in_memory().unwrap();
@@ -820,7 +741,6 @@ mod tests {
         ];
         insert_links(&conn, &mut interner, &edges).unwrap();
 
-        // 3 distinct endpoints, 2 edges.
         let n_urls: i64 = conn
             .query_row("SELECT COUNT(*) FROM urls", [], |r| r.get(0))
             .unwrap();
@@ -830,7 +750,6 @@ mod tests {
             .unwrap();
         assert_eq!(n_edges, 2);
 
-        // The external edge is recoverable by dst URL, with in_domain=0.
         let in_dom: i64 = conn
             .query_row(
                 "SELECT l.in_domain FROM links l JOIN urls d ON d.id = l.dst_id
@@ -841,7 +760,6 @@ mod tests {
             .unwrap();
         assert_eq!(in_dom, 0);
 
-        // Re-inserting the same edges is a no-op (INSERT OR IGNORE on the PK).
         insert_links(&conn, &mut interner, &edges).unwrap();
         let n_edges2: i64 = conn
             .query_row("SELECT COUNT(*) FROM links", [], |r| r.get(0))
@@ -870,10 +788,7 @@ mod tests {
         .unwrap()
     }
 
-    /// These sites serve flaky validators: the same page answers 200 with an ETag
-    /// one run and without one the next. If the validator-less response erases the
-    /// stored ETag, the next crawl can no longer send If-None-Match and re-downloads
-    /// the full body every single run — which defeats the whole incremental design.
+    /// These sites serve flaky validators: the same page answers 200 with an ETag one run and without one the next.
     #[test]
     fn unchanged_check_without_validators_preserves_stored_ones() {
         let conn = Connection::open_in_memory().unwrap();
@@ -883,10 +798,10 @@ mod tests {
             &conn,
             "https://x.de/p",
             200,
-            None, // response carried no ETag ...
-            None, // ... and no Last-Modified
+            None,
+            None,
             Some("aaa"),
-            false, // unchanged
+            false,
             true,
             "2026-07-17T00:00:00",
         )
@@ -902,13 +817,6 @@ mod tests {
     }
 
     /// A removed page must not be able to 304 its way back to present=1.
-    ///
-    /// mark_url_removed kept the validators, so a removed page re-pended by a
-    /// sitemap <lastmod> advance could still send If-None-Match and get a 304 --
-    /// and the 304 branch hardcodes present:true while touching neither documents
-    /// nor raw_docs. The result was queue.present=1 against documents.present=0:
-    /// "present" yet absent from the corpus, and never re-materialized, because
-    /// the resurrection logic only lives on the full-body 2xx path.
     #[test]
     fn mark_url_removed_clears_validators_so_the_page_cannot_304() {
         let conn = Connection::open_in_memory().unwrap();
@@ -932,14 +840,10 @@ mod tests {
         assert_eq!(present, 0, "it is still marked removed");
     }
 
-    /// A DB created before `text_sha256` existed must still open. `CREATE TABLE IF
-    /// NOT EXISTS` is a no-op on an existing table, so the column never appears by
-    /// itself -- Python survives this via `_migrate`'s ALTER, and Rust has to match
-    /// or Phase 1 dies on startup against a DB Phase 2 opens happily.
+    /// A DB created before text_sha256 existed must still open.
     #[test]
     fn init_db_migrates_a_pre_text_sha256_documents_table() {
         let conn = Connection::open_in_memory().unwrap();
-        // The `documents` table exactly as it looked before the dedup column.
         conn.execute_batch(
             "CREATE TABLE documents (
                  id               TEXT PRIMARY KEY,
@@ -975,12 +879,10 @@ mod tests {
             cols.iter().any(|c| c == "text_sha256"),
             "migrate must add text_sha256; columns = {cols:?}"
         );
-        // And it stays idempotent on a second open.
         init_db(&conn).expect("init_db must be idempotent");
     }
 
-    /// The flip side: a response that *does* carry validators still refreshes them,
-    /// so preserving-on-None must not turn into never-updating.
+    /// The flip side: a response that does carry validators still refreshes them.
     #[test]
     fn unchanged_check_with_validators_refreshes_them() {
         let conn = Connection::open_in_memory().unwrap();
@@ -1004,9 +906,7 @@ mod tests {
         assert_eq!(lm.as_deref(), Some("Tue, 02 Jan 2026 00:00:00 GMT"));
     }
 
-    /// requeue_transient_errors re-pends only error rows whose http_status is
-    /// transient, scoped to the given site; permanent errors, done rows, and other
-    /// sites are left untouched.
+    /// requeue_transient_errors re-pends only error rows whose http_status is transient, scoped to the given site.
     #[test]
     fn requeue_transient_errors_repends_only_transient_statuses() {
         let conn = Connection::open_in_memory().unwrap();
@@ -1030,7 +930,6 @@ mod tests {
         for s in permanent {
             insert(&format!("https://x.de/p{s}"), "x.de", "error", s);
         }
-        // A done row and a transient-status error row on a different site: untouched.
         insert("https://x.de/done", "x.de", "done", 200);
         insert("https://y.de/t503", "y.de", "error", 503);
 
@@ -1065,8 +964,7 @@ mod tests {
         );
     }
 
-    /// The Rust predicate must agree with the SQL in requeue_transient_errors so
-    /// the two classifications cannot silently drift.
+    /// The Rust predicate must agree with the SQL in requeue_transient_errors.
     #[test]
     fn is_transient_status_matches_the_sql() {
         for s in [0, 408, 429, 500, 503, 599] {

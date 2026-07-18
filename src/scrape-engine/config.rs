@@ -1,13 +1,4 @@
 //! Run configuration passed from Python.
-//!
-//! `config.py` parses `config.toml` into a frozen `Config` dataclass and the thin
-//! `crawl.run_fetch` adapter flattens it into a plain dict, so Rust never re-reads
-//! `config.toml`. There are no CLI overrides: what the file says is what arrives
-//! here.
-//!
-//! Every field is mandatory (`from_item_all` extracts each by dict key, so a
-//! missing one is an extraction error rather than a default). `config.py` owns both
-//! the defaulting and the range checks.
 
 use pyo3::prelude::*;
 
@@ -36,8 +27,7 @@ pub struct RunConfig {
 }
 
 impl RunConfig {
-    /// Number of concurrent fetch workers per host, floored at 1 (mirrors
-    /// `max(1, config.crawl.workers_per_host)` in the old `run_fetch`).
+    /// Number of concurrent fetch workers per host, floored at 1.
     pub fn workers_per_host(&self) -> usize {
         self.workers_per_host.max(1) as usize
     }
@@ -47,19 +37,12 @@ impl RunConfig {
         self.recheck == "new-only"
     }
 
-    /// Re-queue every already-present URL for this run. Both `"all"` and
-    /// `"force-full"` do; the latter is `"all"` plus dropped validators.
+    /// Re-queue every already-present URL for this run.
     pub fn rechecks_all(&self) -> bool {
         matches!(self.recheck.as_str(), "all" | "force-full")
     }
 
-    /// `recheck == "force-full"`: send no stored `ETag`/`Last-Modified`, so every
-    /// re-checked URL is downloaded in full instead of revalidating to a cheap 304.
-    ///
-    /// Derived from `recheck` rather than carried beside it: as a separate flag it
-    /// could be combined with `"new-only"` to ask for a forced re-download of pages
-    /// that by definition have nothing stored to re-download. That is now
-    /// unrepresentable.
+    /// `recheck == "force-full"`: send no stored `ETag`/`Last-Modified`, so every re-checked URL is downloaded in full instead of revalidating to a cheap 304.
     pub fn force_full(&self) -> bool {
         self.recheck == "force-full"
     }

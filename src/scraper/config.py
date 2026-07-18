@@ -1,12 +1,4 @@
-"""Load and validate config.toml into typed dataclasses.
-
-This is the only place tuning values come from: no CLI flag overrides any of them,
-so what config.toml says is what runs. Values are range-checked here rather than
-left to be silently repaired downstream.
-
-Paths resolve relative to the directory containing config.toml, so the tool
-works from any working directory.
-"""
+"""Load and validate config.toml into typed dataclasses."""
 
 from __future__ import annotations
 
@@ -14,10 +6,6 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-# What a re-run re-checks. "force-full" is "all" plus: ignore the stored
-# ETag/Last-Modified, so every re-checked URL is re-downloaded in full rather than
-# revalidating to a 304. The engine derives both behaviours from this one value
-# (see RunConfig::rechecks_all / ::force_full in src/scrape-engine/config.rs).
 RECHECK_MODES = ("all", "changed-only", "new-only", "force-full")
 
 
@@ -37,13 +25,7 @@ class CrawlConfig:
     workers_per_host: int
     recheck: str
     user_agent: str
-    # Per-hostname page budget (0 = unlimited). Defaulted because the config.toml key
-    # is optional; every caller passes fields by keyword, so this trailing position
-    # carries no meaning -- keep it that way and the field order stays free to change.
     max_pages_per_host: int = 0
-    # Re-queue transient-error URLs (timeout/DNS/conn-refused, 408, 429, 5xx) on the
-    # next run so they retry; false freezes all error rows. Defaulted (optional key)
-    # and trailing for the same reason as max_pages_per_host above.
     retry_transient_errors: bool = True
 
 
@@ -85,13 +67,7 @@ def find_config(start: Path | None = None) -> Path:
 
 
 def _bounded(raw: dict, section: str, key: str, *, default, minimum, cast=int):
-    """Read ``section.key``, cast it, and reject anything below ``minimum``.
-
-    config.toml is the only place these values come from, so a nonsense value has to
-    fail here, by name. Otherwise the engine quietly repairs it instead --
-    workers_per_host is floored at 1 in scrape-engine/config.rs, request_delay_seconds
-    at 0.0 in crawl.rs -- and the run silently ignores what the file asked for.
-    """
+    """Read section.key, cast it, and reject anything below minimum."""
     value = cast(raw.get(key, default))
     if value < minimum:
         raise ValueError(f"{section}.{key} must be >= {minimum}; got {value!r}")
@@ -117,7 +93,6 @@ def load_config(path: Path | None = None) -> Config:
     crawl_raw = data["crawl"]
     extract_raw = data["extract"]
     storage_raw = data["storage"]
-    # Optional section: every key defaults, so omitting it entirely is valid.
     dedup_raw = data.get("dedup", {})
 
     recheck = str(crawl_raw.get("recheck", "all"))
@@ -133,8 +108,6 @@ def load_config(path: Path | None = None) -> Config:
         sites=sites,
         crawl=CrawlConfig(
             use_sitemap=bool(crawl_raw.get("use_sitemap", True)),
-            # 0 means unlimited for both page budgets, so 0 is legal and only a
-            # negative budget is nonsense.
             max_pages=_bounded(crawl_raw, "crawl", "max_pages", default=0, minimum=0),
             max_pages_per_host=_bounded(
                 crawl_raw, "crawl", "max_pages_per_host", default=0, minimum=0

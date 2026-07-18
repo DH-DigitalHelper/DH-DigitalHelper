@@ -36,11 +36,7 @@ def cfg(tmp_path):
 
 
 def write_raw(tmp_path, digest, body, kind="html"):
-    """Write ``body`` to the cache at ``digest``'s path and return that path.
-
-    extract derives a blob's location from raw_dir + digest, so a test's bytes
-    must live at the registered digest's path -- not at their own hash.
-    """
+    """Write body to the cache at digest's path and return that path."""
     cache = st.RawCache(tmp_path / "raw")
     path = cache.path_for(digest, ".html" if kind == "html" else ".pdf")
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -49,14 +45,7 @@ def write_raw(tmp_path, digest, body, kind="html"):
 
 
 def test_extract_dispatch_preserves_non_utf8_german_text(tmp_path):
-    """A legacy Windows-1252 page must survive extraction with its umlauts.
-
-    The corpus is German, so aeoeue/ss carry meaning; decoding cp1252 bytes as
-    UTF-8 turns every one of them into U+FFFD, which silently corrupts both the
-    indexed text and the text_sha256 the corpus dedups on. Exercised through
-    _extract_dispatch on purpose: that is where the decode happens -- calling
-    extract_html with bytes already works, since trafilatura sniffs the charset.
-    """
+    """A legacy Windows-1252 page must survive extraction with its umlauts."""
     html = (
         '<html><head><meta charset="windows-1252"><title>Pruefung</title></head>'
         "<body><main><p>Die Prüfungsordnung regelt die Fächer und Module "
@@ -72,7 +61,6 @@ def test_extract_dispatch_preserves_non_utf8_german_text(tmp_path):
     assert "�" not in doc["text"], "cp1252 bytes were mangled into replacement chars"
     assert "Prüfungsordnung" in doc["text"]
     assert "Fächer" in doc["text"]
-    # Locks that trafilatura's metadata pass also accepts bytes, not just extract().
     assert doc["title"] == "Pruefung"
 
 
@@ -81,7 +69,6 @@ def setup_raw(tmp_path, digest="c1", body=b"<html>x</html>", kind="html"):
     st.init_db(conn)
     cache, path = write_raw(tmp_path, digest, body, kind)
     st.upsert_raw_doc(conn, digest, kind, str(path), len(body), NOW)
-    # a present URL pointing at this content
     st.enqueue(conn, "https://www.dhbw.de/a", "www.dhbw.de", 0, None, NOW)
     st.mark_url_checked(
         conn, "https://www.dhbw.de/a", 200, None, None, digest, True, True, NOW
@@ -112,15 +99,11 @@ def test_extract_one_indexes_present_urls(tmp_path):
         "SELECT * FROM documents WHERE url='https://www.dhbw.de/a'"
     ).fetchone()
     assert doc is not None and doc["word_count"] > 50
-    assert st.get_url_state(conn, "https://www.dhbw.de/a")  # sanity
+    assert st.get_url_state(conn, "https://www.dhbw.de/a")
 
 
 def test_extract_one_ignores_stale_raw_path_from_another_machine(tmp_path):
-    """raw_path stores an absolute path from whichever machine fetched the
-    bytes, so moving the DB to another machine (or checkout) leaves every row
-    pointing at a path that does not exist -- pre-fix, extract_one opened it
-    verbatim and turned the whole backlog into 'error'. The cache is
-    content-addressed, so the blob is found via raw_dir + digest instead."""
+    """A stale absolute raw_path from another machine is ignored because the content-addressed blob is found via raw_dir + digest."""
     conn, _ = setup_raw(tmp_path)
     conn.execute(
         "UPDATE raw_docs SET raw_path=? WHERE content_sha256='c1'",
@@ -162,11 +145,8 @@ def test_extract_one_rejects_low_quality(tmp_path):
 
 
 def test_extract_one_dedups_present_urls_sharing_content(tmp_path):
-    """Source-1 dedup: several present URLs share one content blob (identical
-    extracted text). Only the cleanest URL survives as a document -- the rest are
-    collapsed on the text hash rather than each getting its own row."""
+    """Source-1 dedup: several present URLs sharing one content blob collapse on the text hash so only the cleanest URL survives."""
     conn, _ = setup_raw(tmp_path, digest="c1")
-    # a second present URL pointing at the SAME content digest
     st.enqueue(conn, "https://www.dhbw.de/b", "www.dhbw.de", 0, None, NOW)
     st.mark_url_checked(
         conn, "https://www.dhbw.de/b", 200, None, None, "c1", True, True, NOW
@@ -180,17 +160,13 @@ def test_extract_one_dedups_present_urls_sharing_content(tmp_path):
         r["url"]
         for r in conn.execute("SELECT url FROM documents WHERE present=1").fetchall()
     }
-    # /a and /b tie on query-params + length, so the alphabetically smaller wins.
     assert urls == {"https://www.dhbw.de/a"}
 
 
 def test_extract_dedups_byte_different_urls_with_same_text(tmp_path):
-    """Source-2 dedup (the cHash cluster): two URLs with DIFFERENT raw bytes
-    (separate content digests -> separate extract passes) that extract to
-    IDENTICAL text collapse to a single document. The lookup is global on the
-    text hash, so it spans content digests; the cleanest URL wins."""
+    """Source-2 dedup: two URLs with different raw bytes that extract to identical text collapse to a single document, and the cleanest URL wins."""
     c = cfg(tmp_path)
-    object.__setattr__(c.extract, "workers", 1)  # deterministic single-writer
+    object.__setattr__(c.extract, "workers", 1)
     conn = st.connect(c.storage.db_file)
     st.init_db(conn)
     _, p1 = write_raw(tmp_path, "c1", b"<html>one</html>")
@@ -215,7 +191,6 @@ def test_extract_dedups_byte_different_urls_with_same_text(tmp_path):
     )
     conn.close()
 
-    # good_doc ignores its input bytes -> both blobs extract to the same text.
     counts = extract.run_extract(
         c, {"html": good_doc, "pdf": good_doc}, clock=lambda: NOW
     )
@@ -226,18 +201,13 @@ def test_extract_dedups_byte_different_urls_with_same_text(tmp_path):
         r["url"]
         for r in conn2.execute("SELECT url FROM documents WHERE present=1").fetchall()
     ]
-    assert urls == ["https://www.dhbw.de/firmen/"]  # the cHash-free URL wins
+    assert urls == ["https://www.dhbw.de/firmen/"]
     conn2.close()
 
 
 def test_extract_one_materialization_is_atomic_across_urls(tmp_path, monkeypatch):
-    """All of a doc's writes (the raw_docs extract row + every present URL's
-    document) land in ONE write_txn. If materializing the second of several
-    shared URLs fails, the first must not be left committed and the raw_doc
-    must not be marked done -- the whole transaction rolls back and the outcome
-    is "error"."""
+    """All of a doc's writes land in one write_txn, so a failure materializing a later shared URL rolls the whole transaction back and yields an error outcome."""
     conn, _ = setup_raw(tmp_path, digest="c1")
-    # a second present URL pointing at the SAME content digest
     st.enqueue(conn, "https://www.dhbw.de/b", "www.dhbw.de", 0, None, NOW)
     st.mark_url_checked(
         conn, "https://www.dhbw.de/b", 200, None, None, "c1", True, True, NOW
@@ -259,7 +229,6 @@ def test_extract_one_materialization_is_atomic_across_urls(tmp_path, monkeypatch
         conn, row, cfg(tmp_path), {"html": good_doc, "pdf": good_doc}, NOW
     )
     assert outcome == "error"
-    # neither URL's document survived: the first upsert was rolled back with it
     assert conn.execute("SELECT COUNT(*) c FROM documents").fetchone()["c"] == 0
     raw = conn.execute("SELECT extract_state FROM raw_docs").fetchone()
     assert raw["extract_state"] == "error"
@@ -281,18 +250,12 @@ def test_extract_one_records_error_when_extractor_raises(tmp_path):
 
 
 def test_extract_one_isolates_failures_after_extraction(tmp_path):
-    """A crash in materialization (after the extractor already succeeded and
-    passed the quality gate) must still yield an "error" outcome instead of
-    propagating out of extract_one and killing the worker thread, leaving the
-    claimed row stuck at extract_state='in_progress' forever."""
+    """A crash in materialization after a successful extraction must still yield an error outcome instead of killing the worker thread."""
     conn, _ = setup_raw(tmp_path)
     row = st.claim_pending_raw(conn)
 
     def missing_markdown(_bytes):
         text = "This is genuinely useful DHBW content. " * 10
-        # deliberately omits "markdown", which upsert_document indexes with
-        # doc["markdown"] (not .get) -> KeyError once accepted by the quality
-        # gate (which only reads doc.get("markdown") and tolerates absence).
         return {"title": "T", "text": text, "word_count": len(text.split())}
 
     outcome = extract.extract_one(
@@ -306,7 +269,7 @@ def test_extract_one_isolates_failures_after_extraction(tmp_path):
 
 
 def test_extract_one_populates_classification_columns(tmp_path):
-    conn, _ = setup_raw(tmp_path)  # present URL https://www.dhbw.de/a, site www.dhbw.de
+    conn, _ = setup_raw(tmp_path)
     row = st.claim_pending_raw(conn)
     outcome = extract.extract_one(
         conn, row, cfg(tmp_path), {"html": good_doc, "pdf": good_doc}, NOW
@@ -316,7 +279,6 @@ def test_extract_one_populates_classification_columns(tmp_path):
         "SELECT standort_id, department_id, classify_meta FROM documents "
         "WHERE url='https://www.dhbw.de/a'"
     ).fetchone()
-    # www.dhbw.de -> central standort resolves; department falls back to 'unknown'.
     standort = conn.execute(
         "SELECT name FROM standorte WHERE id=?", (doc["standort_id"],)
     ).fetchone()
@@ -352,11 +314,6 @@ def test_run_extract_processes_pending_docs_through_thread_pool(tmp_path):
     ).fetchone()
     assert doc is not None and doc["word_count"] > 50
     conn2.close()
-
-
-# ---------------------------------------------------------------------------
-# Task 16: Progress wiring
-# ---------------------------------------------------------------------------
 
 
 def test_run_extract_emits_header_and_summary_without_announcing_drops(tmp_path):
@@ -395,22 +352,11 @@ def test_run_extract_emits_header_and_summary_without_announcing_drops(tmp_path)
     out = buf.getvalue()
     assert "Extracting" in out
     assert "Extraction complete" in out
-    # a rejected doc is counted but never announced as its own line
     assert "dropped" not in out
 
 
-# ---------------------------------------------------------------------------
-# Task 21: stranded in_progress recovery + fail-fast worker exceptions
-# ---------------------------------------------------------------------------
-
-
 def test_run_extract_recovers_stranded_in_progress_raw_doc(tmp_path):
-    """A raw_doc left at extract_state='in_progress' by a crashed/killed
-    extract worker (Ctrl-C, OOM on a big PDF, claim_pending_raw raising after
-    busy_timeout) must not be stranded forever. Pre-fix, run_extract only ever
-    claims 'pending' rows, so this doc would never be retried or materialized
-    -> silent permanent data loss. Post-fix, run_extract resets stray
-    in_progress rows back to pending before spawning workers."""
+    """A raw_doc left at extract_state='in_progress' by a crashed worker must not be stranded forever, since run_extract resets stray in_progress rows to pending before spawning workers."""
     c = cfg(tmp_path)
     conn = st.connect(c.storage.db_file)
     st.init_db(conn)
@@ -421,7 +367,6 @@ def test_run_extract_recovers_stranded_in_progress_raw_doc(tmp_path):
     st.mark_url_checked(
         conn, "https://www.dhbw.de/a", 200, None, None, "c1", True, True, NOW
     )
-    # Simulate a worker that claimed the row and then crashed before finishing.
     claimed = st.claim_pending_raw(conn)
     assert claimed["content_sha256"] == "c1"
     row = conn.execute(
@@ -448,11 +393,7 @@ def test_run_extract_recovers_stranded_in_progress_raw_doc(tmp_path):
 
 
 def test_run_extract_retries_errored_raw_doc(tmp_path):
-    """A raw_doc recorded as extract_state='error' (a malformed blob, or a bug
-    since fixed in the extractor) must be retried on the next run rather than
-    stuck forever. run_extract re-queues error rows before spawning workers, so
-    an extractor that now succeeds materializes the document -- and the stale
-    extract_error is cleared so report/dashboard stop counting it."""
+    """A raw_doc recorded as extract_state='error' must be retried on the next run, and the stale extract_error is cleared once it succeeds."""
     c = cfg(tmp_path)
     conn = st.connect(c.storage.db_file)
     st.init_db(conn)
@@ -463,7 +404,6 @@ def test_run_extract_retries_errored_raw_doc(tmp_path):
     st.mark_url_checked(
         conn, "https://www.dhbw.de/a", 200, None, None, "c1", True, True, NOW
     )
-    # A prior extract pass recorded this blob as an error.
     st.save_extraction(conn, "c1", None, False, None, "boom", NOW)
     row = conn.execute(
         "SELECT extract_state, extract_error FROM raw_docs WHERE content_sha256='c1'"
@@ -490,11 +430,6 @@ def test_run_extract_retries_errored_raw_doc(tmp_path):
     conn2.close()
 
 
-# ---------------------------------------------------------------------------
-# Per-type claiming (extract-html / extract-pdf)
-# ---------------------------------------------------------------------------
-
-
 def _seed_two_types(tmp_path):
     """One pending html raw_doc + one pending pdf raw_doc."""
     conn = st.connect(str(tmp_path / "db.sqlite3"))
@@ -511,7 +446,6 @@ def test_claim_pending_raw_filters_by_source_type(tmp_path):
     row = st.claim_pending_raw(conn, source_type="pdf")
     assert row["content_sha256"] == "p" * 64
     assert row["source_type"] == "pdf"
-    # the html row is untouched and still claimable on its own pass
     assert st.claim_pending_raw(conn, source_type="pdf") is None
     assert st.claim_pending_raw(conn, source_type="html")["source_type"] == "html"
 
@@ -525,10 +459,8 @@ def test_count_pending_raw_filters_by_source_type(tmp_path):
 
 def test_reset_extract_in_progress_is_scoped_to_source_type(tmp_path):
     conn = _seed_two_types(tmp_path)
-    # both types get claimed (marked in_progress) by two crashed passes
     st.claim_pending_raw(conn, source_type="html")
     st.claim_pending_raw(conn, source_type="pdf")
-    # an html recovery pass must reset ONLY the html row, leaving pdf's claim
     reset = st.reset_extract_in_progress(conn, source_type="html")
     assert reset == 1
     states = {
@@ -542,10 +474,8 @@ def test_reset_extract_in_progress_is_scoped_to_source_type(tmp_path):
 
 def test_reset_extract_errors_is_scoped_to_source_type(tmp_path):
     conn = _seed_two_types(tmp_path)
-    # both types errored during extraction on two separate passes
     st.save_extraction(conn, "h" * 64, None, False, None, "boom", NOW)
     st.save_extraction(conn, "p" * 64, None, False, None, "boom", NOW)
-    # an html retry pass must re-queue ONLY the html row, leaving pdf's error
     reset = st.reset_extract_errors(conn, source_type="html")
     assert reset == 1
     states = {
@@ -558,9 +488,7 @@ def test_reset_extract_errors_is_scoped_to_source_type(tmp_path):
 
 
 def test_run_extract_pooled_path_indexes_real_html(tmp_path):
-    """End-to-end production path: extractors=None spawns a ProcessPoolExecutor
-    and runs the real trafilatura extractor on an html blob, scoped to
-    source_type='html'."""
+    """End-to-end production path: extractors=None spawns a ProcessPoolExecutor and runs the real trafilatura extractor on an html blob scoped to source_type='html'."""
     c = cfg(tmp_path)
     conn = st.connect(c.storage.db_file)
     st.init_db(conn)
@@ -595,14 +523,7 @@ def test_run_extract_pooled_path_indexes_real_html(tmp_path):
 
 
 def test_run_extract_fails_fast_on_worker_exception(tmp_path, monkeypatch):
-    """If a worker-level call (outside extract_one's own try/except) raises --
-    e.g. claim_pending_raw hitting a connection error -- run_extract must not
-    silently swallow it. Pre-fix, run_extract does `ex.submit(worker)` and
-    discards the futures, so the exception is captured in the unread Future
-    and never surfaces: the CLI would print partial counts and exit 0,
-    reporting success on a partially-failed run. This test fails against
-    pre-fix code (no exception raised) and passes once run_extract collects
-    futures and calls .result() on each."""
+    """A worker-level call that raises must not be silently swallowed; run_extract collects futures and calls .result() so the exception surfaces."""
     c = cfg(tmp_path)
     conn = st.connect(c.storage.db_file)
     st.init_db(conn)

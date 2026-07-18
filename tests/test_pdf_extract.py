@@ -3,8 +3,6 @@ from scraper.quality import evaluate
 
 MARKDOWN = "# Modulhandbuch\n\nInhalt des Moduls mit ausreichend Text."
 
-# A heading/table-heavy PDF page: 40 real words, but ~30 extra markdown tokens
-# (#, |, ---, -, >) that split() happily counts as words.
 TABLE_HEAVY = """\
 # Modulhandbuch Wirtschaftsinformatik
 
@@ -26,38 +24,26 @@ umfasst nur wenige echte Woerter fuer diesen Test.
 
 
 def test_pdf_word_count_ignores_markdown_syntax():
-    """word_count must count words, not markdown punctuation.
-
-    The PDF path used its raw markdown as `text`, so `len(text.split())` counted
-    `#`, `|`, `---`, `-` and `>` as words -- while the HTML path strips all markup
-    before counting. The same min_words gate was therefore applied to two
-    different notions of "word", and a heading/table-heavy PDF sailed past it on
-    punctuation alone.
-    """
+    """word_count must count words, not markdown punctuation."""
     doc = extract_pdf(b"%PDF fake", to_markdown=lambda data: TABLE_HEAVY)
 
     assert doc is not None
-    # The markup itself must not appear in the indexed text ...
     assert "|" not in doc["text"]
     assert "---" not in doc["text"]
     assert not any(line.startswith("#") for line in doc["text"].splitlines())
-    # ... but every real word must survive, including the ordinal.
     assert "Programmieren" in doc["text"]
     assert "Modulhandbuch" in doc["text"]
-    # ... and the count must reflect real words only.
     assert doc["word_count"] == len(doc["text"].split())
     raw_tokens = len(TABLE_HEAVY.split())
     assert doc["word_count"] < raw_tokens, (
         f"word_count {doc['word_count']} still counts markdown syntax "
         f"(raw markdown has {raw_tokens} tokens)"
     )
-    # The markdown itself is still stored verbatim for downstream consumers.
     assert "| Modul | ECTS | Dozent |" in doc["markdown"]
 
 
 def test_pdf_below_the_gate_is_rejected_despite_markdown_padding():
-    """The end-to-end consequence: a short PDF whose *real* word count is under
-    the gate must be rejected, even when its markdown syntax pads it over."""
+    """The end-to-end consequence: a short PDF whose real word count is under the gate must be rejected, even when its markdown syntax pads it over."""
     doc = extract_pdf(b"%PDF fake", to_markdown=lambda data: TABLE_HEAVY)
     real_words = len(doc["text"].split())
     assert real_words < 50, "fixture precondition: genuinely a short page"
@@ -101,7 +87,6 @@ def test_extract_pdf_detects_language():
 
 
 def test_extract_pdf_falls_back_to_metadata_title_when_no_heading():
-    # Markdown without any "# " heading -> the metadata title is consulted.
     no_heading = "Inhalt ohne Ueberschrift, aber mit ausreichend echtem Fliesstext."
     doc = extract_pdf(
         b"%PDF fake",
@@ -117,7 +102,7 @@ def test_extract_pdf_rejects_junk_metadata_title():
         to_markdown=lambda data: "Fliesstext ohne jede Ueberschrift in dem Dokument.",
         meta_title=lambda data: "Microsoft Word - egal.docx",
     )
-    assert doc["title"] is None  # junk metadata rejected; filename fallback is per-URL
+    assert doc["title"] is None
 
 
 def test_extract_pdf_prefers_heading_over_metadata():
@@ -133,4 +118,4 @@ def test_extract_pdf_prefers_heading_over_metadata():
         meta_title=meta,
     )
     assert doc["title"] == "Heading Wins"
-    assert called["meta"] == 0  # metadata is not read when a heading exists
+    assert called["meta"] == 0

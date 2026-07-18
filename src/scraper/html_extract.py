@@ -5,19 +5,11 @@ from __future__ import annotations
 from . import lang as langmod
 from . import markdown as md
 
-# Text is derived from the one markdown pass rather than a second extraction:
-# trafilatura prunes its parse tree in place during extract(), so calling it
-# again on the same tree is unsafe -- and this halves the per-document cost.
-# The stripping itself lives in `markdown.to_text`, shared with the PDF path so
-# both produce the same notion of "word" for the min_words gate.
 _markdown_to_text = md.to_text
 
 
 def extract_html(html: str | bytes, url: str | None = None) -> dict | None:
-    """Extract main content + metadata. Accepts raw ``bytes`` (preferred: lets
-    trafilatura detect the page's encoding) or an already-decoded ``str``."""
-    # Imported lazily so PDF-only pool workers never pay trafilatura's heavy
-    # import cost (and vice versa for pymupdf in pdf_extract).
+    """Extract main content + metadata."""
     import trafilatura
     from trafilatura.metadata import extract_metadata
 

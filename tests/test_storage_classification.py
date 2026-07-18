@@ -1,4 +1,3 @@
-# tests/test_storage_classification.py
 import json
 
 from scraper import storage as st
@@ -110,10 +109,10 @@ def test_stats_unclassified_ignores_legitimately_null_standort():
         "SELECT standort_id, department_id, classify_meta FROM documents WHERE url=?",
         (url,),
     ).fetchone()
-    assert row["standort_id"] is None  # unmapped site -> null standort (legitimate)
-    assert row["department_id"] is not None  # 'unknown' still resolves
+    assert row["standort_id"] is None
+    assert row["department_id"] is not None
     assert row["classify_meta"] is not None
-    assert st.stats(conn)["unclassified"] == 0  # NOT counted as unclassified
+    assert st.stats(conn)["unclassified"] == 0
 
 
 def test_run_reclassify_repopulates_without_touching_updated_at():
@@ -122,7 +121,6 @@ def test_run_reclassify_repopulates_without_touching_updated_at():
     st.enqueue(conn, url, "dhbw-stuttgart.de", 0, None, NOW)
     st.mark_url_checked(conn, url, 200, None, None, "c1", True, True, NOW)
     st.upsert_document(conn, url, "dhbw-stuttgart.de", "html", "c1", doc(), NOW)
-    # Simulate a pre-change row: clear the enrichment columns.
     conn.execute(
         "UPDATE documents SET standort_id=NULL, department_id=NULL, "
         "study_program_id=NULL, classify_meta=NULL WHERE url=?",
@@ -142,7 +140,7 @@ def test_run_reclassify_repopulates_without_touching_updated_at():
     ).fetchone()
     assert dept["name"] == "wirtschaft"
     assert row["standort_id"] is not None
-    assert row["updated_at"] == before  # derived metadata: never touched
+    assert row["updated_at"] == before
 
 
 def test_run_reclassify_is_idempotent():

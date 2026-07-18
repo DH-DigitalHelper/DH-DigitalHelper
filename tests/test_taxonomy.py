@@ -29,12 +29,11 @@ def test_satellite_rules_reference_defined_satellites():
     standort_slugs = {slug for slug, _, _, _ in tx.STANDORTE}
     for sat_slug, patterns, parent in tx.SATELLITE_RULES:
         assert sat_slug in standort_slugs
-        assert patterns  # non-empty
+        assert patterns
         assert parent in standort_slugs
 
 
 def test_site_to_standort_covers_every_configured_site():
-    # The 11 allowed_domain values from config.toml.
     configured = {
         "heidenheim.dhbw.de",
         "www.dhbw.de",

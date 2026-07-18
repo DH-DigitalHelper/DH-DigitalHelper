@@ -1,5 +1,4 @@
-//! Verbatim port of the Python `tests/test_links.py`. These lock the trap rules
-//! and link-discovery behaviour to the originals.
+//! Verbatim port of the Python `tests/test_links.py`, locking the trap rules and link-discovery behaviour to the originals.
 
 use _engine::links::{discover_links, in_domain, is_trap_url};
 
@@ -33,16 +32,13 @@ fn discover_links_filters_and_absolutizes() {
     "#;
     let got = discover_links(html, "https://www.dhbw.de/home", "www.dhbw.de");
     assert!(has(&got, "https://www.dhbw.de/studium"));
-    assert!(has(&got, "https://www.dhbw.de/kontakt")); // fragment stripped
+    assert!(has(&got, "https://www.dhbw.de/kontakt"));
     assert!(has(&got, "https://www.dhbw.de/doc.pdf"));
     assert!(got.iter().all(|u| !u.contains("other.example")));
     assert!(got.iter().all(|u| !u.starts_with("mailto:")));
 }
 
-/// HTML tag and attribute names are case-insensitive, but `tl` hands them back
-/// exactly as written and does no folding. Comparing them literally therefore
-/// dropped `<A HREF=...>`-style anchors outright -- losing both the edge and the
-/// follow target, so whole pages could go uncrawled.
+/// Link discovery is case-insensitive about tag and attribute names.
 #[test]
 fn discover_links_is_case_insensitive_about_tags_and_attributes() {
     let html = r#"
@@ -99,8 +95,6 @@ fn is_trap_url_flags_mrbs_booking_host() {
         "https://buchen.dhbw-vs.de/index.php?view=week&area=5&room=10"
     ));
     assert!(is_trap_url("https://buchen.dhbw-vs.de/help.php"));
-    // "buchen.*" is generalized to the leftmost DNS label, so any campus's booking
-    // host is trapped without pinning each one in config.
     assert!(is_trap_url("https://buchen.mosbach.dhbw.de/index.php"));
     assert!(is_trap_url(
         "https://buchen.dhbw-stuttgart.de/edit_entry.php?area=1"
@@ -115,8 +109,6 @@ fn is_trap_url_allows_sibling_hosts_of_trap_host() {
 
 #[test]
 fn is_trap_url_allows_buchen_in_path_on_normal_host() {
-    // The trap is host-label only. "Campus Buchen" is a real DHBW Mosbach location,
-    // so a normal page whose *path* contains "buchen" must stay crawlable.
     assert!(!is_trap_url(
         "https://www.mosbach.dhbw.de/campus-mosbach/campus-buchen"
     ));

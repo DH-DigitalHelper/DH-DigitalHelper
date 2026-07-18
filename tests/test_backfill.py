@@ -1,10 +1,4 @@
-"""Tests for the one-time metadata backfill (storage.run_backfill).
-
-Seeds `documents` rows with the three fields dead exactly as the real corpus has
-them (lang NULL, final_url == url, title NULL) plus the crawl_log rows the redirect
-truth is recovered from, then checks each field is repaired without bumping
-updated_at, and that a second run is a no-op.
-"""
+"""Tests for the one-time metadata backfill (storage.run_backfill)."""
 
 from scraper import storage as st
 
@@ -95,14 +89,12 @@ def test_backfill_sets_final_url_from_matching_crawl_log(tmp_path):
 
 
 def test_backfill_final_url_ignores_later_304_and_matches_bytes(tmp_path):
-    """A later 304 recheck logs final_url == url; the sha match must keep the real
-    redirect from the full fetch that produced this doc's bytes."""
+    """A later 304 recheck logs final_url == url; the sha match must keep the real redirect from the full fetch that produced this doc's bytes."""
     conn = db(tmp_path)
     insert_doc(conn, "https://x/p", "body text of the page " * 10, "c1")
     log_fetch(
         conn, "https://x/p", "https://x/real-target", "c1", now="2026-07-14T00:00:00"
     )
-    # a later 304 row: build_batch writes final_url == url and sha == the cached sha
     st.record_fetch(
         conn,
         "run-2",
@@ -128,7 +120,7 @@ def test_backfill_final_url_ignores_later_304_and_matches_bytes(tmp_path):
 def test_backfill_leaves_final_url_when_no_redirect(tmp_path):
     conn = db(tmp_path)
     insert_doc(conn, "https://x/plain", "ordinary page body text " * 10, "c1")
-    log_fetch(conn, "https://x/plain", "https://x/plain", "c1")  # no redirect
+    log_fetch(conn, "https://x/plain", "https://x/plain", "c1")
     result = st.run_backfill(conn, tmp_path / "raw")
     assert result["final_url"] == 0
     row = conn.execute(
@@ -155,7 +147,6 @@ def test_backfill_pdf_title_prefers_cached_metadata(tmp_path, monkeypatch):
     insert_doc(
         conn, "https://x/doc.pdf", "pdf body text here " * 10, "cpdf", source_type="pdf"
     )
-    # a cached blob must exist at the content-addressed path for metadata to be read
     cache = st.RawCache(tmp_path / "raw")
     path = cache.path_for("cpdf", ".pdf")
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -176,7 +167,6 @@ def test_backfill_pdf_title_prefers_cached_metadata(tmp_path, monkeypatch):
 
 def test_backfill_pdf_title_falls_back_to_url_when_blob_missing(tmp_path):
     conn = db(tmp_path)
-    # no cached blob on disk -> from_url fallback
     insert_doc(
         conn,
         "https://x/fileadmin/Modul_Handbuch.pdf",

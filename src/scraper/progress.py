@@ -1,18 +1,4 @@
-"""Live progress reporting.
-
-Every crawl/extract worker calls :meth:`Progress.update` with its *own* site's
-running counts. The reporter keeps the latest snapshot per site (keyed by
-``key``) and repaints a single multi-line block on a throttled tick: one row
-per site plus a TOTAL row. Two problems this design avoids:
-
-* **Line-stomping.** Previously all sites shared one ``\\r`` status line and
-  each worker wrote its own site's counter, so the visible number appeared to
-  jump (10 -> 2000 -> 50) as different sites' workers took turns. Now each site
-  owns a row and the total is their sum, so the frame is always coherent.
-* **Flush storms.** Previously every fetched URL took a lock, wrote, and
-  flushed stderr; with hundreds of workers that serialized into real lag. Now
-  updates only mutate in-memory state and repaint at most once per ``interval``.
-"""
+"""Live progress reporting."""
 
 from __future__ import annotations
 
@@ -38,15 +24,11 @@ class Progress:
         self._clock = clock
         self._interval = interval
         self._lock = threading.Lock()
-        # key -> {"counts": dict, "current": str}, insertion-ordered so site
-        # rows keep a stable position across repaints.
         self._tracks: dict[str, dict] = {}
         self._last_paint: float | None = None
-        self._live_lines = 0  # newlines occupied by the on-screen live block
+        self._live_lines = 0
         self._rate = 0.0
-        self._rate_prev: tuple[float, int] | None = None  # (time, total items)
-
-    # -- public API --------------------------------------------------------
+        self._rate_prev: tuple[float, int] | None = None
 
     def header(self, text: str) -> None:
         with self._lock:
@@ -73,8 +55,6 @@ class Progress:
             self.stream.write(f"\n{title}: {_fmt(counts)}\n")
             self.stream.flush()
 
-    # -- rendering ---------------------------------------------------------
-
     def _maybe_paint(self, force: bool) -> None:
         now = self._clock()
         if (
@@ -90,11 +70,10 @@ class Progress:
             return
         if self.is_tty:
             move = f"\033[{self._live_lines}A" if self._live_lines else ""
-            self.stream.write("\r" + move + "\033[J")  # jump to top, clear down
+            self.stream.write("\r" + move + "\033[J")
             self.stream.write("\n".join(lines))
             self._live_lines = len(lines) - 1
         else:
-            # Piped/CI: no cursor control, just a periodic one-line snapshot.
             self.stream.write(lines[-1] + "\n")
         self.stream.flush()
 
@@ -110,9 +89,6 @@ class Progress:
             return []
         width = max(len(k) for k in self._tracks)
         lines = []
-        # With several tracks the throughput lives on the TOTAL row below; with
-        # a single track (e.g. the extract phase, key="") there is no TOTAL row,
-        # so the rate rides on the sole line instead.
         solo_rate = f" | {self._rate:.0f}/s" if len(self._tracks) == 1 else ""
         for key, track in self._tracks.items():
             label = f"{key:<{width}}  " if key else ""
@@ -143,7 +119,6 @@ class Progress:
             dt = now - prev_t
             if dt > 0:
                 inst = (total - prev_total) / dt
-                # Light EMA so the rate reads steadily instead of twitching.
                 self._rate = (
                     inst if self._rate == 0.0 else 0.5 * self._rate + 0.5 * inst
                 )

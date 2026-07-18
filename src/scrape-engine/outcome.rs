@@ -1,12 +1,6 @@
 //! Per-page crawl outcomes and the content-hash change-detection decision.
-//!
-//! Mirrors the branching in the Python `crawl.process_url`. The full branch
-//! (304 / non-2xx / classify=="other" / 2xx html|pdf) lives in `crawl.rs`; the
-//! pure content-hash decision for the 2xx html|pdf case is here so it can be
-//! unit-tested in isolation.
 
-/// The seven terminal outcomes of processing one URL. String forms match the
-/// keys used by `crawl_log.outcome`, the per-site counts dict, and the tests.
+/// The seven terminal outcomes of processing one URL.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Outcome {
     New,
@@ -30,16 +24,7 @@ impl Outcome {
     }
 }
 
-/// Decide the outcome of a successfully fetched html|pdf body against the URL's
-/// stored state. Returns `(outcome, changed)` where `changed` gates writing the
-/// raw file + upserting `raw_docs` (exactly as in `process_url`):
-///
-/// ```text
-/// changed = new_digest != prior_sha  OR  not present
-/// outcome = New       if prior_sha is None
-///           Changed   if changed
-///           Unchanged otherwise
-/// ```
+/// Decide the outcome of a successfully fetched html|pdf body against the URL's stored state.
 pub fn content_outcome(
     prior_sha: Option<&str>,
     present: bool,
@@ -83,8 +68,6 @@ mod tests {
 
     #[test]
     fn same_hash_but_absent_is_changed_resurrection() {
-        // A previously-removed URL (present=0) that now returns identical bytes
-        // must re-trigger extraction, so it counts as changed even on a hash match.
         let (o, changed) = content_outcome(Some("aaa"), false, "aaa");
         assert_eq!(o, Outcome::Changed);
         assert!(changed);

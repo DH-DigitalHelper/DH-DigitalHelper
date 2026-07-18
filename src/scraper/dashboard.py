@@ -1,15 +1,4 @@
-"""Static HTML analysis report for the scraped / extracted corpus.
-
-:func:`collect_analysis` runs a set of **read-only** aggregate queries over the
-SQLite DB and returns a plain, JSON-serializable dict. :func:`render_html` turns
-that dict into a single self-contained HTML file -- inline CSS + a little JS, no
-external assets -- so it opens straight from disk over ``file://``.
-
-There is no server and no live refresh: to refresh the numbers, regenerate the
-file (``dhbw-scraper report``) and reload the page. The report is fully
-data-driven (site names, ``min_words`` and every finding come from the DB +
-config), so re-running it after a crawl/extract reflects the new state.
-"""
+"""Static HTML analysis report for the scraped / extracted corpus."""
 
 from __future__ import annotations
 
@@ -20,7 +9,6 @@ from collections import Counter, defaultdict, deque
 from pathlib import Path
 from urllib.parse import urlsplit
 
-# Word-count histogram buckets (lo inclusive, hi exclusive; last is open-ended).
 _WC_BUCKETS = [
     (0, 50),
     (50, 100),
@@ -55,18 +43,13 @@ def _percentiles(sorted_vals: list[int], ps: tuple[int, ...]) -> dict[str, int]:
     return out
 
 
-# Crawl-discovery-tree caps. Rendering details kept in code (like _WC_BUCKETS and
-# the old host-graph's max_nodes=24), not config.toml -- they bound the payload
-# embedded in the static report, not the crawl.
-_TREE_MAX_CHILDREN = 40  # fan-out per node before the tail folds into "+K more"
-_TREE_MAX_NODES_PER_SITE = 3000  # per-site node budget (breadth-first)
-_TREE_DEFAULT_DOMAIN = "www.dhbw.de"  # campus selected on first load
+_TREE_MAX_CHILDREN = 40
+_TREE_MAX_NODES_PER_SITE = 3000
+_TREE_DEFAULT_DOMAIN = "www.dhbw.de"
 
 
 def _rel(url: str) -> tuple[str, str]:
-    """``(path[?query], host)`` for a URL -- the compact per-node key. The host is
-    kept separately so the client can rebuild the absolute URL for tooltips without
-    repeating the scheme+host on every node."""
+    """Return (path[?query], host) for a URL as the compact per-node key."""
     sp = urlsplit(url)
     rel = sp.path or "/"
     if sp.query:
@@ -75,14 +58,7 @@ def _rel(url: str) -> tuple[str, str]:
 
 
 def _build_tree(items, max_children: int, max_nodes: int):
-    """Build one site's discovery tree from ``(url, discovered_from, state)`` rows.
-
-    Returns ``(nodes, host, truncated, total)`` or ``None`` when nothing survives
-    pruning. ``nodes[0]`` is a synthetic root; each real node is
-    ``{"u": path[?query], "p": parent index, "st": state}`` (+ ``"h"`` host override
-    when a node's host differs from the site host). Emitted breadth-first, so a
-    node's parent always precedes it and a suffix cut keeps every index valid.
-    """
+    """Build one site's discovery tree from (url, discovered_from, state) rows."""
     state_of = {}
     parent_of = {}
     for url, parent, state in items:
@@ -91,7 +67,7 @@ def _build_tree(items, max_children: int, max_nodes: int):
     if not state_of:
         return None
 
-    ROOT = None  # sentinel parent for seeds / cross-site orphans
+    ROOT = None
     children: dict = defaultdict(list)
     for url in state_of:
         p = parent_of[url]
@@ -99,8 +75,6 @@ def _build_tree(items, max_children: int, max_nodes: int):
 
     site_host = Counter(_rel(u)[1] for u in state_of).most_common(1)[0][0]
 
-    # Keep a node iff its subtree contains a `done` node -- drops error/pending
-    # dead-end leaves (trap tails) but never severs the path to a real page.
     keep: set = set()
     size: dict = {}
     for seed in children[ROOT]:
@@ -121,7 +95,7 @@ def _build_tree(items, max_children: int, max_nodes: int):
 
     def kept_children(url):
         cs = [c for c in children.get(url, ()) if c in keep]
-        cs.sort(key=lambda c: (-size[c], c))  # largest subtrees first, then stable
+        cs.sort(key=lambda c: (-size[c], c))
         return cs
 
     nodes = [{"u": "", "p": -1, "st": "root"}]
@@ -155,16 +129,7 @@ def _build_tree(items, max_children: int, max_nodes: int):
 def _discovery_trees(
     rows, sites, *, max_children=_TREE_MAX_CHILDREN, max_nodes=_TREE_MAX_NODES_PER_SITE
 ) -> dict:
-    """Assemble one collapsible crawl-discovery tree per site from ``queue`` rows.
-
-    ``rows`` yields ``(url, site, discovered_from, depth, work_state)``; ``site`` is
-    the stored ``allowed_domain``. Only crawled (in-domain) URLs live in ``queue``,
-    so every tree is DHBW-only by construction. See :func:`_build_tree` for the
-    per-site reduction (prune / child cap / node cap).
-
-    Returns ``{"sites": [{name, host, nodes, truncated, total}], "default": idx}``
-    ordered by config, with the central portal selected by default.
-    """
+    """Assemble one collapsible crawl-discovery tree per site from queue rows."""
     domain2name = {s.allowed_domain: s.name for s in sites}
     order = {s.allowed_domain: i for i, s in enumerate(sites)}
 
@@ -194,18 +159,12 @@ def _discovery_trees(
         (i for i, s in enumerate(out) if s["domain"] == _TREE_DEFAULT_DOMAIN), 0
     )
     for s in out:
-        del s["domain"]  # internal ordering key only
+        del s["domain"]
     return {"sites": out, "default": default}
 
 
 def collect_analysis(conn, *, sites, min_words: int, db_path: Path) -> dict:
-    """Run every read-only query and assemble the report payload.
-
-    ``sites`` is ``config.sites`` (used to map the stored ``allowed_domain`` to a
-    friendly name and to order the per-site table); ``min_words`` is
-    ``config.extract.min_words`` (the current quality-gate threshold, used to flag
-    documents that predate it).
-    """
+    """Run every read-only query and assemble the report payload."""
     cur = conn.cursor()
 
     def q(sql, args=()):
@@ -219,7 +178,6 @@ def collect_analysis(conn, *, sites, min_words: int, db_path: Path) -> dict:
     site_order = [s.allowed_domain for s in sites]
     name_of = lambda d: domain2name.get(d, d)  # noqa: E731
 
-    # ---- db meta -------------------------------------------------------------
     st = db_path.stat()
     meta = {
         "generated_at": _now(),
@@ -230,7 +188,6 @@ def collect_analysis(conn, *, sites, min_words: int, db_path: Path) -> dict:
         "raw_dir_bytes": one("SELECT sum(bytes) FROM raw_docs"),
     }
 
-    # ---- corpus totals -------------------------------------------------------
     docs_present = one("SELECT count(*) FROM documents WHERE present=1")
     words_total = one("SELECT sum(word_count) FROM documents WHERE present=1")
     by_type = {
@@ -264,7 +221,6 @@ def collect_analysis(conn, *, sites, min_words: int, db_path: Path) -> dict:
     )
     extract_pending = one("SELECT count(*) FROM raw_docs WHERE extract_state='pending'")
 
-    # ---- reconciliation (dedup by text) -------------------------------------
     candidates = one(
         "SELECT count(*) FROM queue q JOIN raw_docs r ON r.content_sha256=q.content_sha256 "
         "WHERE q.present=1 AND r.quality_ok=1"
@@ -273,7 +229,6 @@ def collect_analysis(conn, *, sites, min_words: int, db_path: Path) -> dict:
         "SELECT count(DISTINCT text_sha256) FROM documents WHERE present=1"
     )
 
-    # ---- per-site ------------------------------------------------------------
     dsite = {
         d: {"docs": n, "words": w or 0, "avg": (w or 0) / n if n else 0}
         for d, n, w in q(
@@ -308,7 +263,6 @@ def collect_analysis(conn, *, sites, min_words: int, db_path: Path) -> dict:
             }
         )
 
-    # ---- extraction rejects / errors ----------------------------------------
     reject_reasons = [
         {"reason": r or "(none)", "n": n}
         for r, n in q(
@@ -324,7 +278,6 @@ def collect_analysis(conn, *, sites, min_words: int, db_path: Path) -> dict:
         )
     ]
 
-    # ---- word-count distribution --------------------------------------------
     wc = [
         r[0]
         for r in q(
@@ -349,7 +302,6 @@ def collect_analysis(conn, *, sites, min_words: int, db_path: Path) -> dict:
         "below_min": sum(1 for w in wc if w < min_words),
     }
 
-    # ---- crawl_log -----------------------------------------------------------
     crawl_log = {
         "total": one("SELECT count(*) FROM crawl_log"),
         "outcomes": [
@@ -387,7 +339,6 @@ def collect_analysis(conn, *, sites, min_words: int, db_path: Path) -> dict:
         for d, c in sorted(err_by_site.items(), key=lambda kv: -sum(kv[1].values()))
     ]
 
-    # ---- link graph ----------------------------------------------------------
     links_total = one("SELECT count(*) FROM links")
     links = {
         "total": links_total,
@@ -406,8 +357,6 @@ def collect_analysis(conn, *, sites, min_words: int, db_path: Path) -> dict:
         else docs_present
     )
 
-    # Top external link targets: hosts we linked to but did not follow
-    # (in_domain=0). Streams only the ~1.4M external edges, not the full 15M.
     ext_hosts = Counter(
         _host(u)
         for (u,) in q(
@@ -418,7 +367,6 @@ def collect_analysis(conn, *, sites, min_words: int, db_path: Path) -> dict:
     ext_hosts.pop("", None)
     links["top_external"] = [{"host": h, "n": n} for h, n in ext_hosts.most_common(20)]
 
-    # ---- per-host (spider-trap view) ----------------------------------------
     hostc = Counter()
     hoststate = defaultdict(Counter)
     for url, ws in q("SELECT url,work_state FROM queue"):
@@ -436,12 +384,10 @@ def collect_analysis(conn, *, sites, min_words: int, db_path: Path) -> dict:
         for h, n in hostc.most_common(25)
     ]
 
-    # ---- crawl discovery tree (per-site, DHBW-only by construction) ----------
     discovery = _discovery_trees(
         q("SELECT url, site, discovered_from, depth, work_state FROM queue"), sites
     )
 
-    # ---- freshness -----------------------------------------------------------
     def rng(col, table, where=""):
         w = f" WHERE {where}" if where else ""
         return {
@@ -488,14 +434,12 @@ def collect_analysis(conn, *, sites, min_words: int, db_path: Path) -> dict:
 
 
 def _findings(d: dict) -> list[dict]:
-    """Derive ranked findings from the payload so the report stays accurate on
-    every refresh (a re-crawl that fixes a site makes its finding disappear)."""
+    """Derive ranked findings from the payload so the report stays accurate on every refresh."""
     out: list[dict] = []
     sites = d["per_site"]
     docs = [s["docs"] for s in sites if s["docs"] > 0]
     median = sorted(docs)[len(docs) // 2] if docs else 0
 
-    # Under-covered sites (tiny corpus relative to peers).
     for s in sites:
         if median and s["docs"] < max(200, 0.15 * median):
             sev = "crit" if s["docs"] < 0.05 * median else "warn"
@@ -509,7 +453,6 @@ def _findings(d: dict) -> list[dict]:
                 }
             )
 
-    # Documents below the current min_words gate.
     bm = d["wordcount"]["below_min"]
     if bm:
         pct = bm / max(1, d["totals"]["documents"]) * 100
@@ -523,7 +466,6 @@ def _findings(d: dict) -> list[dict]:
             }
         )
 
-    # Link graph underpopulated.
     lk = d["links"]
     if d["totals"]["documents"] and lk["distinct_src"] < 0.5 * d["totals"]["documents"]:
         out.append(
@@ -536,7 +478,6 @@ def _findings(d: dict) -> list[dict]:
             }
         )
 
-    # Error hotspots not already flagged as under-covered.
     flagged = {
         f["title"].split(" is under-covered")[0]
         for f in out
@@ -566,11 +507,6 @@ def _findings(d: dict) -> list[dict]:
     return out
 
 
-# ---------------------------------------------------------------------------
-# Rendering
-# ---------------------------------------------------------------------------
-
-
 def _fmt_bytes(n: int) -> str:
     for unit in ("B", "KB", "MB", "GB", "TB"):
         if n < 1024 or unit == "TB":
@@ -587,23 +523,14 @@ _VENDOR = Path(__file__).parent / "vendor"
 
 
 def _vendored(name: str) -> str:
-    """Read a vendored, offline JS asset and inline it into the report so the file
-    stays self-contained. ``</script`` is neutralised so the blob can live inside a
-    ``<script>`` element without closing it early."""
+    """Read a vendored, offline JS asset and inline it into the report so the file stays self-contained."""
     return (
         (_VENDOR / name).read_text(encoding="utf-8").replace("</script", "<\\/script")
     )
 
 
 def _discovery_section(disc: dict) -> str:
-    """Markup for the interactive per-site crawl-discovery tree.
-
-    Emits a campus ``<select>``, an ``<svg>`` mount and a legend; the tree itself is
-    drawn client-side by :data:`_TREE_JS` from the ``#report-data`` JSON island. No
-    scraped text is interpolated here (only config-supplied site names, escaped),
-    preserving the injection guarantee. Degrades to a warning box when nothing has
-    been crawled yet.
-    """
+    """Markup for the interactive per-site crawl-discovery tree."""
     sites = disc.get("sites", [])
     if not sites:
         return (
@@ -632,10 +559,6 @@ def _discovery_section(disc: dict) -> str:
     )
 
 
-# Client-side collapsible tree. Reads the #report-data island, builds a d3
-# hierarchy per site from the flat (parent-index) node arrays, collapses below the
-# first two levels, and wires click-to-expand + zoom/pan. Static code -- no crawled
-# text reaches the DOM through here (labels/tooltips come from the JSON island).
 _TREE_JS = r"""
 (function () {
   var el = document.getElementById("disc-svg");
@@ -750,7 +673,6 @@ def render_html(d: dict, *, graph_href: str = "discovery.html") -> str:
             f'<div class="kpi-label">{_esc(label)}</div>{sub_html}</div>'
         )
 
-    # KPI row
     html_t = t["by_type"].get("html", {})
     pdf_t = t["by_type"].get("pdf", {})
     kpis = "".join(
@@ -784,7 +706,6 @@ def render_html(d: dict, *, graph_href: str = "discovery.html") -> str:
         ]
     )
 
-    # Findings
     sev_label = {"crit": "CRITICAL", "warn": "WARNING", "info": "INFO", "ok": "OK"}
     findings = "".join(
         f'<div class="finding {f["sev"]}"><span class="badge {f["sev"]}">{sev_label[f["sev"]]}</span>'
@@ -793,7 +714,6 @@ def render_html(d: dict, *, graph_href: str = "discovery.html") -> str:
         for f in d["findings"]
     )
 
-    # Per-site table
     max_docs = max((s["docs"] for s in d["per_site"]), default=1) or 1
     site_rows = ""
     for s in d["per_site"]:
@@ -809,7 +729,6 @@ def render_html(d: dict, *, graph_href: str = "discovery.html") -> str:
             f'<td class="num {er_cls}">{er:.1f}%</td></tr>'
         )
 
-    # Word-count histogram
     max_h = max((b["n"] for b in d["wordcount"]["hist"]), default=1) or 1
     hist_rows = "".join(
         f'<tr><td class="mono">{_esc(b["label"])}</td>'
@@ -895,9 +814,6 @@ def render_html(d: dict, *, graph_href: str = "discovery.html") -> str:
             'the link graph is effectively unpopulated and should not be trusted yet.</p>'
         )
 
-    # The interactive discovery tree lives on its own full-screen page
-    # (render_graph_html) so it has room to breathe; the report just links to it.
-    # The heavy per-URL `discovery` payload and the vendored d3 are NOT inlined here.
     disc = d["discovery"]
     n_sites = len(disc["sites"])
     n_pages = sum(s["total"] for s in disc["sites"])
@@ -915,14 +831,6 @@ def render_html(d: dict, *, graph_href: str = "discovery.html") -> str:
         )
 
     fr = d["freshness"]
-    # `</` is neutralised before this lands inside <script>...</script>. json.dumps
-    # escapes quotes and control characters but not a closing tag, and `d` carries
-    # free text straight from the DB -- extractor and crawl_log errors that quote
-    # whatever a scraped page contained. A single `</script>` substring would close
-    # the element early and turn the rest of the payload into live DOM in the
-    # operator's browser. `<\/` is the same string to a JSON parser, so the data
-    # survives intact; every visible sink already goes through _esc(). The heavy
-    # per-URL `discovery` tree is dropped here -- only the graph page needs it.
     payload = json.dumps(
         {k: v for k, v in d.items() if k != "discovery"},
         ensure_ascii=False,
@@ -1052,17 +960,9 @@ footer {{ margin-top:40px; color:var(--muted); font-size:12px; border-top:1px so
 
 
 def render_graph_html(d: dict, *, report_href: str = "analysis.html") -> str:
-    """Standalone full-screen page for the interactive crawl-discovery tree.
-
-    A slim header (back-link to the report + campus ``<select>`` + theme toggle) over
-    an ``<svg>`` that fills the viewport, so the tree has far more room than the boxed
-    report section. Self-contained: its own theme CSS, its own ``#report-data`` island
-    carrying only ``{"discovery": ...}``, and the vendored d3 + tree script inlined.
-    """
+    """Standalone full-screen page for the interactive crawl-discovery tree."""
     disc = d["discovery"]
     section = _discovery_section(disc)
-    # Only the discovery slice travels to this page (not the whole analysis dict).
-    # `</` is neutralised so scraped URL paths cannot close the <script> island early.
     payload = json.dumps({"discovery": disc}, ensure_ascii=False).replace("</", "<\\/")
     scripts = (
         f'<script>{_vendored("d3.v7.min.js")}</script>\n<script>{_TREE_JS}</script>'
@@ -1129,12 +1029,7 @@ svg.disctree {{ display:block; width:100%; height:calc(100vh - 150px); min-heigh
 def write_report(
     conn, *, sites, min_words: int, db_path: Path, out_path: Path
 ) -> tuple[Path, Path]:
-    """Write the report and its sibling discovery-tree page. Returns both paths.
-
-    The tree lives on its own full-screen page (``discovery.html`` next to the
-    report) so it isn't cramped in the report layout; the two cross-link by
-    basename, which resolves over ``file://``.
-    """
+    """Write the report and its sibling discovery-tree page, returning both paths."""
     data = collect_analysis(conn, sites=sites, min_words=min_words, db_path=db_path)
     graph_path = out_path.with_name("discovery.html")
     out_path.parent.mkdir(parents=True, exist_ok=True)

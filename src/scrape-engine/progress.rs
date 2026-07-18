@@ -1,12 +1,4 @@
 //! Bridge from the coordinator thread to the Python `Progress` renderer.
-//!
-//! The coordinator runs on its own OS thread while `run_fetch` has released the
-//! GIL (`py.allow_threads`), so here we briefly re-acquire the GIL to call the
-//! existing `Progress` object — keeping `progress.py` the single source of truth
-//! for rendering. Calls are throttled by the coordinator (see `maybe_emit_
-//! progress`), so GIL re-acquisition stays rare. A missing progress object makes
-//! every method a no-op; Python-side errors are swallowed so progress can never
-//! abort a crawl.
 
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -19,8 +11,7 @@ pub struct SiteUpdate {
     pub queued: i64,
 }
 
-/// Owns the optional Python `Progress` instance. `Send` (Py<PyAny> is Send) so it
-/// can move onto the coordinator thread.
+/// Owns the optional Python `Progress` instance.
 pub struct ProgressSink {
     obj: Option<Py<PyAny>>,
 }
@@ -30,8 +21,7 @@ impl ProgressSink {
         Self { obj }
     }
 
-    /// A second handle to the same Python object (new reference under the GIL),
-    /// so the coordinator thread and the orchestrator can both call it.
+    /// A second handle to the same Python object (new reference under the GIL), so the coordinator thread and the orchestrator can both call it.
     pub fn try_clone(&self) -> Self {
         Self {
             obj: self

@@ -1,4 +1,3 @@
-# tests/test_storage_taxonomy.py
 from scraper import storage as st
 
 _OLD_DOCUMENTS_DDL = """
@@ -41,7 +40,7 @@ def test_documents_gains_classification_columns():
 
 def test_seeding_is_idempotent():
     conn = mem()
-    st.init_db(conn)  # second run
+    st.init_db(conn)
     assert conn.execute("SELECT COUNT(*) c FROM departments").fetchone()["c"] == 5
     assert conn.execute("SELECT COUNT(*) c FROM standorte").fetchone()["c"] == 14
 

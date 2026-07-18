@@ -1,13 +1,4 @@
-"""Title helpers for documents whose extractor produced no title.
-
-Two independent fallbacks, kept out of the extractors and storage so both the
-forward write path and the one-time backfill share one definition:
-
-* ``clean`` sanitises a PDF's *embedded* ``doc.metadata['title']`` and rejects the
-  common junk (placeholders, Office "Microsoft Word - foo.docx" artifacts, a bare
-  filename) -- for those the URL basename is a better title than the embedded one.
-* ``from_url`` derives a readable title from the URL's last path segment.
-"""
+"""Title helpers for documents whose extractor produced no title."""
 
 from __future__ import annotations
 
@@ -22,7 +13,7 @@ _WS = re.compile(r"\s+")
 
 
 def clean(raw: str | None) -> str | None:
-    """Sanitise an embedded PDF metadata title; ``None`` for junk."""
+    """Sanitise an embedded PDF metadata title; None for junk."""
     if not raw:
         return None
     title = raw.strip()
@@ -39,7 +30,7 @@ def clean(raw: str | None) -> str | None:
 
 
 def from_url(url: str) -> str | None:
-    """Readable title from a URL's last path segment, or ``None`` if there is none."""
+    """Readable title from a URL's last path segment, or None if there is none."""
     path = urlsplit(url).path
     if path.endswith("/"):
         return None

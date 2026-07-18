@@ -1,10 +1,4 @@
-"""Command-line entrypoint: fetch / extract / run / stats / dedup / reclassify / delta.
-
-config.toml is the sole source of tuning values -- no flag overrides any of them.
-The flags here only select what to act on (``--site``, ``--since``, ``-o``) or which
-file to read (``--config``). Adding a ``--max-pages``-style override would put a
-value in two places again; keep a second config.toml and pass ``--config`` instead.
-"""
+"""Command-line entrypoint: fetch / extract / run / stats / dedup / reclassify / delta."""
 
 from __future__ import annotations
 
@@ -26,9 +20,7 @@ def _load(args):
 
 
 def _resolve_sites(config, names):
-    """Filter ``config.sites`` to those whose ``name`` or ``allowed_domain`` is in
-    ``names``. Exits with a clear message if any requested name matches nothing, so
-    a typo fails loudly instead of silently crawling the wrong (or every) site."""
+    """Filter config.sites to those whose name or allowed_domain is in names."""
     unmatched = [
         n
         for n in names
@@ -45,8 +37,6 @@ def _resolve_sites(config, names):
 def _cmd_fetch(args) -> int:
     config = _load(args)
     if args.site:
-        # The only thing the CLI still changes about a run, and it selects *which*
-        # sites to crawl -- never *how*. Every tuning value comes from config.toml.
         object.__setattr__(config, "sites", _resolve_sites(config, args.site))
     results = crawl.run_fetch(config, _run_id())
     for site, counts in results.items():
@@ -136,9 +126,7 @@ def _cmd_backfill(args) -> int:
 
 
 def _cmd_report(args) -> int:
-    """Write a static HTML analysis report of the corpus. Opens the DB read-only
-    (never writes), so it is safe to run at any time -- even while a crawl is in
-    progress -- and reflects the last committed state."""
+    """Write a static HTML analysis report of the corpus."""
     import sqlite3
     import webbrowser
 
@@ -183,8 +171,7 @@ def _cmd_reset_site(args) -> int:
 
 
 def _add_site_arg(p) -> None:
-    """The one flag ``fetch`` and ``run`` share, kept in one place so the two never
-    drift. It selects *what* to crawl; everything about *how* comes from config.toml."""
+    """The one flag fetch and run share, kept in one place so the two never drift."""
     p.add_argument(
         "--site",
         action="append",

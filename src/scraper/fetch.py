@@ -1,8 +1,4 @@
-"""Polite HTTP with conditional GET and content-type routing.
-
-Network access is isolated here so the rest of the pipeline is testable offline
-(inject a fake ``opener``). Failures never raise: they come back on FetchResult.
-"""
+"""Polite HTTP with conditional GET and content-type routing."""
 
 from __future__ import annotations
 
@@ -16,13 +12,8 @@ DEFAULT_TIMEOUT = 30
 
 
 def _sanitize_url(url: str) -> str:
-    """Percent-encode unsafe characters (e.g. spaces) in the URL path/query.
-
-    Already-encoded sequences (``%xx``) are preserved thanks to ``safe`` and
-    ``quote(..., safe=...)``.
-    """
+    """Percent-encode unsafe characters (e.g. spaces) in the URL path/query."""
     parts = urlparse(url)
-    # Re-quote path: keep /, @, :, etc. but encode spaces & control chars.
     clean_path = quote(parts.path, safe="/:@!$&'()*+,;=-._~")
     clean_query = quote(parts.query, safe="/:@!$&'()*+,;=-._~?=")
     return urlunparse(parts._replace(path=clean_path, query=clean_query))

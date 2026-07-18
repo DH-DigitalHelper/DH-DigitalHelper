@@ -50,8 +50,6 @@ def test_faculty_agnostic_page_is_unknown():
 
 
 def test_keyword_ambiguity_resolves_to_unknown_not_a_coinflip():
-    # Ambiguity is judged over title/description (body text is not scanned); two
-    # faculties tie -> unknown, never a coin-flip.
     c = classify.classify(
         "https://www.dhbw.de/x",
         "www.dhbw.de",
@@ -63,8 +61,6 @@ def test_keyword_ambiguity_resolves_to_unknown_not_a_coinflip():
 
 
 def test_underscore_path_matches_gesundheit_program():
-    # Real Gesundheit paths use underscores; '_'->'-' normalization must let the
-    # (previously dead) program pattern match (audit §B1).
     c = classify.classify(
         "https://www.karlsruhe.dhbw.de/studiengang/Angewandte_Gesundheitswissenschaften/",
         "karlsruhe.dhbw.de",
@@ -76,8 +72,6 @@ def test_underscore_path_matches_gesundheit_program():
 
 
 def test_enumeration_company_stub_gets_no_program_or_faculty():
-    # A dual-partner company page whose slug contains a program name must NOT be
-    # tagged with that program/faculty (audit §B1 employer-stub false positives).
     c = classify.classify(
         "https://www.mannheim.dhbw.de/informatik/liste-dualer-partner/unternehmen/"
         "fujitsu-services-gmbh-13464/",
@@ -89,7 +83,6 @@ def test_enumeration_company_stub_gets_no_program_or_faculty():
 
 
 def test_program_segment_anchoring_rejects_coincidental_matches():
-    # 'informatik' must not fire on a '10-informatiktag' event slug (segment-bounded).
     assert (
         classify.classify_program("https://www.dhbw.de/aktuelles/10-informatiktag/")
         is None
@@ -112,8 +105,6 @@ def test_wirtschaftsinformatik_and_informatik_are_distinct_programs():
 
 
 def test_news_list_body_teaser_does_not_leak_a_faculty():
-    # The 3,185-page defect: a news archive whose body teasers mention 'bwl' must
-    # stay 'unknown' -- body text is not scanned for faculty keywords (audit §B2).
     c = classify.classify(
         "https://www.mannheim.dhbw.de/aktuelles/page-3",
         "mannheim.dhbw.de",
@@ -127,7 +118,6 @@ def test_news_list_body_teaser_does_not_leak_a_faculty():
 
 
 def test_department_recovered_from_studienangebot_path():
-    # audit §B4: genuine faculty pages recovered by path-scoped URL rules.
     c = classify.classify(
         "https://www.mosbach.dhbw.de/bachelor-studienangebot/technik/uebersicht/",
         "mosbach.dhbw.de",

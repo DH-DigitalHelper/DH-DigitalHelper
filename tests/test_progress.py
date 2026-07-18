@@ -25,13 +25,11 @@ def test_tty_frame_shows_each_site_and_a_total():
     assert "site-a.de" in out
     assert "site-b.de" in out
     assert "TOTAL" in out
-    assert "2050" in out  # total fetched = 2000 + 50, never a flickered value
+    assert "2050" in out
 
 
 def test_total_reflects_latest_per_site_counts_not_a_flicker():
-    """The historical bug: three sites stomping one status line made the number
-    appear to jump 10 -> 2000 -> 50. Now each site keeps its own row and the
-    total is their sum, so the last frame is stable and correct."""
+    """Each site keeps its own row and the total is their sum, so the last frame is stable and correct."""
     buf = io.StringIO()
     clk = Clock()
     p = Progress(stream=buf, is_tty=True, clock=clk, interval=0.0)
@@ -41,7 +39,7 @@ def test_total_reflects_latest_per_site_counts_not_a_flicker():
     clk.t = 2.0
     p.update({"fetched": 50}, "u", key="c")
     last_frame = buf.getvalue().split("\033[J")[-1]
-    assert "2060" in last_frame  # 10 + 2000 + 50, all three rows still present
+    assert "2060" in last_frame
     assert "a" in last_frame and "b" in last_frame and "c" in last_frame
 
 
@@ -60,18 +58,17 @@ def test_total_sums_queued_across_sites():
     clk.t = 1.0
     p.update({"fetched": 5}, "u", key="b", queued=12)
     last_frame = buf.getvalue().split("\033[J")[-1]
-    assert "312 queued" in last_frame  # 300 + 12, in the TOTAL row
+    assert "312 queued" in last_frame
 
 
 def test_single_track_line_shows_processing_rate():
-    """With one track (e.g. the extract phase, key=''), there is no TOTAL row,
-    so the throughput (documents/second) must be shown on the sole line itself."""
+    """With one track (e.g. the extract phase, key=''), there is no TOTAL row, so the throughput (documents/second) must be shown on the sole line itself."""
     buf = io.StringIO()
     clk = Clock()
     p = Progress(stream=buf, is_tty=True, clock=clk, interval=0.0)
     p.update({"indexed": 4}, "sha", key="")
     clk.t = 1.0
-    p.update({"indexed": 12}, "sha", key="")  # +8 items over 1s -> 8/s
+    p.update({"indexed": 12}, "sha", key="")
     last_frame = buf.getvalue().split("\033[J")[-1]
     assert "8/s" in last_frame
 
@@ -79,29 +76,28 @@ def test_single_track_line_shows_processing_rate():
 def test_queued_omitted_when_not_provided():
     buf = io.StringIO()
     p = Progress(stream=buf, is_tty=True, clock=Clock(), interval=0.0)
-    p.update({"fetched": 5}, "u", key="a")  # no queued arg (e.g. extract phase)
+    p.update({"fetched": 5}, "u", key="a")
     assert "queued" not in buf.getvalue()
 
 
 def test_updates_within_one_interval_repaint_at_most_once():
-    """A thousand workers hammering update() must not cause a thousand
-    flush()es. Within one throttle interval only the first update paints."""
+    """Within one throttle interval only the first update paints."""
     buf = io.StringIO()
     clk = Clock()
     p = Progress(stream=buf, is_tty=True, clock=clk, interval=10.0)
     for i in range(20):
-        p.update({"fetched": i}, "u", key="a")  # all at clk.t == 0.0
-    assert buf.getvalue().count("\033[J") == 1  # one repaint, not twenty
+        p.update({"fetched": i}, "u", key="a")
+    assert buf.getvalue().count("\033[J") == 1
 
 
 def test_interval_elapsed_allows_a_new_repaint():
     buf = io.StringIO()
     clk = Clock()
     p = Progress(stream=buf, is_tty=True, clock=clk, interval=10.0)
-    p.update({"fetched": 1}, "u", key="a")  # paints (t=0)
-    p.update({"fetched": 2}, "u", key="a")  # throttled
+    p.update({"fetched": 1}, "u", key="a")
+    p.update({"fetched": 2}, "u", key="a")
     clk.t = 10.0
-    p.update({"fetched": 3}, "u", key="a")  # interval elapsed -> paints again
+    p.update({"fetched": 3}, "u", key="a")
     assert buf.getvalue().count("\033[J") == 2
 
 
@@ -114,7 +110,7 @@ def test_non_tty_never_emits_carriage_returns_or_cursor_moves():
     p.summary("Done", {"fetched": 3})
     out = buf.getvalue()
     assert "\r" not in out
-    assert "\033[" not in out  # no ANSI cursor control when piped
+    assert "\033[" not in out
     assert "Crawling x" in out and "dropped abc" in out and "Done" in out
 
 
@@ -142,7 +138,5 @@ def test_concurrent_updates_are_serialized_not_torn():
 
     val = buf.getvalue()
     assert val.endswith("\n")
-    # Every emitted line is a complete, well-formed aggregate line -- a torn
-    # write from an unserialized stream would produce a line without the marker.
     for line in val.splitlines():
         assert "fetched" in line

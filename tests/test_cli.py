@@ -5,7 +5,6 @@ from scraper import cli
 
 def test_parser_has_all_subcommands():
     p = cli.build_parser()
-    # argparse exits on unknown; parse each known command
     for cmd in (
         ["fetch"],
         ["extract"],
@@ -82,9 +81,7 @@ def test_extract_reads_workers_from_config(tmp_path, monkeypatch):
     ],
 )
 def test_removed_value_flags_are_rejected(argv):
-    """config.toml is the sole source of tuning values. Every flag that used to
-    override one must now fail loudly rather than be silently accepted -- deleting
-    the flag's test only proves it is unexercised, not that it is gone."""
+    """config.toml is the sole source of tuning values."""
     with pytest.raises(SystemExit):
         cli.build_parser().parse_args(argv)
 
@@ -92,8 +89,7 @@ def test_removed_value_flags_are_rejected(argv):
 def _write_config(
     tmp_path, recheck="all", crawl_extra="", extract_extra="", dedup_extra=""
 ):
-    """The ``*_extra`` fragments splice extra keys into a section, so a test that is
-    about one value states only that value."""
+    """The *_extra fragments splice extra keys into a section, so a test about one value states only that value."""
     (tmp_path / "config.toml").write_text(
         f"""
 [[sites]]
@@ -117,9 +113,7 @@ raw_dir = "raw"
 
 
 def test_cmd_fetch_uses_config_force_full(tmp_path, monkeypatch):
-    """What `--full` used to do is now spelled in the file. The engine turns this
-    value into both a full re-queue and dropped validators; see
-    tests/scrape-engine/orchestration.rs."""
+    """What --full used to do is now spelled in the file."""
     _write_config(tmp_path, recheck="force-full")
     captured = {}
 
@@ -135,9 +129,7 @@ def test_cmd_fetch_uses_config_force_full(tmp_path, monkeypatch):
 
 
 def test_cmd_fetch_passes_config_crawl_values_through_untouched(tmp_path, monkeypatch):
-    """The flagship config-is-truth test: every [crawl] value reaches the engine
-    exactly as written, because nothing between the file and run_fetch may change
-    one. This is what the pile of per-flag override tests collapsed into."""
+    """Every [crawl] value reaches the engine exactly as written, because nothing between the file and run_fetch may change one."""
     _write_config(
         tmp_path,
         recheck="new-only",
@@ -322,12 +314,11 @@ def test_reset_site_command_dispatches_and_resolves_allowed_domain(
         ["--config", str(tmp_path / "config.toml"), "reset-site", "--site", "beta"]
     )
     assert rc == 0
-    assert calls == ["beta.de"]  # resolved from config name to allowed_domain
+    assert calls == ["beta.de"]
     assert "beta.de" in capsys.readouterr().out
 
 
 def test_stats_command_prints_counts(tmp_path, capsys, monkeypatch):
-    # minimal config on disk
     (tmp_path / "config.toml").write_text(
         """
 [[sites]]

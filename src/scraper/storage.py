@@ -1,8 +1,4 @@
-"""SQLite persistence: schema, atomic claims, dedup, upserts, delta, raw cache.
-
-All functions take an explicit connection so each worker (thread/process) uses
-its own. The database runs in WAL mode; writers serialise via BEGIN IMMEDIATE.
-"""
+"""SQLite persistence: schema, atomic claims, dedup, upserts, delta, raw cache."""
 
 from __future__ import annotations
 
@@ -174,11 +170,7 @@ _WS = re.compile(r"\s+")
 
 
 def normalize_text(text: str) -> str:
-    """Canonicalize extracted text for hashing: Unicode NFC, collapse every
-    whitespace run (incl. NBSP and other Unicode spaces, which ``\\s`` matches in
-    ``str`` mode) to a single space, and strip. Deliberately conservative -- NO
-    casefold and NO NFKC, both of which would merge semantically distinct pages
-    ("SS 2024" vs "ss 2024", ligatures/full-width forms)."""
+    """Canonicalize extracted text for hashing via Unicode NFC, collapsing whitespace runs to a single space and stripping."""
     return _WS.sub(" ", unicodedata.normalize("NFC", text or "")).strip()
 
 
@@ -188,16 +180,13 @@ def text_hash(text: str) -> str:
 
 
 def _canonical_key(url: str):
-    """Order URLs so the *cleanest* one sorts smallest: fewest query params, then
-    shortest, then lexicographically. Picks the bare '.../dualis-firmenliste/'
-    over every '?...&cHash=...' variant. ``url`` is UNIQUE so the order is total."""
+    """Order URLs so the cleanest one sorts smallest: fewest query params, then shortest, then lexicographically."""
     query = urlsplit(url).query
     return (len(parse_qsl(query, keep_blank_values=True)), len(url), url)
 
 
 def _is_locked_error(exc: BaseException) -> bool:
-    """True only for SQLite write-lock contention ('database is locked' /
-    'database is busy'), never for a genuine schema/SQL error."""
+    """True only for SQLite write-lock contention, never for a genuine schema/SQL error."""
     if not isinstance(exc, sqlite3.OperationalError):
         return False
     msg = str(exc).lower()
@@ -205,11 +194,7 @@ def _is_locked_error(exc: BaseException) -> bool:
 
 
 def _retry_locked(fn, retries=4, base_delay=0.05, sleep=time.sleep):
-    """Call ``fn()``, retrying only on a transient write-lock error with a
-    short growing backoff. The connection's ``busy_timeout`` already blocks
-    inside SQLite before raising, so this is a thin second layer for the rare
-    lock that surfaces past it. Non-lock errors — and the final attempt —
-    propagate unchanged."""
+    """Call fn(), retrying only on a transient write-lock error with a short growing backoff."""
     for attempt in range(retries + 1):
         try:
             return fn()
@@ -223,11 +208,6 @@ def connect(db_file: str | Path) -> sqlite3.Connection:
     conn = sqlite3.connect(str(db_file), timeout=5.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
-    # NORMAL is durable under WAL (no corruption on app/OS crash, only the last
-    # transaction may be lost on power loss) and drops the per-commit fsync, so
-    # the single WAL write lock is released far sooner under many concurrent
-    # workers. The raised busy_timeout lets a genuinely busy moment wait rather
-    # than surfacing "database is locked".
     conn.execute("PRAGMA synchronous=NORMAL")
     conn.execute("PRAGMA busy_timeout=15000")
     conn.execute("PRAGMA foreign_keys=ON")
@@ -235,16 +215,7 @@ def connect(db_file: str | Path) -> sqlite3.Connection:
 
 
 def _migrate(conn: sqlite3.Connection) -> None:
-    """Apply forward-only, idempotent migrations to an existing DB.
-
-    The repo has no migration framework: every Python entrypoint runs
-    ``init_db``, so schema additions live here and are applied lazily. Column
-    presence is checked via introspection (not ``user_version``) so this is a
-    no-op whether the column arrived via SCHEMA (fresh DB, incl. a Rust-created
-    one) or a prior ALTER, and never raises a duplicate-column error.
-
-    ``ALTER TABLE ADD COLUMN`` with a NULL default is an O(1) metadata-only
-    change in SQLite -- instant even on a multi-GB file, no table rewrite."""
+    """Apply forward-only, idempotent migrations to an existing DB."""
     cols = {r["name"] for r in conn.execute("PRAGMA table_info(documents)")}
     if cols and "text_sha256" not in cols:
         conn.execute("ALTER TABLE documents ADD COLUMN text_sha256 TEXT")
@@ -259,13 +230,6 @@ def _migrate(conn: sqlite3.Connection) -> None:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_documents_department ON documents(department_id)"
     )
-    # Composite (text_sha256, present): both the dedup lookup in _upsert_document
-    # and run_dedup filter on `text_sha256=? AND present=1`. A single-column
-    # text_sha256 index is NOT reliably chosen -- SQLite (without ANALYZE stats)
-    # will happily service that predicate via the low-selectivity `present` index
-    # and scan the whole table per lookup (O(n) each -> O(n^2) overall). The
-    # two-equality composite is unambiguously the most selective, so the planner
-    # picks it and each lookup is a seek.
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_documents_text_sha256 "
         "ON documents(text_sha256, present)"
@@ -273,9 +237,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
 
 
 def _seed_taxonomy(conn) -> None:
-    """Seed the fixed vocabularies (idempotent). Departments are a fixed 5;
-    standorte are seeded in two passes so a satellite's parent_id can reference an
-    already-inserted campus. study_programs are interned on demand, not here."""
+    """Seed the fixed vocabularies (idempotent)."""
     conn.executemany(
         "INSERT OR IGNORE INTO departments (name, display_name) VALUES (?, ?)",
         taxonomy.DEPARTMENTS,
@@ -303,13 +265,7 @@ def init_db(conn: sqlite3.Connection) -> None:
 
 @contextmanager
 def write_txn(conn):
-    """Run a batch of writes under ONE IMMEDIATE transaction (one write-lock
-    acquisition, one fsync) instead of committing each statement separately.
-
-    Compose the non-committing ``_core`` write helpers inside this block so a
-    whole page's mutations land atomically and hold the single WAL write lock
-    for as short a time as possible. Mirrors ``claim_pending_url``'s explicit
-    BEGIN IMMEDIATE / COMMIT / ROLLBACK so the two never nest."""
+    """Run a batch of writes under one IMMEDIATE transaction instead of committing each statement separately."""
     conn.execute("BEGIN IMMEDIATE")
     try:
         yield
@@ -321,9 +277,7 @@ def write_txn(conn):
 
 
 def _enqueue_many(conn, rows) -> int:
-    """Insert many queue rows in one statement (no commit). Each row is a full
-    ``(url, site, depth, discovered_from, first_seen_at)`` tuple; existing URLs
-    are left untouched (INSERT OR IGNORE). Returns the number newly inserted."""
+    """Insert many queue rows in one statement (no commit), returning the number newly inserted."""
     cur = conn.executemany(
         """INSERT OR IGNORE INTO queue (url, site, depth, discovered_from, first_seen_at)
            VALUES (?, ?, ?, ?, ?)""",
@@ -349,15 +303,7 @@ def enqueue(conn, url, site, depth, discovered_from, now) -> bool:
 
 
 def set_sitemap_lastmod(conn, url, site, lastmod, now) -> None:
-    """Record a sitemap <lastmod> value for ``url`` and re-queue it if the
-    value genuinely advanced.
-
-    A known baseline is never erased or regressed: a missing (``None``)
-    lastmod or one that is not strictly greater than the stored value is
-    ignored entirely. This matters because these sites emit no ETag/
-    Last-Modified headers, so the sitemap-lastmod advance is the primary
-    signal that triggers re-checking a URL for changes.
-    """
+    """Record a sitemap <lastmod> value for a URL and re-queue it if the value genuinely advanced."""
     row = conn.execute(
         "SELECT sitemap_lastmod FROM queue WHERE url = ?", (url,)
     ).fetchone()
@@ -379,13 +325,11 @@ def set_sitemap_lastmod(conn, url, site, lastmod, now) -> None:
                 "UPDATE queue SET sitemap_lastmod = ? WHERE url = ?",
                 (lastmod, url),
             )
-        # else: lastmod is None, or lastmod <= stored -> leave baseline untouched.
     conn.commit()
 
 
 def requeue_present_urls(conn, site) -> int:
-    """Reset all present, already-fetched URLs for a site back to 'pending' so a
-    re-check run conditionally re-fetches them. Leaves in_progress/error/removed rows alone."""
+    """Reset all present, already-fetched URLs for a site back to 'pending' so a re-check run conditionally re-fetches them."""
     cur = conn.execute(
         "UPDATE queue SET work_state = 'pending' "
         "WHERE site = ? AND present = 1 AND work_state = 'done'",
@@ -396,12 +340,7 @@ def requeue_present_urls(conn, site) -> int:
 
 
 def requeue_transient_errors(conn, site) -> int:
-    """Parity twin of storage.rs::requeue_transient_errors (crawl seeding is
-    Rust-only; this exists for cross-language parity and unit tests). Flip error
-    rows whose stored HTTP status is transient -- 0 (transport: timeout/DNS/
-    conn-refused), 408, 429, or any 5xx -- back to 'pending' so the next run
-    retries them. Permanent client errors (400/401/403/...) and non-error rows are
-    left untouched; 404/410 never land here (they are marked removed, not error)."""
+    """Flip error rows whose stored HTTP status is transient back to 'pending' so the next run retries them."""
     cur = conn.execute(
         "UPDATE queue SET work_state = 'pending' "
         "WHERE site = ? AND work_state = 'error' "
@@ -421,23 +360,11 @@ def reset_in_progress(conn) -> int:
     return cur.rowcount
 
 
-# Tables whose rows are keyed per-site and safe to wipe for a clean re-crawl.
-# raw_docs is deliberately NOT here: it is content-addressed (keyed by
-# content_sha256, not site) and shared across URLs/sites, so wiping it by site is
-# both meaningless and wasteful -- keeping it lets a re-crawl reuse the extraction
-# cache (identical bytes are never re-extracted).
 _SITE_SCOPED_TABLES = ("queue", "crawl_log", "documents", "links")
 
 
 def reset_site(conn, site) -> dict:
-    """Hard-delete all per-site crawl state for ``site`` (its allowed_domain), so
-    the next crawl re-seeds and rebuilds it from scratch.
-
-    Removes the site's rows from ``queue`` (frontier + change-detection state),
-    ``crawl_log`` (fetch audit), ``documents`` (materialized corpus), and ``links``
-    (edge graph), all in one transaction. Leaves the content-addressed ``raw_docs``
-    cache intact (see :data:`_SITE_SCOPED_TABLES`). Returns per-table delete counts.
-    """
+    """Hard-delete all per-site crawl state for a site so the next crawl re-seeds and rebuilds it from scratch."""
     counts: dict = {}
     with write_txn(conn):
         for table in _SITE_SCOPED_TABLES:
@@ -474,8 +401,7 @@ def claim_pending_url(conn, site, only_new=False) -> sqlite3.Row | None:
 
 
 def requeue_url(conn, url) -> None:
-    """Flip a single URL back to 'pending' (used to release a claim that could
-    not be processed). Retries on transient write-lock contention."""
+    """Flip a single URL back to 'pending', retrying on transient write-lock contention."""
 
     def _do():
         conn.execute("UPDATE queue SET work_state='pending' WHERE url=?", (url,))
@@ -514,7 +440,7 @@ def count_pending_raw(conn, source_type=None) -> int:
 
 
 class RawCache:
-    """Content-addressed store for downloaded bytes under ``root``."""
+    """Content-addressed store for downloaded bytes under root."""
 
     def __init__(self, root) -> None:
         self.root = Path(root)
@@ -636,19 +562,7 @@ def mark_url_removed(conn, url, now) -> None:
 
 
 def _upsert_raw_doc(conn, content_sha256, source_type, raw_path, nbytes, now) -> bool:
-    """Atomically insert a raw_docs row for ``content_sha256`` if one doesn't
-    already exist.
-
-    Uses a single INSERT ... ON CONFLICT DO NOTHING statement (rather than a
-    separate SELECT-then-INSERT) so that concurrent fetch workers
-    (workers_per_host>1) downloading byte-identical content cannot race each
-    other into a sqlite3.IntegrityError on the content_sha256 uniqueness
-    constraint.
-
-    Returns True iff this call newly inserted the row (extraction starts
-    'pending'); False if the digest already existed (the caller is expected
-    to call requeue_extraction in that case).
-    """
+    """Atomically insert a raw_docs row for content_sha256 if one doesn't already exist."""
     cur = conn.execute(
         """INSERT INTO raw_docs (content_sha256, source_type, raw_path, bytes,
                first_seen_at, extract_state)
@@ -674,21 +588,14 @@ def _requeue_extraction(conn, content_sha256, now) -> bool:
 
 
 def requeue_extraction(conn, content_sha256, now) -> bool:
-    """Force re-extraction of an already-seen content blob so Phase 2
-    re-materializes documents for all URLs currently pointing at it
-    (used when a removed URL reappears, or a new URL shares existing content).
-    Returns True if a row was updated."""
+    """Force re-extraction of an already-seen content blob so Phase 2 re-materializes documents for all URLs pointing at it."""
     updated = _requeue_extraction(conn, content_sha256, now)
     conn.commit()
     return updated
 
 
 def reset_extract_in_progress(conn, source_type=None) -> int:
-    """Reset raw_docs stranded in_progress (from a crashed extract worker) back to pending.
-
-    When ``source_type`` is given, only that type's rows are reset -- so an
-    ``extract-html`` recovery pass never steals the ``in_progress`` rows a
-    concurrently running ``extract-pdf`` pass has legitimately claimed."""
+    """Reset raw_docs stranded in_progress (from a crashed extract worker) back to pending."""
     sql = "UPDATE raw_docs SET extract_state = 'pending' WHERE extract_state = 'in_progress'"
     params: tuple = ()
     if source_type is not None:
@@ -700,14 +607,7 @@ def reset_extract_in_progress(conn, source_type=None) -> int:
 
 
 def reset_extract_errors(conn, source_type=None) -> int:
-    """Re-queue raw_docs whose extraction errored, so the next extract run retries
-    them (for both html and pdf).
-
-    Clears ``extract_error`` too: ``report``/``dashboard`` count errors by
-    ``extract_error IS NOT NULL``, so a re-queued row must not keep showing as
-    errored -- a successful retry rewrites it to NULL and a repeat failure rewrites
-    the fresh message. Scoped to ``source_type`` like :func:`reset_extract_in_progress`,
-    so an ``extract-html`` pass never re-queues an ``extract-pdf`` pass's rows."""
+    """Re-queue raw_docs whose extraction errored, so the next extract run retries them."""
     sql = (
         "UPDATE raw_docs SET extract_state = 'pending', extract_error = NULL "
         "WHERE extract_state = 'error'"
@@ -748,10 +648,7 @@ def claim_pending_raw(conn, source_type=None) -> sqlite3.Row | None:
 def _save_extraction(
     conn, content_sha256, doc, quality_ok, reject_reason, extract_error, now
 ) -> None:
-    """Write the extract result onto its raw_docs row (no commit). Compose
-    inside a ``write_txn`` with :func:`_upsert_document` so a doc's whole
-    materialization lands atomically; :func:`save_extraction` wraps this with a
-    commit for the standalone error-recording path."""
+    """Write the extract result onto its raw_docs row (no commit)."""
     if extract_error is not None:
         state = "error"
     elif not quality_ok:
@@ -824,9 +721,7 @@ def _program_id(conn, slug, display, dept_slug):
 
 
 def _set_classification(conn, doc_id, url, site, doc) -> None:
-    """Classify (url, site, doc) and write the four enrichment columns onto the
-    document row by id. Never touches updated_at -- this is derived metadata, and
-    the backfill re-runs it over the whole corpus without spamming delta()."""
+    """Classify (url, site, doc) and write the four enrichment columns onto the document row by id."""
     cl = classify.classify(url, site, doc)
     conn.execute(
         "UPDATE documents SET standort_id=?, department_id=?, study_program_id=?, "
@@ -842,21 +737,9 @@ def _set_classification(conn, doc_id, url, site, doc) -> None:
 
 
 def _upsert_document(conn, url, site, source_type, content_sha256, doc, now) -> str:
-    """Materialize one URL's document row (no commit), deduplicated on the
-    extracted-text hash: the corpus keeps at most one row per distinct text --
-    the *cleanest* URL of the group (see :func:`_canonical_key`). Compose inside
-    a ``write_txn`` alongside :func:`_save_extraction` so a whole doc's writes are
-    atomic; :func:`upsert_document` wraps this with a commit for standalone callers.
-
-    Returns "new" / "changed" / "unchanged" as before, plus "duplicate" when this
-    URL's text is already represented by a cleaner URL (then no row is written)."""
+    """Materialize one URL's document row (no commit), deduplicated on the extracted-text hash."""
     h = text_hash(doc["text"])
 
-    # Text-hash dedup. Other present rows carrying this exact text are the same
-    # document reached another way -- source 1: many URLs -> one content blob;
-    # source 2: byte-different variants -> identical extraction (e.g. TYPO3 cHash
-    # permutations). This lookup is global (keyed on text_sha256, not scoped to
-    # the current content digest), so cross-digest variants collapse too.
     others = conn.execute(
         "SELECT url FROM documents WHERE text_sha256=? AND url<>? AND present=1",
         (h, url),
@@ -864,21 +747,13 @@ def _upsert_document(conn, url, site, source_type, content_sha256, doc, now) -> 
     if others:
         cleanest_other = min(others, key=lambda r: _canonical_key(r["url"]))["url"]
         if _canonical_key(cleanest_other) <= _canonical_key(url):
-            # A cleaner (or equal) URL already represents this text -> this URL is
-            # a duplicate. Retire any stale row it held (it may have been canonical
-            # for a since-changed text) and index nothing for it.
             _mark_document_removed(conn, url, now)
             return "duplicate"
-        # This URL is cleaner than every current holder -> it wins; retire them.
         for r in others:
             _mark_document_removed(conn, r["url"], now)
 
     existing = conn.execute("SELECT * FROM documents WHERE url=?", (url,)).fetchone()
     meta = json.dumps(doc.get("metadata")) if doc.get("metadata") else None
-    # A doc the extractor could not title (a PDF with no heading and no usable
-    # metadata title, or a rare title-less HTML page) still gets a readable title
-    # from its URL basename. The "unchanged"/"duplicate" branches below never write
-    # title -- the one-time backfill (run_backfill) covers already-stored rows.
     title = doc.get("title") or pdf_title.from_url(url)
     if existing is None:
         conn.execute(
@@ -907,9 +782,6 @@ def _upsert_document(conn, url, site, source_type, content_sha256, doc, now) -> 
         _set_classification(conn, _doc_id(url), url, site, doc)
         return "new"
     if existing["text_sha256"] != h:
-        # The extracted TEXT changed -> a genuine content change: bump revision +
-        # updated_at so the delta feed re-surfaces it. (Change detection keys on
-        # text, not bytes, so cHash byte-churn with identical text stays quiet.)
         conn.execute(
             """UPDATE documents SET content_sha256=?, source_type=?, title=?, text=?,
                    markdown=?, lang=?, word_count=?, metadata=?, text_sha256=?,
@@ -931,15 +803,11 @@ def _upsert_document(conn, url, site, source_type, content_sha256, doc, now) -> 
         _set_classification(conn, existing["id"], url, site, doc)
         return "changed"
     if existing["content_sha256"] != content_sha256:
-        # Same text, new raw bytes (cHash churn): refresh the byte pointer
-        # silently -- no revision/updated_at bump, so the feed is not spammed.
         conn.execute(
             "UPDATE documents SET content_sha256=?, source_type=? WHERE url=?",
             (content_sha256, source_type, url),
         )
     if existing["present"] == 0:
-        # Resurrecting a previously-removed doc: bump updated_at so the delta
-        # feed re-surfaces it for re-indexing even though the text is unchanged.
         conn.execute(
             "UPDATE documents SET present=1, updated_at=? WHERE url=?", (now, url)
         )
@@ -955,15 +823,7 @@ def upsert_document(conn, url, site, source_type, content_sha256, doc, now) -> s
 
 
 def _mark_document_removed(conn, url, now) -> None:
-    """Retire a document from the live corpus (no commit).
-
-    Guarded on ``present=1`` so this is a true no-op on an already-retired row.
-    ``updated_at`` must be stamped only on the live -> retired transition,
-    because that stamp *is* the deletion signal :func:`delta` reports
-    (``present=0 AND updated_at > since``). Re-stamping it would re-ship the same
-    deletion on every subsequent delta -- the hard DELETE this replaced was
-    self-limiting, and the tombstone has to be too.
-    """
+    """Retire a document from the live corpus (no commit)."""
     conn.execute(
         "UPDATE documents SET present=0, updated_at=? WHERE url=? AND present=1",
         (now, url),
@@ -1035,32 +895,7 @@ def stats(conn) -> dict:
 def run_dedup(
     conn, batch_size: int = 500, vacuum: bool = True, now: str | None = None
 ) -> dict:
-    """Backfill ``text_sha256`` and retire duplicate documents, keeping the
-    single cleanest URL (see :func:`_canonical_key`) per distinct extracted text.
-
-    This is the one-time corpus cleanup *and* an idempotent maintenance pass: a
-    second run finds nothing to backfill or delete and performs no writes. It is
-    the authoritative backstop for the prevention logic in :func:`_upsert_document`
-    (e.g. after a re-crawl re-materializes cHash variants). Do not run it
-    concurrently with fetch/extract -- all three write ``documents``.
-
-    Phases:
-      A. Backfill ``text_sha256`` where NULL, keyset-paginated by ``id`` in
-         ``batch_size`` chunks so only that many texts are resident at once (never
-         the whole corpus) in a single O(n) forward pass. This is derived
-         metadata -- it never touches ``updated_at`` (no delta spam).
-      B. For every present text group with more than one member, keep the cleanest
-         URL and retire the rest with a ``present=0`` tombstone (NOT a hard
-         DELETE): a loser may already have been handed downstream as an upsert,
-         and :func:`delta` can only report a deletion it can still see
-         (``present=0 AND updated_at > since``). A deleted row is invisible, so
-         the downstream index would keep the orphan forever. Retiring bumps
-         ``updated_at`` by design -- that bump *is* the deletion signal.
-      C. VACUUM to defragment -- only if anything was retired.
-
-    ``before``/``after`` count the live corpus (``present=1``), so
-    ``before - after == deleted`` still holds even though no row is destroyed.
-    """
+    """Backfill text_sha256 and retire duplicate documents, keeping the single cleanest URL per distinct extracted text."""
     now = now or time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime())
     before = conn.execute(
         "SELECT COUNT(*) c FROM documents WHERE present=1"
@@ -1069,12 +904,6 @@ def run_dedup(
     backfilled = 0
     last_id = ""
     while True:
-        # Keyset-paginate by the PRIMARY KEY `id` (a forward index range scan),
-        # NOT `WHERE text_sha256 IS NULL LIMIT n`: that re-scans from the start
-        # each batch and, because rows are updated by their scattered hash-id,
-        # degrades to O(n^2) over a large table. Advancing `last_id` past every
-        # row seen makes this a single O(n) forward pass; skipping already-hashed
-        # rows keeps it idempotent and restartable.
         rows = conn.execute(
             "SELECT id, text, text_sha256 FROM documents "
             "WHERE id > ? ORDER BY id LIMIT ?",
@@ -1082,7 +911,6 @@ def run_dedup(
         ).fetchall()
         if not rows:
             break
-        # Hash outside the write lock (CPU-heavy); write the batch in one txn.
         todo = [
             (text_hash(r["text"]), r["id"]) for r in rows if r["text_sha256"] is None
         ]
@@ -1095,11 +923,6 @@ def run_dedup(
             backfilled += len(todo)
         last_id = rows[-1]["id"]
 
-    # One ordered pass over the small (id, url, text_sha256) columns -- NOT an
-    # N+1 "query each group" loop, which SQLite may service via the present index
-    # and rescan the whole table per group (O(n) each). Group the sorted rows in
-    # Python; only 3 short columns per row are held, so memory stays tiny even at
-    # corpus scale. Deletes go by PK (id), which is always a seek.
     rows = conn.execute(
         "SELECT id, url, text_sha256 FROM documents "
         "WHERE present=1 AND text_sha256 IS NOT NULL "
@@ -1127,11 +950,6 @@ def run_dedup(
         deleted += len(chunk)
 
     if vacuum and deleted:
-        # VACUUM cannot run inside a transaction; every write_txn above has
-        # already committed, so the connection is in autocommit here. Retiring is
-        # now a soft delete, so unlike the old hard DELETE this frees no pages --
-        # it only defragments the UPDATE churn, and `deleted` is just the "this
-        # pass churned the table" signal. `--no-vacuum` skips it on a large corpus.
         conn.execute("VACUUM")
 
     after = conn.execute("SELECT COUNT(*) c FROM documents WHERE present=1").fetchone()[
@@ -1147,19 +965,7 @@ def run_dedup(
 
 
 def run_reclassify(conn, batch_size: int = 500) -> dict:
-    """Re-run :func:`classify.classify` over every document row and rewrite the four
-    enrichment columns (``standort_id`` / ``department_id`` / ``study_program_id`` /
-    ``classify_meta``). Run this after editing ``taxonomy.py`` / bumping
-    ``CLASSIFY_VERSION`` -- the Phase-2 write path only (re)classifies rows it
-    ``new``/``changed``, so an unchanged corpus keeps stale tags otherwise.
-
-    Idempotent (same rules ⇒ same ids) and it **never touches ``updated_at``** --
-    classification is derived metadata, so a reclassify must not spam :func:`delta`.
-    Keyset-paginated by the PRIMARY KEY ``id`` (a single O(n) forward pass, like
-    :func:`run_dedup`); only ``batch_size`` rows are resident at once, and the huge
-    ``text`` column is never read (classification is URL + title + description only).
-    Do NOT run concurrently with fetch/extract -- all three write ``documents``.
-    """
+    """Re-run classify over every document row and rewrite the four enrichment columns."""
     updated = 0
     last_id = ""
     while True:
@@ -1183,8 +989,7 @@ def run_reclassify(conn, batch_size: int = 500) -> dict:
 
 
 def _backfill_title(row, cache, ext_for) -> str | None:
-    """Best title for a title-less document: for a PDF, the cached blob's cleaned
-    embedded metadata title, else -- and for HTML -- the URL basename."""
+    """Best title for a title-less document: a PDF's cleaned embedded metadata title, else the URL basename."""
     if row["source_type"] == "pdf":
         path = cache.path_for(row["content_sha256"], ext_for("pdf"))
         try:
@@ -1201,32 +1006,11 @@ def _backfill_title(row, cache, ext_for) -> str | None:
 
 
 def run_backfill(conn, raw_dir, batch_size: int = 500) -> dict:
-    """One-time repair of the three dead metadata fields over the *existing* corpus,
-    in one keyset-paginated pass over present ``documents``. Idempotent and it
-    **never touches ``updated_at``** (derived metadata must not spam :func:`delta`),
-    exactly like :func:`run_dedup` / :func:`run_reclassify`. Re-crawl/re-extract
-    cannot do this: none of these fields changes ``text_sha256``, so an unchanged
-    doc takes the no-op branch of :func:`_upsert_document`.
-
-    * ``lang``: detect from the stored ``text`` where NULL (skip if undetectable).
-    * ``final_url``: the true redirect target from ``crawl_log``, taken from the
-      genuine full fetch (``status=200``) of the exact bytes this doc holds
-      (``url`` + ``sha256``); the ``status=200`` filter keeps a later 304 recheck
-      (which logs ``final_url == url``) from masking the real redirect. Docs with no
-      matching full-fetch row keep ``final_url == url`` -- never NULL, never wrong.
-    * ``title``: for a title-less doc, a PDF's cleaned embedded metadata title (from
-      the re-opened cached blob) else the URL basename; HTML uses the URL basename.
-
-    Do NOT run concurrently with fetch/extract -- all three write ``documents``.
-    """
+    """One-time repair of the three dead metadata fields over the existing corpus, in one keyset-paginated pass over present documents."""
     from . import fetch as fetchmod
 
     cache = RawCache(raw_dir)
 
-    # Step A: (url, sha256) -> final_url, built by streaming crawl_log once (its many
-    # rows are never all resident) and keeping only keys that belong to a present doc.
-    # The two dicts below are bounded by the present-doc count, not by crawl_log size.
-    # Later rows (a larger id, i.e. a more recent fetch of those exact bytes) win.
     doc_keys = {
         (r["url"], r["content_sha256"])
         for r in conn.execute(
@@ -1235,10 +1019,6 @@ def run_backfill(conn, raw_dir, batch_size: int = 500) -> dict:
     }
     final_by_key: dict = {}
     for r in conn.execute(
-        # status=200 selects genuine full-fetch rows only. A 304 recheck also logs
-        # sha256 == the cached content digest but with final_url == the request URL
-        # (see scrape-engine/crawl.rs build_batch, 304 branch), so without this filter
-        # a later 304 would overwrite the real redirect this doc's bytes resolved to.
         "SELECT url, sha256, final_url FROM crawl_log "
         "WHERE sha256 IS NOT NULL AND final_url IS NOT NULL AND status = 200 "
         "ORDER BY id"
@@ -1247,7 +1027,6 @@ def run_backfill(conn, raw_dir, batch_size: int = 500) -> dict:
         if key in doc_keys:
             final_by_key[key] = r["final_url"]
 
-    # Step B: keyset pass over present docs (single O(n) forward scan by PK id).
     counts = {"lang": 0, "final_url": 0, "titles": 0, "scanned": 0}
     last_id = ""
     while True:
@@ -1258,7 +1037,7 @@ def run_backfill(conn, raw_dir, batch_size: int = 500) -> dict:
         ).fetchall()
         if not rows:
             break
-        pending = []  # (sets, id) computed outside the write lock
+        pending = []
         for r in rows:
             counts["scanned"] += 1
             sets: dict = {}

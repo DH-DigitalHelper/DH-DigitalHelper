@@ -1,7 +1,4 @@
-//! End-to-end orchestration tests using an in-memory `HttpClient` (the Rust
-//! analogue of the Python `fetch_fn` injection in `test_crawl.py`). Drives a
-//! tiny fixture site through the real frontier + single-writer pipeline and
-//! asserts the resulting SQLite database.
+//! End-to-end orchestration tests using an in-memory `HttpClient` (the Rust analogue of the Python `fetch_fn` injection in `test_crawl.py`).
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -11,22 +8,15 @@ use _engine::crawl::run_with_client;
 use _engine::fetch::{FetchRequest, FetchResult, HttpClient};
 use _engine::progress::ProgressSink;
 
-/// One canned response. `Default` is a 200 with an empty body, so a test spells
-/// out only the field it cares about.
+/// One canned mock HTTP response, defaulting to a 200 with an empty body.
 #[derive(Clone, Default)]
 struct Page {
     content_type: String,
     body: Vec<u8>,
-    /// 0 means 200.
     status: u16,
-    /// Set to model a redirect: reqwest follows it and reports where the bytes
-    /// actually came from, which may be a different host than was requested.
     final_url: Option<String>,
-    /// The ETag this page serves with its body.
     etag: Option<String>,
-    /// When true, a request whose If-None-Match matches `etag` gets a 304.
     revalidates: bool,
-    /// The ETag the 304 itself carries — a server that rotated its validator.
     etag_on_304: Option<String>,
 }
 
@@ -111,8 +101,6 @@ impl HttpClient for MockClient {
                 error: Some("HTTP 404".into()),
             };
         };
-        // Conditional GET: a matching validator revalidates to 304 with no body.
-        // The 304 may carry a rotated ETag of its own.
         if page.revalidates && req.etag.is_some() && req.etag == page.etag {
             return FetchResult {
                 url: req.url.clone(),
@@ -126,7 +114,6 @@ impl HttpClient for MockClient {
             };
         }
         let status = if page.status == 0 { 200 } else { page.status };
-        // Mirrors ReqwestClient: a non-2xx still yields an error string, a 2xx does not.
         let error = if (200..300).contains(&status) {
             None
         } else {
@@ -229,15 +216,12 @@ fn crawls_cascade_records_edges_and_seeds_from_sitemap() {
     let counts = run(tmp.path());
 
     let c = &counts["site.test"];
-    // startseite, a, b, c, from-sitemap = 5 distinct pages, all brand new.
     assert_eq!(c.fetched, 5, "fetched count");
     assert_eq!(c.new, 5, "all new on a cold crawl");
     assert_eq!(c.error, 0);
 
     let conn = rusqlite::Connection::open(tmp.path().join("db.sqlite3")).unwrap();
 
-    // Queue: exactly the 5 followable pages, all done+present; trap & external
-    // are NOT enqueued.
     let done: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM queue WHERE work_state='done' AND present=1",
@@ -258,8 +242,6 @@ fn crawls_cascade_records_edges_and_seeds_from_sitemap() {
         assert_eq!(n, 0, "{absent} must not be enqueued");
     }
 
-    // Links edge table: the full outbound set from the seed, incl. external
-    // (in_domain=0) and the trap (recorded but never followed).
     let ext: i64 = conn
         .query_row(
             "SELECT l.in_domain FROM links l
@@ -279,7 +261,6 @@ fn crawls_cascade_records_edges_and_seeds_from_sitemap() {
         .unwrap();
     assert_eq!(trap, 1, "trap edge recorded even though never crawled");
 
-    // raw_docs handed off for extraction (one per unique body).
     let raw_pending: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM raw_docs WHERE extract_state='pending'",
@@ -289,20 +270,14 @@ fn crawls_cascade_records_edges_and_seeds_from_sitemap() {
         .unwrap();
     assert_eq!(raw_pending, 5);
 
-    // Content-addressed raw files exist on disk.
     let files = std::fs::read_dir(tmp.path().join("raw")).unwrap().count();
     assert_eq!(files, 5);
 }
 
-/// A raw-cache write failure must never leave a page claiming a stored digest it
-/// has no bytes for: `queue.content_sha256` is the change-detection key, so
-/// advancing it without a `raw_docs` row makes the page read as Unchanged forever
-/// while Phase 2 never sees it — a silent, permanent hole in the corpus.
+/// A raw-cache write failure must never leave a page claiming a stored digest it has no bytes for.
 #[test]
 fn raw_cache_write_failure_never_orphans_a_page() {
     let tmp = tempfile::tempdir().unwrap();
-    // Put a regular file exactly where RawCache must create its directory, so
-    // every `create_dir_all` inside RawCache::write fails deterministically.
     std::fs::write(tmp.path().join("raw"), b"not a directory").unwrap();
 
     let counts = run_with_client(
@@ -330,16 +305,10 @@ fn raw_cache_write_failure_never_orphans_a_page() {
         "a page whose bytes were never cached must not advertise a stored digest"
     );
 
-    // And the failure must be loud rather than counted as a successful fetch.
     let c = &counts["site.test"];
     assert_eq!(c.new, 0, "nothing was stored, so nothing is 'new'");
     assert!(c.error > 0, "raw-write failures must surface as errors");
 
-    // Losing the bytes must not also lose the link discovery that already
-    // succeeded: the body WAS downloaded and parsed, only the cache write
-    // failed. Dropping the outbound links would amputate the whole subtree
-    // behind a page over one transient disk hiccup, so the cascade must still
-    // reach a/b/c (5 pages) rather than stopping at the two seeded ones.
     assert_eq!(
         c.fetched, 5,
         "discovered links must still be followed after a raw-write failure"
@@ -358,10 +327,7 @@ fn raw_cache_write_failure_never_orphans_a_page() {
     );
 }
 
-/// The domain allowlist is enforced on discovered links and at enqueue, but
-/// reqwest follows redirects to ANY host. So an in-domain URL that 30x's to a
-/// foreign host had that host's bytes downloaded, hashed, cached and link-scanned,
-/// all attributed to the in-domain URL -- the allowlist silently bypassed.
+/// An in-domain URL that redirects to a foreign host must not have that host's content stored.
 #[test]
 fn off_domain_redirect_content_is_not_stored() {
     let tmp = tempfile::tempdir().unwrap();
@@ -370,7 +336,6 @@ fn off_domain_redirect_content_is_not_stored() {
             "http://site.test/startseite",
             Page::html(r#"<html><body>seed <a href="/go">go</a></body></html>"#),
         ),
-        // Requested in-domain, but the bytes actually came from another host.
         (
             "http://site.test/go",
             Page::html("<html><body>foreign host content, not ours at all</body></html>")
@@ -385,7 +350,6 @@ fn off_domain_redirect_content_is_not_stored() {
 
     let conn = rusqlite::Connection::open(tmp.path().join("db.sqlite3")).unwrap();
 
-    // The foreign bytes must not enter the corpus under our URL ...
     let raw: i64 = conn
         .query_row("SELECT COUNT(*) FROM raw_docs", [], |r| r.get(0))
         .unwrap();
@@ -402,14 +366,12 @@ fn off_domain_redirect_content_is_not_stored() {
         "no digest may be recorded for off-domain content"
     );
 
-    // ... it is counted as skipped, not as a successful fetch ...
     assert_eq!(
         counts["site.test"].skipped, 1,
         "off-domain redirect is skipped"
     );
     assert_eq!(counts["site.test"].new, 1, "only the seed is new");
 
-    // ... the reason is auditable ...
     let err: Option<String> = conn
         .query_row(
             "SELECT error FROM crawl_log WHERE url='http://site.test/go'",
@@ -422,7 +384,6 @@ fn off_domain_redirect_content_is_not_stored() {
         "crawl_log must record where it was redirected"
     );
 
-    // ... and no links from the foreign page leak into our graph.
     let edges: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM links l JOIN urls s ON s.id = l.src_id
@@ -437,10 +398,7 @@ fn off_domain_redirect_content_is_not_stored() {
     );
 }
 
-/// `FetchResult::ok()` requires a non-empty body, so a legitimate empty 200/204
-/// failed it, was not a 404/410, and fell through to the error branch -- landing
-/// in the DB as work_state='error' with http_status=200 and error=NULL (an
-/// incoherent row), re-tried on every recheck=all run, discarding its validators.
+/// A legitimate empty 200/204 must not be recorded as an error.
 #[test]
 fn empty_body_2xx_is_not_recorded_as_an_error() {
     let tmp = tempfile::tempdir().unwrap();
@@ -471,8 +429,6 @@ fn empty_body_2xx_is_not_recorded_as_an_error() {
         counts["site.test"].error, 0,
         "no errors on a clean empty 200"
     );
-    // Nothing was stored, and it never had content, so it is a skip -- but an
-    // auditable one, not a silent present row that never extracts.
     assert_eq!(counts["site.test"].skipped, 1);
     let err: Option<String> = conn
         .query_row(
@@ -487,8 +443,7 @@ fn empty_body_2xx_is_not_recorded_as_an_error() {
     );
 }
 
-/// An empty body is far likelier a blip than "this page is now genuinely empty",
-/// so a page that already has content must keep it rather than be wiped or errored.
+/// A page that already has content keeps it rather than being wiped when it later answers an empty body.
 #[test]
 fn empty_body_2xx_keeps_previously_stored_content() {
     let tmp = tempfile::tempdir().unwrap();
@@ -521,7 +476,6 @@ fn empty_body_2xx_keeps_previously_stored_content() {
         .unwrap();
     assert!(before.is_some(), "precondition: the page stored content");
 
-    // Second run: the same page now answers an empty 200.
     let mut cfg2 = config(tmp.path());
     cfg2.use_sitemap = false;
     let counts = run_with_client(
@@ -558,10 +512,7 @@ fn empty_body_2xx_keeps_previously_stored_content() {
     assert_eq!(orphans, 0, "the kept digest must still resolve to its blob");
 }
 
-/// 410 Gone is a stronger, permanent signal than 404, but both were collapsed to
-/// http_status=404 on the queue row, so the stored state could not distinguish
-/// "deliberately withdrawn" from "missing right now". crawl_log kept the true
-/// status all along -- only the queue row lied about it.
+/// A 410 Gone must be recorded as 410, not flattened to 404.
 #[test]
 fn gone_410_is_recorded_as_410_not_404() {
     let tmp = tempfile::tempdir().unwrap();
@@ -595,17 +546,13 @@ fn gone_410_is_recorded_as_410_not_404() {
     assert_eq!(present, 0, "410 still removes the page");
 }
 
-/// A 304 may carry a *new* ETag: the server is telling us the content is
-/// unchanged but its validator has rotated. Discarding it means the next crawl
-/// re-sends the stale validator, the server can no longer match it, and it
-/// answers a full 200 body -- so the page silently stops revalidating cheaply.
+/// A 304 carrying a rotated ETag must adopt the new validator.
 #[test]
 fn a_304_adopts_its_rotated_etag() {
     let tmp = tempfile::tempdir().unwrap();
     let page = "http://site.test/p";
     let seed = r#"<html><body>seed <a href="/p">p</a></body></html>"#;
 
-    // Run 1: the page hands out ETag "v1".
     let mut cfg = config(tmp.path());
     cfg.use_sitemap = false;
     run_with_client(
@@ -628,8 +575,6 @@ fn a_304_adopts_its_rotated_etag() {
         .unwrap();
     assert_eq!(stored.as_deref(), Some("\"v1\""), "precondition");
 
-    // Run 2: the conditional GET matches, so we get a 304 -- but the server has
-    // rotated its validator to "v2" and says so on the 304 itself.
     let mut cfg2 = config(tmp.path());
     cfg2.use_sitemap = false;
     run_with_client(
@@ -658,10 +603,7 @@ fn a_304_adopts_its_rotated_etag() {
     );
 }
 
-/// Once a page has stored validators, every later crawl revalidates it as 304 --
-/// and the 304 branch used to emit no edges at all, so the link graph froze at
-/// whatever single full-body fetch last touched each page. The bytes are already
-/// on disk, so a 304 rebuilds them for free (see `edges_from_cached_blob`).
+/// A 304 must re-emit the page's edges from its cached blob.
 #[test]
 fn a_304_re_emits_edges_from_the_cached_blob() {
     let tmp = tempfile::tempdir().unwrap();
@@ -696,8 +638,6 @@ fn a_304_re_emits_edges_from_the_cached_blob() {
         "precondition: the full-body crawl recorded edges"
     );
 
-    // Simulate the rot: the graph is gone while the pages are still `done` with
-    // validators, so every re-crawl can only 304 them.
     conn.execute("DELETE FROM links", []).unwrap();
 
     let mut cfg2 = config(tmp.path());
@@ -741,11 +681,9 @@ fn max_pages_caps_total_fetches() {
 #[test]
 fn second_run_new_only_fetches_nothing() {
     let tmp = tempfile::tempdir().unwrap();
-    // First full crawl populates the DB.
     let first = run(tmp.path());
     assert_eq!(first["site.test"].fetched, 5);
 
-    // A new-only re-run must not re-fetch any already-checked URL.
     let mut cfg = config(tmp.path());
     cfg.recheck = "new-only".into();
     let second = run_with_client(cfg, "run-2".into(), ProgressSink::new(None), fixture())
@@ -754,12 +692,6 @@ fn second_run_new_only_fetches_nothing() {
 }
 
 /// `recheck = "force-full"` is `"all"` plus: do not send the stored validators.
-///
-/// Without that second half a page with an ETag revalidates to a cheap 304 and is
-/// never re-downloaded -- which is the entire point of asking for a forced full
-/// re-crawl (repairing a corpus whose stored bytes are suspect). The two halves used
-/// to be `recheck="all"` and a separate `force_full: bool` argument; this pins that
-/// the one enum value still drives both.
 #[test]
 fn force_full_redownloads_where_recheck_all_revalidates() {
     let tmp = tempfile::tempdir().unwrap();
@@ -777,7 +709,6 @@ fn force_full_redownloads_where_recheck_all_revalidates() {
         c
     };
 
-    // Run 1 stores the body and its ETag.
     run_with_client(
         cfg_at("all"),
         "run-1".into(),
@@ -785,7 +716,6 @@ fn force_full_redownloads_where_recheck_all_revalidates() {
         pages(),
     )
     .expect("first crawl");
-    // Run 2, recheck="all": the stored validator still matches, so the page 304s.
     run_with_client(
         cfg_at("all"),
         "run-2".into(),
@@ -793,7 +723,6 @@ fn force_full_redownloads_where_recheck_all_revalidates() {
         pages(),
     )
     .expect("recheck=all crawl");
-    // Run 3, recheck="force-full": same page, no validator sent, so a full 200.
     run_with_client(
         cfg_at("force-full"),
         "run-3".into(),
@@ -802,9 +731,6 @@ fn force_full_redownloads_where_recheck_all_revalidates() {
     )
     .expect("force-full crawl");
 
-    // Assert on crawl_log.status, not the counts: force-full re-downloads identical
-    // bytes, so its outcome is still `unchanged` and counts cannot tell the two
-    // modes apart. crawl_log is append-only, so every run's row survives.
     let conn = rusqlite::Connection::open(tmp.path().join("db.sqlite3")).unwrap();
     let status = |run: &str| -> i64 {
         conn.query_row(
@@ -842,9 +768,6 @@ fn per_host_budget_caps_single_host() {
         db_file: tmp.path().join("db.sqlite3").to_string_lossy().into_owned(),
         raw_dir: tmp.path().join("raw").to_string_lossy().into_owned(),
     };
-    // hub links to 4 pages on flood.test and 2 on good.test; both hosts are
-    // in-domain for allowed_domain "test". With max_pages_per_host=2, flood.test is
-    // capped at 2 while good.test (under the cap) is crawled fully.
     let client = MockClient::new(vec![
         (
             "http://hub.test/start",
@@ -865,7 +788,6 @@ fn per_host_budget_caps_single_host() {
     ]);
     let counts = run_with_client(cfg, "run-perhost".into(), ProgressSink::new(None), client)
         .expect("crawl run");
-    // seed hub(1) + flood(2, capped) + good(2) = 5
     assert_eq!(
         counts["test"].fetched, 5,
         "per-host cap limits total fetched"
@@ -882,7 +804,6 @@ fn per_host_budget_caps_single_host() {
     };
     assert_eq!(done("http://flood.test/%"), 2, "flood.test capped at 2");
     assert_eq!(done("http://good.test/%"), 2, "good.test unaffected by cap");
-    // The 2 over-budget flood URLs stay pending (available to a later, higher-cap run).
     let flood_pending: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM queue WHERE work_state='pending' AND url LIKE 'http://flood.test/%'",
@@ -897,9 +818,6 @@ fn per_host_budget_caps_single_host() {
 fn frontier_load_drops_preseeded_trap() {
     let tmp = tempfile::tempdir().unwrap();
     let db_path = tmp.path().join("db.sqlite3");
-    // Pre-seed the queue with a trap URL already pending (as if enqueued before the
-    // trap rule existed, or via a sitemap). The frontier load must drop it so it is
-    // never served/fetched — the block is authoritative, not just discovery-time.
     {
         let conn = _engine::storage::connect(db_path.to_str().unwrap()).unwrap();
         _engine::storage::init_db(&conn).unwrap();
@@ -963,10 +881,7 @@ fn frontier_load_drops_preseeded_trap() {
     assert_eq!(still_pending, 1, "trap row left pending, untouched");
 }
 
-// ---- transient-error retry on re-run ---------------------------------------
-
-/// Run a first crawl in `dir` where the seed links to `path` and `path` answers
-/// `status`, so it lands in the queue as an error row. Uses run id "run-1".
+/// Run a first crawl in `dir` where the seed links to `path` and `path` answers `status`, so it lands in the queue as an error row.
 fn first_error_run(dir: &std::path::Path, path: &str, status: u16) {
     let mut cfg = config(dir);
     cfg.use_sitemap = false;
@@ -999,8 +914,7 @@ fn refetched_in_run(conn: &rusqlite::Connection, run_id: &str, url: &str) -> boo
     n > 0
 }
 
-/// A transient failure (503) is re-queued on the next run and, if it now
-/// succeeds, becomes a normal present document.
+/// A transient failure (503) is re-queued on the next run and, if it now succeeds, becomes a normal present document.
 #[test]
 fn transient_error_is_retried_on_rerun() {
     let tmp = tempfile::tempdir().unwrap();
@@ -1011,7 +925,6 @@ fn transient_error_is_retried_on_rerun() {
     assert_eq!(state, "error", "a 503 is a transient error");
     assert_eq!(status, 503);
 
-    // Run 2: /flap is healthy now. The seeding requeue should retry it.
     let mut cfg2 = config(tmp.path());
     cfg2.use_sitemap = false;
     let seed = r#"<html><body>seed <a href="/flap">f</a></body></html>"#;
@@ -1049,8 +962,7 @@ fn transient_error_is_retried_on_rerun() {
     );
 }
 
-/// A permanent client error (403) is NOT re-queued, even on a recheck=all run and
-/// even if the URL would now serve 200.
+/// A permanent client error (403) is NOT re-queued, even on a recheck=all run and even if the URL would now serve 200.
 #[test]
 fn permanent_error_is_not_retried_on_rerun() {
     let tmp = tempfile::tempdir().unwrap();
@@ -1061,7 +973,6 @@ fn permanent_error_is_not_retried_on_rerun() {
     assert_eq!(state, "error");
     assert_eq!(status, 403);
 
-    // Run 2: it would now serve 200, but a 403 is permanent -> must not be retried.
     let mut cfg2 = config(tmp.path());
     cfg2.use_sitemap = false;
     let seed = r#"<html><body>seed <a href="/forbidden">x</a></body></html>"#;
@@ -1128,8 +1039,7 @@ fn retry_transient_errors_false_freezes_error_rows() {
     );
 }
 
-/// recheck=new-only never retries error rows (they have last_checked_at set), so
-/// the transient requeue is skipped there.
+/// recheck=new-only never retries error rows (they have last_checked_at set), so the transient requeue is skipped there.
 #[test]
 fn new_only_does_not_retry_transient_errors() {
     let tmp = tempfile::tempdir().unwrap();

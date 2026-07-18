@@ -1,5 +1,4 @@
-//! Port of the Python `tests/test_sitemap.py`, using an in-memory mock
-//! `HttpClient` in place of the injected `fetch_fn`.
+//! Port of the Python `tests/test_sitemap.py`, using an in-memory mock `HttpClient` in place of the injected `fetch_fn`.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -28,7 +27,6 @@ impl MockClient {
 
 impl HttpClient for MockClient {
     async fn fetch(&self, req: FetchRequest, _ua: String) -> FetchResult {
-        // Unused by sitemap discovery.
         FetchResult {
             url: req.url.clone(),
             final_url: req.url,
@@ -103,12 +101,7 @@ fn gzipped(data: &[u8]) -> Vec<u8> {
     enc.finish().unwrap()
 }
 
-/// Large sites publish their sitemap index pointing at `.xml.gz` children.
-/// reqwest's `gzip` feature only strips a `Content-Encoding: gzip` wrapper -- it
-/// does nothing for a body that IS a gzip member (served as application/gzip).
-/// Those bytes reached from_utf8_lossy as binary, decoded to replacement-char
-/// garbage the <loc> regex matched nothing in, and every URL in that child was
-/// silently dropped from seeding -- no error, just a smaller crawl.
+/// A gzipped child sitemap served as application/gzip is decompressed so its URLs are discovered.
 #[tokio::test]
 async fn gzipped_child_sitemap_is_decompressed() {
     let index = br#"<?xml version="1.0"?>
@@ -135,10 +128,7 @@ async fn gzipped_child_sitemap_is_decompressed() {
     );
 }
 
-/// Only `{homepage}/sitemap.xml` was ever probed. A site whose index lives
-/// anywhere else advertises it via a `Sitemap:` line in robots.txt, which we
-/// never read -- so the whole sitemap seed was missed. NB: this reads robots.txt
-/// purely for DISCOVERY; crawl policy still deliberately ignores it.
+/// A Sitemap: line in robots.txt is followed for discovery.
 #[tokio::test]
 async fn sitemaps_advertised_in_robots_txt_are_followed() {
     let robots =
@@ -157,8 +147,7 @@ async fn sitemaps_advertised_in_robots_txt_are_followed() {
     );
 }
 
-/// An off-domain Sitemap: line gets the same treatment as an off-domain index
-/// child: recorded nowhere, fetched never.
+/// An off-domain Sitemap: line gets the same treatment as an off-domain index child: recorded nowhere, fetched never.
 #[tokio::test]
 async fn off_domain_robots_sitemap_is_not_followed() {
     let robots = b"Sitemap: https://evil.example/sitemap-x.xml\n";

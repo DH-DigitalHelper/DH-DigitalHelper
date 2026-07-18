@@ -12,26 +12,14 @@ def test_extracts_main_content_and_strips_boilerplate():
     )
     assert doc is not None
     assert "Dualen Partner" in doc["text"]
-    assert "Impressum" not in doc["text"]  # footer stripped
-    assert "Nav A" not in doc["text"]  # nav stripped
+    assert "Impressum" not in doc["text"]
+    assert "Nav A" not in doc["text"]
     assert doc["word_count"] > 20
     assert doc["markdown"]
 
 
 def test_leading_ordinals_survive_the_markdown_stripper():
-    """`_LIST_MARKER` matched a leading "N." on ANY line, not just real list items.
-
-    `_HEADING` runs first, so "## 1. Semester" is already reduced to a line
-    starting "1. " by the time the list rule sees it -- and the ordinal was
-    stripped, indexing the heading as bare "Semester". For DHBW module and
-    semester content those ordinals are the meaningful part: "1. Semester" and
-    "2. Semester" both collapsed to "Semester", so full-text search could no
-    longer tell them apart.
-
-    Asserted on the stripper directly: routing this through the real
-    trafilatura.extract() would depend on whether that version renders the
-    heading as "## 1. Semester" or as an ordered-list item.
-    """
+    """_LIST_MARKER matched a leading "N." on ANY line, not just real list items."""
     assert "1. Semester" in _markdown_to_text("## 1. Semester")
     assert "2. Fachsemester" in _markdown_to_text("### 2. Fachsemester")
     assert "1. Semester" in _markdown_to_text("Studienplan\n\n1. Semester\n")

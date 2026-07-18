@@ -1,7 +1,4 @@
-//! Phase-1 orchestration: seed the frontier, run per-host async workers, and
-//! funnel every finished page to the single writer/coordinator.
-//!
-//! Public entry point [`run`] mirrors the old Python `crawl.run_fetch`.
+//! Phase-1 orchestration: seed the frontier, run per-host async workers, and funnel every finished page to the single writer/coordinator.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -50,9 +47,7 @@ impl From<std::io::Error> for CrawlError {
     }
 }
 
-/// Per-host request spacing (port of the Python `_HostRateLimiter`): reserve the
-/// next time slot under the lock, then sleep outside it so other workers are
-/// never blocked from reserving while this one waits.
+/// Per-host request spacing that reserves the next time slot under the lock, then sleeps outside it so other workers are never blocked while this one waits.
 struct RateLimiter {
     delay: Duration,
     next: std::sync::Mutex<Option<tokio::time::Instant>>,
@@ -84,8 +79,7 @@ impl RateLimiter {
     }
 }
 
-/// Run the whole Phase-1 crawl with the production reqwest client. Blocks until
-/// every site is finished; returns per-site counts keyed by `allowed_domain`.
+/// Run the whole Phase-1 crawl with the production reqwest client.
 pub fn run(
     config: RunConfig,
     run_id: String,
@@ -95,8 +89,7 @@ pub fn run(
     run_with_client(config, run_id, progress, client)
 }
 
-/// Orchestration generic over the HTTP client — the injection seam used by tests
-/// (a deterministic in-memory client) in place of the old Python `fetch_fn`.
+/// Orchestration generic over the HTTP client — the injection seam used by tests in place of the old Python `fetch_fn`.
 pub fn run_with_client<C: HttpClient>(
     config: RunConfig,
     run_id: String,
@@ -107,7 +100,6 @@ pub fn run_with_client<C: HttpClient>(
         .enable_all()
         .build()?;
 
-    // --- sitemap discovery (concurrent across sites) ---
     let sitemap_results: Vec<Vec<(String, Option<String>)>> = if config.use_sitemap {
         rt.block_on(async {
             let mut handles = Vec::new();
@@ -130,7 +122,6 @@ pub fn run_with_client<C: HttpClient>(
         vec![Vec::new(); config.sites.len()]
     };
 
-    // --- seed the durable queue + load the in-memory frontier ---
     let conn = storage::connect(&config.db_file)?;
     storage::init_db(&conn)?;
     storage::reset_in_progress(&conn)?;
@@ -149,10 +140,6 @@ pub fn run_with_client<C: HttpClient>(
         if config.rechecks_all() {
             storage::requeue_present_urls(&conn, &site.allowed_domain)?;
         }
-        // Retry URLs that failed transiently (rate limit / 5xx / timeout / DNS) on
-        // the last run. Skipped under new-only: an error row has last_checked_at
-        // set, so load_pending(only_new=true) would drop it from the frontier yet
-        // leave it stranded in 'pending'.
         if config.retry_transient_errors && !config.only_new() {
             storage::requeue_transient_errors(&conn, &site.allowed_domain)?;
         }
@@ -160,9 +147,6 @@ pub fn run_with_client<C: HttpClient>(
 
     let mut inits = Vec::new();
     for site in &config.sites {
-        // Drop any already-queued trap URLs (legacy rows, sitemap entries, pages
-        // enqueued before a trap rule existed) so the block is authoritative on the
-        // frontier, not only at discovery time (see the follow filter in build_batch).
         let mut frontier = storage::load_pending(&conn, &site.allowed_domain, config.only_new())?;
         frontier.retain(|it| !is_trap_url(&it.url));
         let seen = storage::all_urls(&conn, &site.allowed_domain)?;
@@ -175,14 +159,12 @@ pub fn run_with_client<C: HttpClient>(
         });
     }
 
-    // --- spawn the single writer/coordinator on its own OS thread ---
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<WriterMsg>();
     let coord = Coordinator::new(conn, run_id, inits, progress.try_clone());
     let coord_handle = std::thread::spawn(move || coord.run(rx));
 
     progress.header("Crawling");
 
-    // --- run per-host workers ---
     let force_full = config.force_full();
     rt.block_on(async {
         let mut handles = Vec::new();
@@ -206,13 +188,12 @@ pub fn run_with_client<C: HttpClient>(
             let _ = h.await;
         }
     });
-    drop(tx); // close the channel so the coordinator finishes
+    drop(tx);
 
     let counts = coord_handle
         .join()
         .map_err(|_| CrawlError::CoordinatorPanicked)??;
 
-    // Final per-site summary lines (mirrors run_fetch's post-loop summaries).
     for site in &config.sites {
         if let Some(c) = counts.get(&site.allowed_domain) {
             progress.summary(&site.allowed_domain, &c.pairs());
@@ -241,12 +222,12 @@ async fn worker<C: HttpClient>(
             })
             .is_err()
         {
-            break; // coordinator gone
+            break;
         }
         let item = match reply_rx.await {
             Ok(ClaimResult::Give(item)) => item,
             Ok(ClaimResult::Done) => break,
-            Err(_) => break, // coordinator dropped the reply — treat as done
+            Err(_) => break,
         };
 
         limiter.wait().await;
@@ -269,18 +250,6 @@ async fn worker<C: HttpClient>(
 }
 
 /// Rebuild a page's outbound edges from the copy of its body already on disk.
-///
-/// A 304 says the bytes are unchanged — and we still have them — yet the branch
-/// used to emit no edges at all. Once a page has stored validators every later
-/// crawl revalidates it as 304, so without this the link graph would freeze at
-/// whatever single full-body fetch last touched each page. Re-deriving here costs
-/// no network and keeps the graph current on every revalidation.
-///
-/// Keyed on the `.html` blob: a PDF's blob is stored as `.pdf` and simply will
-/// not be found, which is correct — PDFs emit no edges. A missing or unreadable
-/// blob yields no edges. The base is `item.url`; `FrontierItem` carries no
-/// `final_url`, so a redirected page's edges resolve against its request URL — a
-/// low-severity divergence, harmless because edges are written INSERT OR IGNORE.
 fn edges_from_cached_blob(
     item: &FrontierItem,
     site_name: &str,
@@ -311,10 +280,7 @@ fn edges_from_cached_blob(
         .collect()
 }
 
-/// Turn a fetch result into the page's complete write-batch. Mirrors the branch
-/// structure of the Python `process_url`. The content-addressed raw file (if the
-/// page changed) is written here, worker-side and lock-free, before the batch is
-/// handed to the writer.
+/// Turn a fetch result into the page's complete write-batch.
 fn build_batch(
     site_idx: usize,
     site_name: &str,
@@ -324,8 +290,6 @@ fn build_batch(
 ) -> PageBatch {
     let now = now_iso();
 
-    // 304 Not Modified: nothing downloaded — but the bytes are still on disk, so
-    // the outbound edges can be rebuilt for free (see edges_from_cached_blob).
     if result.not_modified() {
         let edges = edges_from_cached_blob(item, site_name, cache, &now);
         return PageBatch {
@@ -334,10 +298,6 @@ fn build_batch(
             now,
             mark: UrlMark::Checked {
                 http_status: 304,
-                // A 304 may rotate its validator: "unchanged, but revalidate with
-                // this next time". Prefer what it told us and fall back to what we
-                // already hold, or the next crawl re-sends a validator the server
-                // no longer matches and gets a full body for nothing.
                 etag: result.etag.clone().or_else(|| item.etag.clone()),
                 last_modified: result
                     .last_modified
@@ -363,13 +323,6 @@ fn build_batch(
         };
     }
 
-    // A 2xx that simply carried no body is not a failure. `ok()` requires a
-    // non-empty body, so an empty 200/204 failed it, was not a 404/410, and fell
-    // into the error branch below -- stored as work_state='error' with
-    // http_status=200 and error=NULL (a row that contradicts itself), re-tried on
-    // every recheck=all run and throwing away its fresh validators each time.
-    // Treat it as a transient no-change: an empty body is far likelier a blip than
-    // a page that genuinely became empty, so keep whatever content we already had.
     if result.error.is_none() && (200..300).contains(&result.status) && result.data.is_empty() {
         let had_content = item.content_sha256.is_some();
         return PageBatch {
@@ -394,8 +347,6 @@ fn build_batch(
                 sha256: item.content_sha256.clone(),
                 bytes: 0,
                 kind: None,
-                // With no prior content there is nothing to keep and nothing to
-                // extract, so say so rather than leave a silent present row.
                 error: if had_content {
                     None
                 } else {
@@ -410,7 +361,6 @@ fn build_batch(
         };
     }
 
-    // Non-2xx / transport error.
     if !result.ok() {
         let status = result.status as i64;
         if result.status == 404 || result.status == 410 {
@@ -459,14 +409,6 @@ fn build_batch(
         };
     }
 
-    // 2xx, but did we actually end up where we asked? reqwest follows redirects to
-    // any host, and the allowlist is otherwise only enforced on discovered links
-    // and at enqueue -- so without this an in-domain URL that 30x's to a foreign
-    // host would have that host's bytes hashed, cached and link-scanned, all
-    // attributed to our URL. Checked before classify/hash/cache so nothing foreign
-    // is ever stored. Marked done+unchanged (like the content-type skip below)
-    // rather than error, so it is not retried on every --full run; the page keeps
-    // whatever content it legitimately had before.
     if !in_domain(&result.final_url, site_name) {
         return PageBatch {
             site_idx,
@@ -496,7 +438,6 @@ fn build_batch(
         };
     }
 
-    // 2xx: route by content type.
     let kind = classify(&result.content_type, &result.final_url);
     if kind == "other" {
         return PageBatch {
@@ -527,7 +468,6 @@ fn build_batch(
         };
     }
 
-    // html | pdf
     let digest = storage::sha256_hex(&result.data);
     let (outcome, changed) = content_outcome(item.content_sha256.as_deref(), item.present, &digest);
 
@@ -564,12 +504,6 @@ fn build_batch(
                 raw_path: path.to_string_lossy().into_owned(),
                 bytes: result.data.len() as i64,
             }),
-            // The digest advance and the raw hand-off must be atomic. Marking the
-            // page done with the *new* digest while its bytes are missing would
-            // make every later crawl compare equal and report Unchanged, so the
-            // page would never be re-downloaded and Phase 2 would never see it —
-            // a silent, permanent hole. Fail loudly instead and leave
-            // content_sha256 alone so the row still describes what is on disk.
             Err(e) => {
                 return PageBatch {
                     site_idx,
@@ -578,12 +512,6 @@ fn build_batch(
                     mark: UrlMark::Error {
                         http_status: Some(200),
                     },
-                    // Keep the link discovery: the body *was* downloaded and
-                    // parsed, only the cache write failed. Dropping these would
-                    // amputate the entire subtree behind this page over one
-                    // transient disk hiccup, and this page's own error row is
-                    // already the signal that it needs re-fetching. Both writes
-                    // are INSERT OR IGNORE, so re-emitting them later is a no-op.
                     followable,
                     edges,
                     raw_doc: None,

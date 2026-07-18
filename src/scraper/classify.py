@@ -1,13 +1,4 @@
-"""Pure, deterministic classification of a document into Standort /
-Studienabteilung / Studiengang. No DB, no I/O, no network -- classify(url, site,
-doc) is a pure function of its inputs, so it is unit-testable from fixtures and
-safe to call from both the Phase-2 write path and the reclassify maintenance pass.
-
-Matching is over the URL (lowercased, '_'->'-' normalized) plus the document's
-title/description -- never the page body text, whose article teasers on news-list
-pages leak a faculty into it. Company/enumeration directory pages (the dual-partner
-listing) are excluded from satellite and program detection: their slugs are
-saturated with city and program names that are not about a campus or a program."""
+"""Pure, deterministic classification of a document into Standort / Studienabteilung / Studiengang."""
 
 from __future__ import annotations
 
@@ -23,15 +14,12 @@ _SATELLITE_SLUGS = frozenset(
 
 
 def _norm_url(url: str) -> str:
-    """Lowercase and fold '_' to '-' so underscore paths (Angewandte_Gesundheits...)
-    match the hyphenated slugs the taxonomy is written in."""
+    """Lowercase and fold '_' to '-' so underscore paths match the hyphenated taxonomy slugs."""
     return url.lower().replace("_", "-")
 
 
 def _is_enumeration(low_url: str) -> bool:
-    """True for dual-partner company-directory / enumeration listing URLs, which are
-    never a campus or study-program page even though their slugs are saturated with
-    city and program names (e.g. .../unternehmen/zf-friedrichshafen-ag-.../)."""
+    """True for dual-partner company-directory or enumeration listing URLs, which are never a campus or study-program page."""
     return any(marker in low_url for marker in taxonomy.ENUMERATION_URL_MARKERS)
 
 
@@ -40,18 +28,12 @@ def _path_segments(low_url: str) -> list[str]:
 
 
 def _segment_matches(segments: list[str], slug: str) -> bool:
-    """A slug matches only as a whole path segment (segment == slug) or as the head
-    of one (segment startswith slug + '-'). This rejects coincidental substrings
-    ('10-informatiktag', an 'xyz-informatik-gmbh' company) that a bare `in` test or
-    a leading-'/' anchor would still catch, while matching '/informatik/' and
-    '/informatik-technischer-vertrieb/'."""
+    """True when the slug matches a whole path segment or the head of one (segment == slug, or segment starts with slug + '-')."""
     return any(seg == slug or seg.startswith(slug + "-") for seg in segments)
 
 
 def _base_from_host(url: str) -> str | None:
-    """Longest-suffix match of the URL host against the known allowed_domains, so
-    a subdomain (events.mannheim.dhbw.de) resolves to its campus even when the
-    row's `site` was not the exact allowed_domain."""
+    """Longest-suffix match of the URL host against the known allowed_domains, so a subdomain resolves to its campus."""
     host = (urlsplit(url).hostname or "").lower()
     best: tuple[str, str] | None = None
     for domain, slug in taxonomy.SITE_TO_STANDORT.items():
@@ -67,7 +49,7 @@ def classify_standort(url: str, site: str) -> str | None:
         return None
     low = _norm_url(url)
     if _is_enumeration(low):
-        return base  # company/enumeration stub: keep the base campus, never a satellite
+        return base
     for sat_slug, patterns, parent in taxonomy.SATELLITE_RULES:
         if parent == base and any(p in low for p in patterns):
             return sat_slug
@@ -84,9 +66,7 @@ class Classification:
 
 
 def classify_program(url: str) -> tuple[str, str, str] | None:
-    """First seed-catalog entry whose slug matches a URL path segment. URL-only and
-    segment-anchored for precision; returns (slug, display_name, department_slug),
-    or None when nothing matches or the page is a company/enumeration stub."""
+    """First seed-catalog entry whose slug matches a URL path segment, else None."""
     low = _norm_url(url)
     if _is_enumeration(low):
         return None
@@ -98,10 +78,7 @@ def classify_program(url: str) -> tuple[str, str, str] | None:
 
 
 def _department_with_source(url: str, title: str, description: str) -> tuple[str, str]:
-    """URL rules first (high precision) over the normalized URL; else content
-    keywords over title+description ONLY (never body text -- article teasers on
-    news-list pages leak a faculty) with word-boundary matching; a tie -> 'unknown'.
-    Returns (department_slug, source) where source is 'url' | 'keyword' | 'default'."""
+    """Classify the department by URL rules first, else keyword matching over title+description, returning (department_slug, source)."""
     low_url = _norm_url(url)
     for substr, dept in taxonomy.DEPARTMENT_URL_RULES:
         if substr in low_url:
@@ -118,8 +95,7 @@ def _department_with_source(url: str, title: str, description: str) -> tuple[str
 
 
 def classify_department(url: str, title: str, description: str) -> str:
-    """URL rules first (high precision); else content keywords over title+description
-    with word-boundary matching; a tie -> 'unknown'."""
+    """Classify the department by URL rules first, else keyword matching over title+description; a tie yields 'unknown'."""
     return _department_with_source(url, title, description)[0]
 
 

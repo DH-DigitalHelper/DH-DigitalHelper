@@ -1,17 +1,4 @@
 //! The single writer/coordinator.
-//!
-//! One dedicated OS thread owns the sole write `Connection` AND the in-memory
-//! frontier, so the hot path is lock-free and there is never SQLite write
-//! contention. Async fetch workers talk to it over an unbounded channel:
-//!   * `Claim` — pop the next URL for a site (pure in-memory; parked if the
-//!     frontier is momentarily empty but work may still arrive).
-//!   * `Complete` — a finished page's write-batch; applied to SQLite, then the
-//!     newly discovered links are merged into the frontier *after* commit so
-//!     memory and disk never diverge.
-//!
-//! Termination is decided here, the single arbiter that sees both the frontier
-//! and the in-flight count: a site is done when its frontier is empty and no
-//! page is in flight (or its `max_pages` budget is spent).
 
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet, VecDeque};
@@ -38,8 +25,6 @@ pub enum UrlMark {
         changed: bool,
         present: bool,
     },
-    /// The page is gone. Carries the status that said so (404 vs 410), since the
-    /// two mean different things and the queue row is the durable record.
     Removed {
         http_status: i64,
     },
@@ -103,7 +88,7 @@ pub enum ClaimResult {
     Done,
 }
 
-/// Per-site running counts. Field order matches the Python counts dict.
+/// Per-site running counts.
 #[derive(Debug, Clone, Default)]
 pub struct Counts {
     pub fetched: i64,
@@ -141,8 +126,7 @@ impl Counts {
     }
 }
 
-/// Frontier heap element ordered so `BinaryHeap::pop` yields the smallest
-/// `(depth, url)` — i.e. breadth-first, matching the old `ORDER BY depth, url`.
+/// Frontier heap element ordered so `BinaryHeap::pop` yields the smallest `(depth, url)` — i.e. breadth-first, matching the old `ORDER BY depth, url`.
 struct HeapItem(FrontierItem);
 
 impl PartialEq for HeapItem {
@@ -153,8 +137,6 @@ impl PartialEq for HeapItem {
 impl Eq for HeapItem {}
 impl Ord for HeapItem {
     fn cmp(&self, other: &Self) -> Ordering {
-        // Reversed: a smaller (depth, url) must compare as "greater" so the
-        // max-heap surfaces it first.
         (other.0.depth, &other.0.url).cmp(&(self.0.depth, &self.0.url))
     }
 }
@@ -197,11 +179,6 @@ impl SiteState {
         if self.budget_spent() {
             return Some(ClaimResult::Done);
         }
-        // Pop until a URL whose host is under its per-host budget. Over-budget URLs
-        // are dropped permanently (never re-pushed); they stay `pending` in the DB,
-        // which is harmless and idempotent — a later run with a higher cap can take
-        // them. This is the defense-in-depth backstop against an unknown runaway
-        // host (a known one, e.g. buchen.*, is denylisted outright in links.rs).
         while let Some(item) = self.heap.pop() {
             if self.max_pages_per_host > 0 {
                 let host = host_of(&item.0.url).unwrap_or_default();
@@ -218,17 +195,10 @@ impl SiteState {
         if self.in_flight == 0 {
             return Some(ClaimResult::Done);
         }
-        None // frontier momentarily empty but work is in flight — park
+        None
     }
 
-    /// Hand `res` to a claimant, undoing `try_serve`'s bookkeeping if the claimant
-    /// is already gone.
-    ///
-    /// `try_serve` pops the URL and commits `in_flight`/`given`/`host_given` before
-    /// we can know whether the reply lands. A worker that died in between would
-    /// otherwise take the URL with it AND leave `in_flight` incremented forever --
-    /// and since termination is decided on `in_flight == 0`, that leak parks every
-    /// remaining worker for good. Put all of it back instead.
+    /// Hand `res` to a claimant, undoing `try_serve`'s bookkeeping if the claimant is already gone.
     fn send_or_return(&mut self, reply: oneshot::Sender<ClaimResult>, res: ClaimResult) {
         let Err(returned) = reply.send(res) else {
             return;
@@ -280,9 +250,6 @@ pub struct Coordinator {
     sites: Vec<SiteState>,
     progress: ProgressSink,
     last_paint: Option<std::time::Instant>,
-    /// URL -> `urls.id` cache, shared across every batch of this run so repeated
-    /// endpoints don't re-hit the DB. Lives here (not in `insert_links`) precisely so
-    /// it survives between batches.
     url_ids: storage::UrlInterner,
 }
 
@@ -328,7 +295,6 @@ impl Coordinator {
     }
 
     /// Run the coordinator loop until the channel closes (all workers gone).
-    /// Returns per-site counts keyed by site name.
     pub fn run(
         mut self,
         mut rx: UnboundedReceiver<WriterMsg>,
@@ -339,7 +305,6 @@ impl Coordinator {
                 WriterMsg::Complete(batch) => {
                     let mut completes: Vec<Box<PageBatch>> = vec![batch];
                     let mut deferred: Option<(usize, oneshot::Sender<ClaimResult>)> = None;
-                    // Opportunistically batch further completes into one txn.
                     while completes.len() < BATCH_MAX {
                         match rx.try_recv() {
                             Ok(WriterMsg::Complete(b)) => completes.push(b),
@@ -358,8 +323,6 @@ impl Coordinator {
             }
         }
         storage::checkpoint_truncate(&self.conn);
-        // Never truncate silently: if a host hit its per-host budget, say so and by
-        // how much, so a capped host is always visible in the run output.
         for s in &self.sites {
             if s.host_over_budget_dropped > 0 {
                 self.progress.summary(
@@ -382,29 +345,12 @@ impl Coordinator {
     fn handle_claim(&mut self, site_idx: usize, reply: oneshot::Sender<ClaimResult>) {
         let site = &mut self.sites[site_idx];
         match site.try_serve() {
-            // Same lost-claim hazard as the parked-waiter path: the worker may be
-            // gone by the time we answer, so undo rather than leak.
             Some(res) => site.send_or_return(reply, res),
             None => site.waiters.push_back(reply),
         }
     }
 
     /// Apply up to `BATCH_MAX` finished pages in ONE transaction.
-    ///
-    /// A write error here aborts the whole batch and the whole run, and that is
-    /// deliberate. The realistic faults are `SQLITE_FULL`/`SQLITE_IOERR`, on which
-    /// SQLite invalidates the entire transaction anyway -- per-page SAVEPOINTs
-    /// could not rescue the siblings, and continuing to write on a full or failing
-    /// disk is not something to paper over. Transient `SQLITE_BUSY` is already
-    /// absorbed by the 15s `busy_timeout` set in `storage::connect`, and there is
-    /// only one writer, so contention needs another process to even arise.
-    /// Per-page commits would fix nothing here and would cost both throughput and
-    /// the post-commit frontier-consistency invariant below.
-    // The `Box` is deliberate and not redundant indirection: these values arrive
-    // already boxed as `WriterMsg::Complete(Box<PageBatch>)` — which keeps the
-    // channel message small — and are pushed straight into this Vec. Taking
-    // `Vec<PageBatch>` as clippy suggests would force a large move out of every
-    // box on the writer's hot path for no benefit.
     #[allow(clippy::vec_box)]
     fn apply_completes(&mut self, completes: Vec<Box<PageBatch>>) -> rusqlite::Result<()> {
         let tx = self
@@ -412,8 +358,6 @@ impl Coordinator {
             .transaction_with_behavior(TransactionBehavior::Immediate)?;
         {
             let c: &Connection = &tx;
-            // `&mut self.url_ids` is a disjoint field borrow from `self.conn` (already
-            // moved into `tx`), same as the `self.sites[..]` reads below it.
             let interner = &mut self.url_ids;
             for b in &completes {
                 let site_name = self.sites[b.site_idx].name.clone();
@@ -422,7 +366,6 @@ impl Coordinator {
         }
         tx.commit()?;
 
-        // Post-commit, in-memory bookkeeping (frontier stays consistent with disk).
         let mut touched: Vec<usize> = Vec::new();
         for b in &completes {
             let idx = b.site_idx;
@@ -483,8 +426,7 @@ impl Coordinator {
     }
 }
 
-/// Apply one page's writes within an open transaction `c`. `interner` is the run's
-/// shared URL->id cache, used when writing edges.
+/// Apply one page's writes within an open transaction `c`.
 fn apply_one(
     c: &Connection,
     interner: &mut storage::UrlInterner,
@@ -596,15 +538,12 @@ mod tests {
         }
     }
 
-    /// try_serve commits the bookkeeping (in_flight/given/host_given) and pops the
-    /// URL *before* the reply is sent, so a worker that died in between takes the
-    /// URL with it and leaves in_flight incremented forever. Termination is decided
-    /// on in_flight==0, so that leak parks every remaining worker for good.
+    /// try_serve commits the bookkeeping and pops the URL before the reply is sent, so a worker that died in between takes the URL with it and leaves in_flight incremented forever.
     #[test]
     fn a_lost_claim_is_fully_returned_to_the_frontier() {
         let mut site = site_with_one_url("https://x.de/a");
         let (tx, rx) = oneshot::channel();
-        drop(rx); // the worker is gone before we can answer it
+        drop(rx);
 
         let res = site.try_serve().expect("one URL is available");
         assert_eq!(

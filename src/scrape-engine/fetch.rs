@@ -1,22 +1,11 @@
 //! Polite HTTP with conditional GET and content-type routing.
-//!
-//! Port of the Python `fetch.py`. Failures never panic — they come back on
-//! [`FetchResult::error`]. The [`HttpClient`] trait isolates the network so the
-//! orchestrator and sitemap discovery are generic over it; production uses
-//! [`ReqwestClient`], tests inject a deterministic in-memory client.
-//!
-//! Note on URL sanitising: the Python `_sanitize_url` re-quoted spaces/control
-//! chars left by `urljoin`. Here discovered URLs already come from the `url`
-//! crate (which percent-encodes during parse/join) and reqwest is handed a
-//! parsed `Url`, so a separate sanitise pass is unnecessary.
 
 use std::future::Future;
 use std::time::Duration;
 
 pub const DEFAULT_TIMEOUT_SECS: u64 = 30;
 
-/// A conditional-GET request: stored validators re-sent as If-None-Match /
-/// If-Modified-Since so a `304 Not Modified` ends the work with no body.
+/// A conditional-GET request: stored validators re-sent as If-None-Match / If-Modified-Since so a `304 Not Modified` ends the work with no body.
 #[derive(Debug, Clone)]
 pub struct FetchRequest {
     pub url: String,
@@ -34,7 +23,7 @@ impl FetchRequest {
     }
 }
 
-/// Outcome of one HTTP fetch. Mirrors the Python `FetchResult` dataclass.
+/// Outcome of one HTTP fetch.
 #[derive(Debug, Clone)]
 pub struct FetchResult {
     pub url: String,
@@ -71,8 +60,7 @@ impl FetchResult {
     }
 }
 
-/// Network abstraction. Generic (not `dyn`) so the returned futures stay
-/// unboxed; `ReqwestClient` is `Clone` (cheap Arc) for spawning into tasks.
+/// Network abstraction.
 pub trait HttpClient: Clone + Send + Sync + 'static {
     /// Conditional GET for a crawl target.
     fn fetch(
@@ -81,8 +69,7 @@ pub trait HttpClient: Clone + Send + Sync + 'static {
         user_agent: String,
     ) -> impl Future<Output = FetchResult> + Send;
 
-    /// Unconditional GET returning the body iff the response was ok (used for
-    /// sitemap fetches, which carry no stored validators).
+    /// Unconditional GET returning the body iff the response was ok (used for sitemap fetches, which carry no stored validators).
     fn fetch_bytes(
         &self,
         url: String,
@@ -90,7 +77,7 @@ pub trait HttpClient: Clone + Send + Sync + 'static {
     ) -> impl Future<Output = Option<Vec<u8>>> + Send;
 }
 
-/// reqwest-backed [`HttpClient`]. One shared client = per-host keep-alive pool.
+/// reqwest-backed HttpClient: one shared client is a per-host keep-alive pool.
 #[derive(Clone)]
 pub struct ReqwestClient {
     client: reqwest::Client,
@@ -100,7 +87,6 @@ impl ReqwestClient {
     pub fn new() -> reqwest::Result<Self> {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(DEFAULT_TIMEOUT_SECS))
-            // Follow redirects and expose the final URL (mirrors resp.geturl()).
             .redirect(reqwest::redirect::Policy::limited(10))
             .build()?;
         Ok(Self { client })
@@ -141,17 +127,11 @@ impl HttpClient for ReqwestClient {
                 status: 304,
                 content_type: String::new(),
                 data: Vec::new(),
-                // Carry the 304's own validators through: a server may answer
-                // "unchanged" while rotating its ETag, and dropping the new one
-                // here would make the next crawl revalidate with a stale value
-                // the server can no longer match -- costing a full body.
                 etag,
                 last_modified,
                 error: None,
             };
         }
-        // Read the body regardless of status; a non-2xx still yields an error
-        // string so `removed`/`error` outcomes carry a message in crawl_log.
         let error = if (200..300).contains(&status) {
             None
         } else {
@@ -198,8 +178,7 @@ fn header_string(
         .map(|s| s.to_string())
 }
 
-/// The bare media type without parameters, lowercased (mirrors
-/// `headers.get_content_type()`), e.g. "text/html; charset=utf-8" -> "text/html".
+/// The bare media type without parameters, lowercased, e.g. "text/html; charset=utf-8" -> "text/html".
 fn mime_essence(ct: &str) -> String {
     ct.split(';')
         .next()
@@ -215,7 +194,6 @@ const BINARY_EXT: &[&str] = &[
 ];
 
 /// Route a response to an extractor family: "pdf" | "html" | "other".
-/// Verbatim port of Python `classify`.
 pub fn classify(content_type: &str, url: &str) -> &'static str {
     let ct = content_type.to_ascii_lowercase();
     let path = url::Url::parse(url)

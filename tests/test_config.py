@@ -113,13 +113,12 @@ raw_dir = "raw"
 
 
 def test_load_config_retry_transient_errors_defaults_true(tmp_path):
-    cfg = load_config(_write(tmp_path, "all"))  # _write emits no retry_transient_errors
+    cfg = load_config(_write(tmp_path, "all"))
     assert cfg.crawl.retry_transient_errors is True
 
 
 def _write_raw(tmp_path, *, crawl="", extract="", dedup=""):
-    """Write a minimal config with extra lines spliced into a section, so a test can
-    state just the one key it is about."""
+    """Write a minimal config with extra lines spliced into a section, so a test can state just the one key it is about."""
     (tmp_path / "config.toml").write_text(
         f"""
 [[sites]]
@@ -144,7 +143,7 @@ raw_dir = "raw"
 
 def test_load_config_dedup_section_is_optional(tmp_path):
     """Every [dedup] key defaults, so a config predating the section stays valid."""
-    cfg = load_config(_write(tmp_path, "all"))  # _write emits no [dedup]
+    cfg = load_config(_write(tmp_path, "all"))
     assert cfg.dedup == DedupConfig(batch_size=500, vacuum=True)
 
 
@@ -172,8 +171,7 @@ def test_load_config_parses_retry_transient_errors_false(tmp_path):
     ],
 )
 def test_load_config_rejects_out_of_range(tmp_path, section, body, key):
-    """The message must name the offending key -- the whole point of validating here
-    rather than letting the engine silently floor it."""
+    """The message must name the offending key -- the whole point of validating here rather than letting the engine silently floor it."""
     with pytest.raises(ValueError, match=re.escape(key)):
         load_config(_write_raw(tmp_path, **{section: body}))
 
@@ -181,15 +179,14 @@ def test_load_config_rejects_out_of_range(tmp_path, section, body, key):
 @pytest.mark.parametrize(
     "section,body",
     [
-        ("crawl", "max_pages = 0"),  # 0 = unlimited, legal
-        ("crawl", "max_pages_per_host = 0"),  # 0 = unlimited, legal
-        ("crawl", "request_delay_seconds = 0.0"),  # no delay, legal
-        ("crawl", "workers_per_host = 1"),  # the floor itself
-        ("extract", "min_words = 0"),  # no word gate, legal
-        ("dedup", "batch_size = 1"),  # the floor itself
+        ("crawl", "max_pages = 0"),
+        ("crawl", "max_pages_per_host = 0"),
+        ("crawl", "request_delay_seconds = 0.0"),
+        ("crawl", "workers_per_host = 1"),
+        ("extract", "min_words = 0"),
+        ("dedup", "batch_size = 1"),
     ],
 )
 def test_load_config_accepts_boundary_values(tmp_path, section, body):
-    """0 is meaningful for the budgets (= unlimited), so the floors must not be 1.
-    The shipped config.toml sets max_pages = 0."""
+    """0 is meaningful for the budgets (= unlimited), so the floors must not be 1."""
     load_config(_write_raw(tmp_path, **{section: body}))

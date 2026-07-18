@@ -1,8 +1,4 @@
 //! Best-effort sitemap discovery: (url, lastmod) pairs, in-domain only.
-//!
-//! Port of the Python `sitemap.py` (regex-based, tolerant). Follows nested
-//! sitemap-index levels bounded by a `visited` set (cycle-safe), keeping only
-//! in-domain locs and in-domain child sitemaps.
 
 use std::collections::{HashMap, HashSet};
 use std::io::Read;
@@ -42,9 +38,7 @@ pub fn parse(xml: &str) -> (Vec<(String, Option<String>)>, Vec<String>) {
     (url_pairs, subs)
 }
 
-/// Discover in-domain URLs from a site's sitemap, following in-domain nested
-/// sitemap-index levels. Returns `(url, lastmod)` pairs. Never errors: an
-/// unreachable/malformed sitemap degrades to whatever was found so far.
+/// Discover in-domain URLs from a site's sitemap, following in-domain nested sitemap-index levels.
 pub async fn discover<C: HttpClient>(
     seed_url: &str,
     allowed_domain: &str,
@@ -63,10 +57,6 @@ pub async fn discover<C: HttpClient>(
     };
 
     let mut to_visit: Vec<String> = vec![format!("{homepage}/sitemap.xml")];
-    // Probing only the conventional location misses any site that publishes its
-    // index elsewhere and advertises it via robots.txt -- the whole seed, silently.
-    // This reads robots.txt for DISCOVERY only: crawl policy still deliberately
-    // ignores it (see the README), we are just taking the pointer it offers.
     if let Some(bytes) = client
         .fetch_bytes(format!("{homepage}/robots.txt"), user_agent.to_string())
         .await
@@ -78,8 +68,6 @@ pub async fn discover<C: HttpClient>(
         }
     }
     let mut visited: HashSet<String> = HashSet::new();
-    // Insertion-ordered accumulation of found urls (last lastmod wins, as in the
-    // Python dict).
     let mut order: Vec<String> = Vec::new();
     let mut found: HashMap<String, Option<String>> = HashMap::new();
 
@@ -119,16 +107,7 @@ pub async fn discover<C: HttpClient>(
         .collect()
 }
 
-/// Decode a fetched sitemap body to XML text, inflating it first if it is a gzip
-/// member.
-///
-/// `.xml.gz` children are standard on large sites. reqwest's `gzip` feature only
-/// strips a `Content-Encoding: gzip` transfer wrapper -- it does nothing for a
-/// body whose *payload* is gzip (served as application/gzip). Those bytes used to
-/// reach `from_utf8_lossy` raw, decode to replacement-char garbage that the
-/// `<loc>` regex matched nothing in, and every URL in that child vanished from
-/// seeding with no error at all. A corrupt member degrades to best-effort, like
-/// everything else here.
+/// Decode a fetched sitemap body to XML text, inflating it first if it is a gzip member.
 fn decode_xml(bytes: &[u8]) -> String {
     if bytes.starts_with(&[0x1f, 0x8b]) {
         let mut out = String::new();
@@ -142,8 +121,7 @@ fn decode_xml(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).into_owned()
 }
 
-/// The targets of robots.txt `Sitemap:` lines. The directive is case-insensitive
-/// and position-independent (it is not tied to any User-agent group).
+/// The targets of robots.txt `Sitemap:` lines.
 fn robots_sitemaps(text: &str) -> Vec<String> {
     text.lines()
         .filter_map(|line| {
@@ -157,9 +135,7 @@ fn robots_sitemaps(text: &str) -> Vec<String> {
         .collect()
 }
 
-/// Unescape the XML entities that appear in `<loc>`/`<lastmod>` text. Covers the
-/// named entities plus numeric character references, matching Python's
-/// `html.unescape` for the cases sitemaps use in practice.
+/// Unescape the XML entities that appear in `<loc>`/`<lastmod>` text.
 fn unescape(s: &str) -> String {
     if !s.contains('&') {
         return s.to_string();

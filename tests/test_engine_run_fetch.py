@@ -1,13 +1,4 @@
-"""End-to-end test of the Rust Phase-1 engine driven through the Python adapter.
-
-Serves a tiny fixture site from a local ``ThreadingHTTPServer``, runs
-``crawl.run_fetch`` against it (real HTTP via reqwest inside the extension), and
-asserts the shared SQLite DB + content-addressed raw cache — the cross-language
-contract Phase 2 relies on.
-
-Skipped automatically if the ``_engine`` extension has not been built yet
-(``maturin develop``).
-"""
+"""End-to-end test of the Rust Phase-1 engine driven through the Python adapter."""
 
 from __future__ import annotations
 
@@ -62,7 +53,7 @@ PAGES = {
 
 def _make_handler(host: str):
     class Handler(BaseHTTPRequestHandler):
-        def log_message(self, *args):  # silence stderr noise
+        def log_message(self, *args):
             pass
 
         def do_GET(self):
@@ -123,7 +114,7 @@ def test_run_fetch_crawls_and_writes_shared_db(tmp_path, server):
     counts = crawl.run_fetch(config, "run-it")
 
     c = counts["127.0.0.1"]
-    assert c["fetched"] == 5, counts  # startseite, a, b, c, from-sitemap
+    assert c["fetched"] == 5, counts
     assert c["new"] == 5
     assert c["error"] == 0
 
@@ -135,7 +126,6 @@ def test_run_fetch_crawls_and_writes_shared_db(tmp_path, server):
     ).fetchone()["c"]
     assert done == 5
 
-    # Trap + external are recorded as edges but never enqueued.
     for absent in (
         f"http://{host}/calendar/view.php?view=month&time=1",
         "http://example.invalid/x",
@@ -169,14 +159,7 @@ def test_new_only_rerun_fetches_nothing(tmp_path, server):
 
 
 def test_force_full_rerun_refetches_everything(tmp_path, server):
-    """The "force-full" recheck value has to survive the whole hop: config.py's enum
-    -> _engine_config's dict -> RunConfig extraction -> rechecks_all(). The opposite
-    of new-only above: every already-present URL comes back.
-
-    That it also *drops the validators* is asserted in Rust
-    (tests/scrape-engine/orchestration.rs) -- the fixture server here serves no ETag,
-    so nothing on this side could tell force-full from "all".
-    """
+    """Every already-present URL comes back on a force-full rerun, the opposite of new-only."""
     host = server
     crawl.run_fetch(_config(tmp_path, host), "run-1")
     counts = crawl.run_fetch(_config(tmp_path, host, recheck="force-full"), "run-2")
