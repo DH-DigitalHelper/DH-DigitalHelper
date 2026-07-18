@@ -32,6 +32,9 @@ data/*.sqlite3-shm
 # Agent/tooling scratch: SDD task briefs, reports, and review diffs.
 .superpowers/
 
+# Claude Code local project config (settings, etc.) — kept locally, not committed.
+.claude/
+
 # graphify knowledge graph + cache: regenerated locally via `graphify update .`.
 graphify-out/
 
