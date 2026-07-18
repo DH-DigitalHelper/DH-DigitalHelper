@@ -69,7 +69,7 @@ max_pages = 0                              # per-site page budget (0 = unlimited
 # straight past it and gets cut off. Known traps (buchen.*, moodle.*, ...) are
 # denylisted outright in src/scrape-engine/links.rs; this only catches unknown ones.
 max_pages_per_host = 50000
-request_delay_seconds = 5.0
+request_delay_seconds = 1.0
 respect_robots = false
 workers_per_host = 6
 # What a re-run re-checks:
