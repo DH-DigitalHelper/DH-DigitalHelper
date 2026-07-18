@@ -1,0 +1,873 @@
+<!doctype html>
+<title>DHBW corpus report</title>
+<style>
+:root {
+  --bg:#f6f7f9; --card:#fff; --ink:#1a1d21; --muted:#6b7280; --line:#e5e7eb;
+  --accent:#2563eb; --crit:#dc2626; --warn:#d97706; --info:#2563eb; --ok:#059669;
+  --bar:#3b82f6; --hot:#dc2626; --warm:#d97706;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg:#0d1117; --card:#161b22; --ink:#e6edf3; --muted:#8b949e; --line:#30363d;
+          --accent:#58a6ff; --bar:#388bfd; }
+}
+:root[data-theme="dark"] { --bg:#0d1117; --card:#161b22; --ink:#e6edf3; --muted:#8b949e;
+  --line:#30363d; --accent:#58a6ff; --bar:#388bfd; }
+:root[data-theme="light"] { --bg:#f6f7f9; --card:#fff; --ink:#1a1d21; --muted:#6b7280;
+  --line:#e5e7eb; --accent:#2563eb; --bar:#3b82f6; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink);
+  font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+.wrap { max-width:1080px; margin:0 auto; padding:28px 20px 80px; }
+header { display:flex; flex-wrap:wrap; align-items:baseline; gap:12px; justify-content:space-between; }
+h1 { font-size:22px; margin:0; }
+h2 { font-size:15px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted);
+  margin:34px 0 10px; border-bottom:1px solid var(--line); padding-bottom:6px; }
+.sub { color:var(--muted); font-size:12.5px; }
+.sub code { background:var(--card); border:1px solid var(--line); border-radius:5px; padding:1px 6px; }
+.kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-top:18px; }
+.kpi { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; }
+.kpi-val { font-size:24px; font-weight:650; letter-spacing:-.02em; }
+.kpi-label { color:var(--muted); font-size:12px; margin-top:2px; }
+.kpi-sub { color:var(--muted); font-size:11px; margin-top:5px; }
+.finding { display:flex; gap:12px; background:var(--card); border:1px solid var(--line);
+  border-left-width:4px; border-radius:8px; padding:12px 14px; margin-bottom:8px; }
+.finding.crit { border-left-color:var(--crit); }
+.finding.warn { border-left-color:var(--warn); }
+.finding.info { border-left-color:var(--info); }
+.finding.ok { border-left-color:var(--ok); }
+.f-title { font-weight:600; }
+.f-detail { color:var(--muted); font-size:13px; margin-top:2px; }
+.badge { font-size:10px; font-weight:700; padding:2px 7px; border-radius:20px; height:fit-content;
+  color:#fff; white-space:nowrap; }
+.badge.crit { background:var(--crit); } .badge.warn { background:var(--warn); }
+.badge.info { background:var(--info); } .badge.ok { background:var(--ok); }
+.grid2 { display:grid; grid-template-columns:1fr 1fr; gap:22px; }
+@media (max-width:720px) { .grid2 { grid-template-columns:1fr; } }
+table { width:100%; border-collapse:collapse; background:var(--card);
+  border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+th,td { text-align:left; padding:7px 10px; border-bottom:1px solid var(--line); }
+th { font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); font-weight:600; }
+tr:last-child td { border-bottom:none; }
+td.num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+td.mono, .mono { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12.5px; }
+.small { font-size:11px; color:var(--muted); }
+.hot { color:var(--hot); font-weight:600; } .warm { color:var(--warm); }
+.minibar { height:4px; background:var(--line); border-radius:3px; margin-top:4px; }
+.minibar.wide { height:9px; margin:0; }
+.minibar > span { display:block; height:100%; background:var(--bar); border-radius:3px; }
+.barcell { width:45%; }
+.warnbox { background:color-mix(in srgb,var(--warn) 12%,transparent); border:1px solid var(--warn);
+  border-radius:8px; padding:10px 12px; font-size:13px; }
+.treelink { color:var(--accent); font-weight:600; text-decoration:none; }
+.treelink:hover { text-decoration:underline; }
+.toggle { cursor:pointer; background:var(--card); border:1px solid var(--line); color:var(--ink);
+  border-radius:6px; padding:5px 10px; font-size:12px; }
+footer { margin-top:40px; color:var(--muted); font-size:12px; border-top:1px solid var(--line); padding-top:14px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>DHBW corpus — scrape &amp; extract report</h1>
+      <div class="sub">Generated 2026-07-17 22:04:50 UTC · DB 3.8 GB
+        (modified 2026-07-17 20:53:38) · gate <code>min_words=50</code></div>
+    </div>
+    <button class="toggle" onclick="var r=document.documentElement;r.dataset.theme=r.dataset.theme==='dark'?'light':'dark'">◐ theme</button>
+  </header>
+
+  <div class="sub" style="margin-top:8px">To refresh: re-run <code>uv run dhbw-scraper report</code> and reload this page.</div>
+
+  <div class="kpis"><div class="kpi"><div class="kpi-val">46,423</div><div class="kpi-label">Documents</div><div class="kpi-sub">present, deduplicated</div></div><div class="kpi"><div class="kpi-val">35.8 M</div><div class="kpi-label">Total words</div><div class="kpi-sub">HTML 10.3M · PDF 25.6M</div></div><div class="kpi"><div class="kpi-val">100,905</div><div class="kpi-label">Raw blobs</div><div class="kpi-sub">28.0 GB cached</div></div><div class="kpi"><div class="kpi-val">97.5%</div><div class="kpi-label">Extraction pass</div><div class="kpi-sub">1,933 rejected · 20 errored</div></div><div class="kpi"><div class="kpi-val">114,845</div><div class="kpi-label">URLs crawled</div><div class="kpi-sub">107,264 done · 6,186 error</div></div><div class="kpi"><div class="kpi-val">50%</div><div class="kpi-label">Text-dedup</div><div class="kpi-sub">92,144 candidates → 46,423 unique</div></div></div>
+
+  <section><h2>Findings</h2><div class="finding crit"><span class="badge crit">CRITICAL</span><div><div class="f-title">villingen_schwenningen is under-covered</div><div class="f-detail">121 documents vs a per-site median of 3,406; queue shows 414 errors (66% of fetch attempts).</div></div></div><div class="finding warn"><span class="badge warn">WARNING</span><div><div class="f-title">8,366 documents below min_words=50</div><div class="f-detail">18% of the corpus is thinner than the current quality gate (min 10 words) -- legacy rows from an extract pass with a looser threshold. A full re-extract would normalize them.</div></div></div><div class="finding info"><span class="badge info">INFO</span><div><div class="f-title">stuttgart has elevated fetch errors</div><div class="f-detail">4,006 errored URLs (18% of attempts) -- mostly connection refused/timeout, worth one gentle retry.</div></div></div><div class="finding info"><span class="badge info">INFO</span><div><div class="f-title">karlsruhe has elevated fetch errors</div><div class="f-detail">1,660 errored URLs (22% of attempts) -- mostly connection refused/timeout, worth one gentle retry.</div></div></div></section>
+
+  <section><h2>Per-site coverage</h2>
+    <table><thead><tr><th>Site</th><th class="num">Documents</th><th class="num">Avg words</th>
+      <th class="num">Fetched</th><th class="num">Errors</th><th class="num">Error rate</th></tr></thead>
+      <tbody><tr><td class="mono">heidenheim</td><td class="num">3,709<div class="minibar"><span style="width:30.7%"></span></div></td><td class="num">493</td><td class="num">6,510</td><td class="num ">5</td><td class="num ">0.1%</td></tr><tr><td class="mono">dhbw</td><td class="num">3,406<div class="minibar"><span style="width:28.2%"></span></div></td><td class="num">3,948</td><td class="num">5,559</td><td class="num ">0</td><td class="num ">0.0%</td></tr><tr><td class="mono">mannheim</td><td class="num">9,124<div class="minibar"><span style="width:75.5%"></span></div></td><td class="num">449</td><td class="num">18,333</td><td class="num ">5</td><td class="num ">0.0%</td></tr><tr><td class="mono">stuttgart</td><td class="num">12,087<div class="minibar"><span style="width:100.0%"></span></div></td><td class="num">629</td><td class="num">18,750</td><td class="num hot">4,006</td><td class="num hot">17.6%</td></tr><tr><td class="mono">karlsruhe</td><td class="num">2,599<div class="minibar"><span style="width:21.5%"></span></div></td><td class="num">483</td><td class="num">6,029</td><td class="num hot">1,660</td><td class="num hot">21.6%</td></tr><tr><td class="mono">mosbach</td><td class="num">5,414<div class="minibar"><span style="width:44.8%"></span></div></td><td class="num">473</td><td class="num">24,172</td><td class="num ">45</td><td class="num ">0.2%</td></tr><tr><td class="mono">heilbronn</td><td class="num">2,372<div class="minibar"><span style="width:19.6%"></span></div></td><td class="num">351</td><td class="num">10,385</td><td class="num ">23</td><td class="num ">0.2%</td></tr><tr><td class="mono">ravensburg</td><td class="num">4,328<div class="minibar"><span style="width:35.8%"></span></div></td><td class="num">553</td><td class="num">9,144</td><td class="num ">6</td><td class="num ">0.1%</td></tr><tr><td class="mono">loerrach</td><td class="num">2,054<div class="minibar"><span style="width:17.0%"></span></div></td><td class="num">348</td><td class="num">6,535</td><td class="num ">15</td><td class="num ">0.2%</td></tr><tr><td class="mono">villingen_schwenningen</td><td class="num">121<div class="minibar"><span style="width:1.0%"></span></div></td><td class="num">335</td><td class="num">216</td><td class="num hot">414</td><td class="num hot">65.7%</td></tr><tr><td class="mono">cas</td><td class="num">1,209<div class="minibar"><span style="width:10.0%"></span></div></td><td class="num">888</td><td class="num">1,631</td><td class="num ">7</td><td class="num ">0.4%</td></tr></tbody></table></section>
+
+  <section><h2>Word-count distribution</h2>
+    <div class="sub" style="margin-bottom:8px">min 10 · p10 30 · p25 66 · median 217 · p75 382 · p90 732 · p99 17,800 · max 172,048</div>
+    <table><thead><tr><th>Words</th><th class="num">Docs</th><th></th></tr></thead>
+      <tbody><tr><td class="mono">0-50</td><td class="num">8,366</td><td class="barcell"><div class="minibar wide"><span style="width:58.2%"></span></div></td></tr><tr><td class="mono">50-100</td><td class="num">6,603</td><td class="barcell"><div class="minibar wide"><span style="width:45.9%"></span></div></td></tr><tr><td class="mono">100-250</td><td class="num">9,976</td><td class="barcell"><div class="minibar wide"><span style="width:69.3%"></span></div></td></tr><tr><td class="mono">250-500</td><td class="num">14,386</td><td class="barcell"><div class="minibar wide"><span style="width:100.0%"></span></div></td></tr><tr><td class="mono">500-1,000</td><td class="num">3,685</td><td class="barcell"><div class="minibar wide"><span style="width:25.6%"></span></div></td></tr><tr><td class="mono">1,000-2,500</td><td class="num">1,807</td><td class="barcell"><div class="minibar wide"><span style="width:12.6%"></span></div></td></tr><tr><td class="mono">2,500-5,000</td><td class="num">535</td><td class="barcell"><div class="minibar wide"><span style="width:3.7%"></span></div></td></tr><tr><td class="mono">5,000+</td><td class="num">1,065</td><td class="barcell"><div class="minibar wide"><span style="width:7.4%"></span></div></td></tr></tbody></table></section>
+
+  <div class="grid2">
+    <section><h2>Quality-gate rejects</h2><table><thead><tr><th>Reason</th><th>Count</th></tr></thead><tbody><tr><td class="mono">empty</td><td class="num">1,590</td></tr><tr><td class="mono">too short: 3 words</td><td class="num">71</td></tr><tr><td class="mono">too short: 9 words</td><td class="num">32</td></tr><tr><td class="mono">too short: 8 words</td><td class="num">30</td></tr><tr><td class="mono">too short: 4 words</td><td class="num">26</td></tr><tr><td class="mono">too short: 2 words</td><td class="num">20</td></tr><tr><td class="mono">too short: 15 words</td><td class="num">20</td></tr><tr><td class="mono">too short: 6 words</td><td class="num">18</td></tr><tr><td class="mono">too short: 7 words</td><td class="num">12</td></tr><tr><td class="mono">too short: 5 words</td><td class="num">9</td></tr><tr><td class="mono">too short: 1 words</td><td class="num">9</td></tr><tr><td class="mono">too short: 38 words</td><td class="num">6</td></tr></tbody></table></section>
+    <section><h2>Extraction errors</h2><table><thead><tr><th>Error</th><th>Count</th></tr></thead><tbody><tr><td class="mono">cannot initialize - document still encrypted</td><td class="num">20</td></tr></tbody></table></section>
+    <section><h2>Crawl outcomes</h2><table><thead><tr><th>Outcome</th><th>Count</th></tr></thead><tbody><tr><td class="mono">new</td><td class="num">1,060,084</td></tr><tr><td class="mono">error</td><td class="num">12,427</td></tr><tr><td class="mono">skipped</td><td class="num">11,749</td></tr><tr><td class="mono">unchanged</td><td class="num">7,359</td></tr><tr><td class="mono">removed</td><td class="num">987</td></tr><tr><td class="mono">changed</td><td class="num">43</td></tr></tbody></table></section>
+    <section><h2>HTTP status</h2><table><thead><tr><th>Status</th><th>Count</th></tr></thead><tbody><tr><td class="mono">200</td><td class="num">1,078,759</td></tr><tr><td class="mono">0</td><td class="num">12,193</td></tr><tr><td class="mono">404</td><td class="num">984</td></tr><tr><td class="mono">304</td><td class="num">477</td></tr><tr><td class="mono">429</td><td class="num">119</td></tr><tr><td class="mono">400</td><td class="num">49</td></tr><tr><td class="mono">500</td><td class="num">37</td></tr><tr><td class="mono">401</td><td class="num">14</td></tr><tr><td class="mono">302</td><td class="num">7</td></tr><tr><td class="mono">403</td><td class="num">5</td></tr><tr><td class="mono">410</td><td class="num">3</td></tr><tr><td class="mono">301</td><td class="num">2</td></tr></tbody></table></section>
+  </div>
+
+  <section><h2>Top crawl errors</h2><table><thead><tr><th>Error</th><th>Count</th></tr></thead><tbody><tr><td class="mono">&lt;urlopen error [Errno 111] Connection refused&gt;</td><td class="num">4,874</td></tr><tr><td class="mono">The read operation timed out</td><td class="num">993</td></tr><tr><td class="mono">HTTP 404</td><td class="num">984</td></tr><tr><td class="mono">HTTP 429</td><td class="num">119</td></tr><tr><td class="mono">&lt;urlopen error _ssl.c:993: The handshake operation timed out&gt;</td><td class="num">108</td></tr><tr><td class="mono">&lt;urlopen error timed out&gt;</td><td class="num">93</td></tr><tr><td class="mono">HTTP 400</td><td class="num">49</td></tr><tr><td class="mono">HTTP 500</td><td class="num">37</td></tr><tr><td class="mono">HTTP 401</td><td class="num">14</td></tr><tr><td class="mono">&lt;urlopen error [Errno -2] Name or service not known&gt;</td><td class="num">11</td></tr></tbody></table></section>
+  <section><h2>Errors by site (work_state=error)</h2><table><thead><tr><th>Site</th><th>Errors</th><th>By HTTP status</th></tr></thead><tbody><tr><td class="mono">stuttgart</td><td class="num">4,006</td><td class="mono small">0:3989, 500:9, 401:6, 403:2</td></tr><tr><td class="mono">karlsruhe</td><td class="num">1,660</td><td class="mono small">0:1659, 200:1</td></tr><tr><td class="mono">villingen_schwenningen</td><td class="num">414</td><td class="mono small">0:414</td></tr><tr><td class="mono">mosbach</td><td class="num">45</td><td class="mono small">429:26, 400:16, 0:2, 401:1</td></tr><tr><td class="mono">heilbronn</td><td class="num">23</td><td class="mono small">429:22, 0:1</td></tr><tr><td class="mono">loerrach</td><td class="num">15</td><td class="mono small">0:6, 400:4, 500:4, 403:1</td></tr><tr><td class="mono">cas</td><td class="num">7</td><td class="mono small">0:7</td></tr><tr><td class="mono">ravensburg</td><td class="num">6</td><td class="mono small">400:4, 0:2</td></tr><tr><td class="mono">heidenheim</td><td class="num">5</td><td class="mono small">0:5</td></tr><tr><td class="mono">mannheim</td><td class="num">5</td><td class="mono small">429:5</td></tr></tbody></table></section>
+
+  <section><h2>Crawl discovery tree</h2>
+
+    <div class="sub">15,217,211 link edges · 13,787,008 in-domain · 1,430,203 external ·
+      81,119 distinct sources · 149,510 distinct targets</div>
+    <p class="sub" style="margin:2px 0 0">107,273 crawled pages across 11 campus trees. <a class="treelink" href="discovery.html">Open the interactive discovery tree →</a> (full-screen, its own page).</p>
+  </section>
+  <section><h2>Top external link targets</h2><table><thead><tr><th>Host</th><th>Links</th></tr></thead><tbody><tr><td class="mono">www.instagram.com</td><td class="num">82,854</td></tr><tr><td class="mono">www.youtube.com</td><td class="num">73,790</td></tr><tr><td class="mono">www.linkedin.com</td><td class="num">58,984</td></tr><tr><td class="mono">www.dhbw.de</td><td class="num">57,477</td></tr><tr><td class="mono">www.facebook.com</td><td class="num">46,041</td></tr><tr><td class="mono">dualis.dhbw.de</td><td class="num">41,487</td></tr><tr><td class="mono">portal.dhbw.de</td><td class="num">39,837</td></tr><tr><td class="mono">www.cas.dhbw.de</td><td class="num">35,003</td></tr><tr><td class="mono">www.tiktok.com</td><td class="num">31,235</td></tr><tr><td class="mono">bildungscampus.hn</td><td class="num">28,489</td></tr><tr><td class="mono">moodle.dhbw.de</td><td class="num">24,518</td></tr><tr><td class="mono">de.linkedin.com</td><td class="num">21,150</td></tr><tr><td class="mono">de-de.facebook.com</td><td class="num">15,864</td></tr><tr><td class="mono">moodle.dhbw-mannheim.de</td><td class="num">15,327</td></tr><tr><td class="mono">intranet.dhbw-mannheim.de</td><td class="num">15,306</td></tr><tr><td class="mono">events.dhbw-mannheim.de</td><td class="num">15,306</td></tr><tr><td class="mono">www.weiterbildung.dhbw.de</td><td class="num">13,369</td></tr><tr><td class="mono">dhbw-loerrach.de</td><td class="num">12,131</td></tr><tr><td class="mono">www.studierendenwerk-stuttgart.de</td><td class="num">11,558</td></tr><tr><td class="mono">www.accenture.com</td><td class="num">11,488</td></tr></tbody></table></section>
+
+  <section><h2>Per-host URL distribution (spider-trap view)</h2><table><thead><tr><th>Host</th><th>URLs</th><th>Done</th><th>Error</th><th>Pending</th></tr></thead><tbody><tr><td class="mono">www.mosbach.dhbw.de</td><td class="num">24,103</td><td class="num">24,102</td><td class="num ">0</td><td class="num">1</td></tr><tr><td class="mono">www.dhbw-stuttgart.de</td><td class="num">21,887</td><td class="num">18,325</td><td class="num ">2,183</td><td class="num">1,379</td></tr><tr><td class="mono">www.mannheim.dhbw.de</td><td class="num">16,781</td><td class="num">16,777</td><td class="num ">0</td><td class="num">4</td></tr><tr><td class="mono">www.heilbronn.dhbw.de</td><td class="num">10,332</td><td class="num">10,329</td><td class="num ">0</td><td class="num">3</td></tr><tr><td class="mono">www.ravensburg.dhbw.de</td><td class="num">9,154</td><td class="num">9,144</td><td class="num ">6</td><td class="num">4</td></tr><tr><td class="mono">www.karlsruhe.dhbw.de</td><td class="num">7,663</td><td class="num">6,004</td><td class="num ">1,659</td><td class="num">0</td></tr><tr><td class="mono">www.heidenheim.dhbw.de</td><td class="num">6,506</td><td class="num">6,505</td><td class="num ">0</td><td class="num">1</td></tr><tr><td class="mono">dhbw-loerrach.de</td><td class="num">6,473</td><td class="num">6,473</td><td class="num ">0</td><td class="num">0</td></tr><tr><td class="mono">www.dhbw.de</td><td class="num">5,560</td><td class="num">5,559</td><td class="num ">0</td><td class="num">1</td></tr><tr><td class="mono">wwwlehre.dhbw-stuttgart.de</td><td class="num">1,917</td><td class="num">273</td><td class="num hot">1,644</td><td class="num">0</td></tr><tr><td class="mono">www.cas.dhbw.de</td><td class="num">1,627</td><td class="num">1,621</td><td class="num ">6</td><td class="num">0</td></tr><tr><td class="mono">studyup.mannheim.dhbw.de</td><td class="num">1,512</td><td class="num">1,512</td><td class="num ">0</td><td class="num">0</td></tr><tr><td class="mono">www.dhbw-vs.de</td><td class="num">440</td><td class="num">35</td><td class="num hot">405</td><td class="num">0</td></tr><tr><td class="mono">zms.dhbw-stuttgart.de</td><td class="num">222</td><td class="num">89</td><td class="num hot">133</td><td class="num">0</td></tr><tr><td class="mono">blog.dhbw-vs.de</td><td class="num">118</td><td class="num">118</td><td class="num ">0</td><td class="num">0</td></tr><tr><td class="mono">events.heilbronn.dhbw.de</td><td class="num">75</td><td class="num">53</td><td class="num ">22</td><td class="num">0</td></tr><tr><td class="mono">events.mosbach.dhbw.de</td><td class="num">56</td><td class="num">30</td><td class="num hot">26</td><td class="num">0</td></tr><tr><td class="mono">events.mannheim.dhbw.de</td><td class="num">48</td><td class="num">43</td><td class="num ">5</td><td class="num">0</td></tr><tr><td class="mono">umfragen.dhbw-vs.de</td><td class="num">38</td><td class="num">38</td><td class="num ">0</td><td class="num">0</td></tr><tr><td class="mono">nextcloud.dhbw-stuttgart.de</td><td class="num">30</td><td class="num">20</td><td class="num hot">10</td><td class="num">0</td></tr><tr><td class="mono">campusweb.dhbw-loerrach.de</td><td class="num">28</td><td class="num">27</td><td class="num ">1</td><td class="num">0</td></tr><tr><td class="mono">bewerberboerse.karlsruhe.dhbw.de</td><td class="num">25</td><td class="num">25</td><td class="num ">0</td><td class="num">0</td></tr><tr><td class="mono">login.mosbach.dhbw.de</td><td class="num">18</td><td class="num">2</td><td class="num hot">16</td><td class="num">0</td></tr><tr><td class="mono">bewerberboerse.mosbach.dhbw.de</td><td class="num">16</td><td class="num">16</td><td class="num ">0</td><td class="num">0</td></tr><tr><td class="mono">bewerberboerse.dhbw-loerrach.de</td><td class="num">14</td><td class="num">14</td><td class="num ">0</td><td class="num">0</td></tr></tbody></table></section>
+
+  <footer>
+    Crawl window 2026-07-14T16:31:51 → 2026-07-17T20:52:24 UTC ·
+    documents updated 2026-07-14T16:32:09 → 2026-07-17T20:06:51 UTC.<br>
+    Read-only snapshot of <span class="mono">C:\Users\manue\Documents\GitHub\DH-DigitalHelper\data\scraper.sqlite3</span>. Static file — regenerate to refresh.
+  </footer>
+</div>
+<script id="report-data" type="application/json">{
+"meta": {
+"generated_at": "2026-07-17 22:04:50",
+"db_path": "C:\\Users\\manue\\Documents\\GitHub\\DH-DigitalHelper\\data\\scraper.sqlite3",
+"db_size_bytes": 4108226560,
+"db_mtime": "2026-07-17 20:53:38",
+"min_words": 50,
+"raw_dir_bytes": 30079598452
+},
+"totals": {
+"documents": 46423,
+"words": 35844942,
+"by_type": {
+"html": {
+"docs": 39150,
+"words": 10267381,
+"avg": 262.257496807152,
+"max": 49024
+},
+"pdf": {
+"docs": 7273,
+"words": 25577561,
+"avg": 3516.7827581465694,
+"max": 172048
+}
+},
+"queue_total": 114845,
+"queue_state": {
+"done": 107264,
+"error": 6186,
+"pending": 1395
+},
+"raw_total": 100905,
+"raw_by_type": {
+"html": {
+"n": 91784,
+"bytes": 23608269986
+},
+"pdf": {
+"n": 9121,
+"bytes": 6471328466
+}
+},
+"quality_ok": 98352,
+"quality_bad": 1933,
+"extract_errored": 20,
+"extract_pending": 620,
+"candidates": 92144,
+"distinct_text": 46423
+},
+"per_site": [
+{
+"name": "heidenheim",
+"domain": "heidenheim.dhbw.de",
+"docs": 3709,
+"words": 1828427,
+"avg": 493,
+"done": 6510,
+"error": 5,
+"pending": 1,
+"error_rate": 0.0007674597083653108
+},
+{
+"name": "dhbw",
+"domain": "www.dhbw.de",
+"docs": 3406,
+"words": 13448506,
+"avg": 3948,
+"done": 5559,
+"error": 0,
+"pending": 1,
+"error_rate": 0.0
+},
+{
+"name": "mannheim",
+"domain": "mannheim.dhbw.de",
+"docs": 9124,
+"words": 4093834,
+"avg": 449,
+"done": 18333,
+"error": 5,
+"pending": 4,
+"error_rate": 0.00027265786890609664
+},
+{
+"name": "stuttgart",
+"domain": "dhbw-stuttgart.de",
+"docs": 12087,
+"words": 7605006,
+"avg": 629,
+"done": 18750,
+"error": 4006,
+"pending": 1381,
+"error_rate": 0.17604148356477411
+},
+{
+"name": "karlsruhe",
+"domain": "karlsruhe.dhbw.de",
+"docs": 2599,
+"words": 1254417,
+"avg": 483,
+"done": 6029,
+"error": 1660,
+"pending": 0,
+"error_rate": 0.215892833918585
+},
+{
+"name": "mosbach",
+"domain": "mosbach.dhbw.de",
+"docs": 5414,
+"words": 2559548,
+"avg": 473,
+"done": 24172,
+"error": 45,
+"pending": 1,
+"error_rate": 0.0018581987859767931
+},
+{
+"name": "heilbronn",
+"domain": "heilbronn.dhbw.de",
+"docs": 2372,
+"words": 833063,
+"avg": 351,
+"done": 10385,
+"error": 23,
+"pending": 3,
+"error_rate": 0.0022098385857033053
+},
+{
+"name": "ravensburg",
+"domain": "ravensburg.dhbw.de",
+"docs": 4328,
+"words": 2393255,
+"avg": 553,
+"done": 9144,
+"error": 6,
+"pending": 4,
+"error_rate": 0.0006557377049180328
+},
+{
+"name": "loerrach",
+"domain": "dhbw-loerrach.de",
+"docs": 2054,
+"words": 715032,
+"avg": 348,
+"done": 6535,
+"error": 15,
+"pending": 0,
+"error_rate": 0.0022900763358778627
+},
+{
+"name": "villingen_schwenningen",
+"domain": "dhbw-vs.de",
+"docs": 121,
+"words": 40531,
+"avg": 335,
+"done": 216,
+"error": 414,
+"pending": 0,
+"error_rate": 0.6571428571428571
+},
+{
+"name": "cas",
+"domain": "cas.dhbw.de",
+"docs": 1209,
+"words": 1073323,
+"avg": 888,
+"done": 1631,
+"error": 7,
+"pending": 0,
+"error_rate": 0.004273504273504274
+}
+],
+"reject_reasons": [
+{
+"reason": "empty",
+"n": 1590
+},
+{
+"reason": "too short: 3 words",
+"n": 71
+},
+{
+"reason": "too short: 9 words",
+"n": 32
+},
+{
+"reason": "too short: 8 words",
+"n": 30
+},
+{
+"reason": "too short: 4 words",
+"n": 26
+},
+{
+"reason": "too short: 2 words",
+"n": 20
+},
+{
+"reason": "too short: 15 words",
+"n": 20
+},
+{
+"reason": "too short: 6 words",
+"n": 18
+},
+{
+"reason": "too short: 7 words",
+"n": 12
+},
+{
+"reason": "too short: 5 words",
+"n": 9
+},
+{
+"reason": "too short: 1 words",
+"n": 9
+},
+{
+"reason": "too short: 38 words",
+"n": 6
+}
+],
+"extract_errors": [
+{
+"error": "cannot initialize - document still encrypted",
+"n": 20
+}
+],
+"wordcount": {
+"n": 46423,
+"min": 10,
+"max": 172048,
+"pct": {
+"10": 30,
+"25": 66,
+"50": 217,
+"75": 382,
+"90": 732,
+"99": 17800
+},
+"hist": [
+{
+"label": "0-50",
+"n": 8366
+},
+{
+"label": "50-100",
+"n": 6603
+},
+{
+"label": "100-250",
+"n": 9976
+},
+{
+"label": "250-500",
+"n": 14386
+},
+{
+"label": "500-1,000",
+"n": 3685
+},
+{
+"label": "1,000-2,500",
+"n": 1807
+},
+{
+"label": "2,500-5,000",
+"n": 535
+},
+{
+"label": "5,000+",
+"n": 1065
+}
+],
+"below_min": 8366
+},
+"crawl_log": {
+"total": 1092649,
+"outcomes": [
+{
+"k": "new",
+"n": 1060084
+},
+{
+"k": "error",
+"n": 12427
+},
+{
+"k": "skipped",
+"n": 11749
+},
+{
+"k": "unchanged",
+"n": 7359
+},
+{
+"k": "removed",
+"n": 987
+},
+{
+"k": "changed",
+"n": 43
+}
+],
+"status": [
+{
+"k": 200,
+"n": 1078759
+},
+{
+"k": 0,
+"n": 12193
+},
+{
+"k": 404,
+"n": 984
+},
+{
+"k": 304,
+"n": 477
+},
+{
+"k": 429,
+"n": 119
+},
+{
+"k": 400,
+"n": 49
+},
+{
+"k": 500,
+"n": 37
+},
+{
+"k": 401,
+"n": 14
+},
+{
+"k": 302,
+"n": 7
+},
+{
+"k": 403,
+"n": 5
+},
+{
+"k": 410,
+"n": 3
+},
+{
+"k": 301,
+"n": 2
+}
+],
+"errors": [
+{
+"k": "<urlopen error [Errno 111] Connection refused>",
+"n": 4874
+},
+{
+"k": "The read operation timed out",
+"n": 993
+},
+{
+"k": "HTTP 404",
+"n": 984
+},
+{
+"k": "HTTP 429",
+"n": 119
+},
+{
+"k": "<urlopen error _ssl.c:993: The handshake operation timed out>",
+"n": 108
+},
+{
+"k": "<urlopen error timed out>",
+"n": 93
+},
+{
+"k": "HTTP 400",
+"n": 49
+},
+{
+"k": "HTTP 500",
+"n": 37
+},
+{
+"k": "HTTP 401",
+"n": 14
+},
+{
+"k": "<urlopen error [Errno -2] Name or service not known>",
+"n": 11
+}
+]
+},
+"errors_by_site": [
+{
+"name": "stuttgart",
+"total": 4006,
+"breakdown": "0:3989, 500:9, 401:6, 403:2"
+},
+{
+"name": "karlsruhe",
+"total": 1660,
+"breakdown": "0:1659, 200:1"
+},
+{
+"name": "villingen_schwenningen",
+"total": 414,
+"breakdown": "0:414"
+},
+{
+"name": "mosbach",
+"total": 45,
+"breakdown": "429:26, 400:16, 0:2, 401:1"
+},
+{
+"name": "heilbronn",
+"total": 23,
+"breakdown": "429:22, 0:1"
+},
+{
+"name": "loerrach",
+"total": 15,
+"breakdown": "0:6, 400:4, 500:4, 403:1"
+},
+{
+"name": "cas",
+"total": 7,
+"breakdown": "0:7"
+},
+{
+"name": "ravensburg",
+"total": 6,
+"breakdown": "400:4, 0:2"
+},
+{
+"name": "heidenheim",
+"total": 5,
+"breakdown": "0:5"
+},
+{
+"name": "mannheim",
+"total": 5,
+"breakdown": "429:5"
+}
+],
+"links": {
+"total": 15217211,
+"in_domain": 13787008,
+"external": 1430203,
+"distinct_src": 81119,
+"distinct_dst": 149510,
+"docs_no_out": 7293,
+"top_external": [
+{
+"host": "www.instagram.com",
+"n": 82854
+},
+{
+"host": "www.youtube.com",
+"n": 73790
+},
+{
+"host": "www.linkedin.com",
+"n": 58984
+},
+{
+"host": "www.dhbw.de",
+"n": 57477
+},
+{
+"host": "www.facebook.com",
+"n": 46041
+},
+{
+"host": "dualis.dhbw.de",
+"n": 41487
+},
+{
+"host": "portal.dhbw.de",
+"n": 39837
+},
+{
+"host": "www.cas.dhbw.de",
+"n": 35003
+},
+{
+"host": "www.tiktok.com",
+"n": 31235
+},
+{
+"host": "bildungscampus.hn",
+"n": 28489
+},
+{
+"host": "moodle.dhbw.de",
+"n": 24518
+},
+{
+"host": "de.linkedin.com",
+"n": 21150
+},
+{
+"host": "de-de.facebook.com",
+"n": 15864
+},
+{
+"host": "moodle.dhbw-mannheim.de",
+"n": 15327
+},
+{
+"host": "intranet.dhbw-mannheim.de",
+"n": 15306
+},
+{
+"host": "events.dhbw-mannheim.de",
+"n": 15306
+},
+{
+"host": "www.weiterbildung.dhbw.de",
+"n": 13369
+},
+{
+"host": "dhbw-loerrach.de",
+"n": 12131
+},
+{
+"host": "www.studierendenwerk-stuttgart.de",
+"n": 11558
+},
+{
+"host": "www.accenture.com",
+"n": 11488
+}
+]
+},
+"hosts": [
+{
+"host": "www.mosbach.dhbw.de",
+"urls": 24103,
+"done": 24102,
+"error": 0,
+"pending": 1
+},
+{
+"host": "www.dhbw-stuttgart.de",
+"urls": 21887,
+"done": 18325,
+"error": 2183,
+"pending": 1379
+},
+{
+"host": "www.mannheim.dhbw.de",
+"urls": 16781,
+"done": 16777,
+"error": 0,
+"pending": 4
+},
+{
+"host": "www.heilbronn.dhbw.de",
+"urls": 10332,
+"done": 10329,
+"error": 0,
+"pending": 3
+},
+{
+"host": "www.ravensburg.dhbw.de",
+"urls": 9154,
+"done": 9144,
+"error": 6,
+"pending": 4
+},
+{
+"host": "www.karlsruhe.dhbw.de",
+"urls": 7663,
+"done": 6004,
+"error": 1659,
+"pending": 0
+},
+{
+"host": "www.heidenheim.dhbw.de",
+"urls": 6506,
+"done": 6505,
+"error": 0,
+"pending": 1
+},
+{
+"host": "dhbw-loerrach.de",
+"urls": 6473,
+"done": 6473,
+"error": 0,
+"pending": 0
+},
+{
+"host": "www.dhbw.de",
+"urls": 5560,
+"done": 5559,
+"error": 0,
+"pending": 1
+},
+{
+"host": "wwwlehre.dhbw-stuttgart.de",
+"urls": 1917,
+"done": 273,
+"error": 1644,
+"pending": 0
+},
+{
+"host": "www.cas.dhbw.de",
+"urls": 1627,
+"done": 1621,
+"error": 6,
+"pending": 0
+},
+{
+"host": "studyup.mannheim.dhbw.de",
+"urls": 1512,
+"done": 1512,
+"error": 0,
+"pending": 0
+},
+{
+"host": "www.dhbw-vs.de",
+"urls": 440,
+"done": 35,
+"error": 405,
+"pending": 0
+},
+{
+"host": "zms.dhbw-stuttgart.de",
+"urls": 222,
+"done": 89,
+"error": 133,
+"pending": 0
+},
+{
+"host": "blog.dhbw-vs.de",
+"urls": 118,
+"done": 118,
+"error": 0,
+"pending": 0
+},
+{
+"host": "events.heilbronn.dhbw.de",
+"urls": 75,
+"done": 53,
+"error": 22,
+"pending": 0
+},
+{
+"host": "events.mosbach.dhbw.de",
+"urls": 56,
+"done": 30,
+"error": 26,
+"pending": 0
+},
+{
+"host": "events.mannheim.dhbw.de",
+"urls": 48,
+"done": 43,
+"error": 5,
+"pending": 0
+},
+{
+"host": "umfragen.dhbw-vs.de",
+"urls": 38,
+"done": 38,
+"error": 0,
+"pending": 0
+},
+{
+"host": "nextcloud.dhbw-stuttgart.de",
+"urls": 30,
+"done": 20,
+"error": 10,
+"pending": 0
+},
+{
+"host": "campusweb.dhbw-loerrach.de",
+"urls": 28,
+"done": 27,
+"error": 1,
+"pending": 0
+},
+{
+"host": "bewerberboerse.karlsruhe.dhbw.de",
+"urls": 25,
+"done": 25,
+"error": 0,
+"pending": 0
+},
+{
+"host": "login.mosbach.dhbw.de",
+"urls": 18,
+"done": 2,
+"error": 16,
+"pending": 0
+},
+{
+"host": "bewerberboerse.mosbach.dhbw.de",
+"urls": 16,
+"done": 16,
+"error": 0,
+"pending": 0
+},
+{
+"host": "bewerberboerse.dhbw-loerrach.de",
+"urls": 14,
+"done": 14,
+"error": 0,
+"pending": 0
+}
+],
+"freshness": {
+"queue_first_seen": {
+"min": "2026-07-14T16:31:51",
+"max": "2026-07-17T20:52:24"
+},
+"documents_updated": {
+"min": "2026-07-14T16:32:09",
+"max": "2026-07-17T20:06:51"
+},
+"raw_first_seen": {
+"min": "2026-07-14T16:31:55",
+"max": "2026-07-17T20:52:24"
+}
+},
+"findings": [
+{
+"sev": "crit",
+"title": "villingen_schwenningen is under-covered",
+"detail": "121 documents vs a per-site median of 3,406; queue shows 414 errors (66% of fetch attempts)."
+},
+{
+"sev": "warn",
+"title": "8,366 documents below min_words=50",
+"detail": "18% of the corpus is thinner than the current quality gate (min 10 words) -- legacy rows from an extract pass with a looser threshold. A full re-extract would normalize them."
+},
+{
+"sev": "info",
+"title": "stuttgart has elevated fetch errors",
+"detail": "4,006 errored URLs (18% of attempts) -- mostly connection refused/timeout, worth one gentle retry."
+},
+{
+"sev": "info",
+"title": "karlsruhe has elevated fetch errors",
+"detail": "1,660 errored URLs (22% of attempts) -- mostly connection refused/timeout, worth one gentle retry."
+}
+]
+}</script>

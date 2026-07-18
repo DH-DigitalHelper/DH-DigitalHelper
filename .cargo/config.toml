@@ -1,0 +1,5 @@
+# pyo3 0.25 predates CPython 3.14; with the abi3 stable ABI it can still build
+# against 3.14 when told to proceed forward-compatibly. Setting this here (rather
+# than requiring an env var on every build) means `cargo`/`maturin` just work.
+[env]
+PYO3_USE_ABI3_FORWARD_COMPATIBILITY = "1"

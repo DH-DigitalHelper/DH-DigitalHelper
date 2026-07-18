@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Cancel superseded runs on the same ref.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-test:
+    name: Lint & test (Linux)
+    runs-on: ubuntu-latest
+    env:
+      PYO3_PYTHON: ${{ github.workspace }}/.venv/bin/python
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust toolchain (rustfmt + clippy)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.3.2
+        with:
+          enable-cache: true
+
+      - name: Install Python 3.14
+        run: uv python install 3.14
+
+      - name: Sync deps (builds the Rust extension via maturin)
+        run: uv sync --extra dev
+
+      - name: Cache pre-commit hook environments
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      - name: Expose libpython for the cargo-test hook
+        shell: bash
+        run: |
+          # The pre-push `cargo test` hook's binaries load libpython at runtime.
+          PYLIB="$(.venv/bin/python -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))')"
+          echo "LD_LIBRARY_PATH=$PYLIB:${LD_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
+
+      - name: Pre-commit hooks (hygiene, ruff, rustfmt)
+        run: uv run pre-commit run --all-files --show-diff-on-failure --color always
+
+      - name: Pre-push hooks (pytest, clippy, cargo test)
+        run: uv run pre-commit run --hook-stage pre-push --all-files --show-diff-on-failure --color always

@@ -1,0 +1,107 @@
+[[sites]]
+name = "heidenheim"
+seed_url = "https://www.heidenheim.dhbw.de/startseite"
+allowed_domain = "heidenheim.dhbw.de"
+
+[[sites]]
+name = "dhbw"
+seed_url = "https://www.dhbw.de"
+allowed_domain = "www.dhbw.de"
+
+# The nine DHBW campus locations + the Center for Advanced Studies (CAS). Each is
+# crawled strictly in-domain (links leaving allowed_domain are recorded in the
+# links table, never followed). allowed_domain omits the "www." prefix on purpose:
+# in_domain() matches both the bare host and any subdomain of it (src/scrape-engine/links.rs),
+# so "mannheim.dhbw.de" covers www.mannheim.dhbw.de too. NOTE the three campuses that do NOT follow the
+# <location>.dhbw.de pattern: Stuttgart, Lörrach, and Villingen-Schwenningen.
+
+[[sites]]
+name = "mannheim"
+seed_url = "https://www.mannheim.dhbw.de"
+allowed_domain = "mannheim.dhbw.de"
+
+[[sites]]
+name = "stuttgart"
+seed_url = "https://www.dhbw-stuttgart.de"
+allowed_domain = "dhbw-stuttgart.de"
+
+[[sites]]
+name = "karlsruhe"
+seed_url = "https://www.karlsruhe.dhbw.de"
+allowed_domain = "karlsruhe.dhbw.de"
+
+[[sites]]
+name = "mosbach"
+seed_url = "https://www.mosbach.dhbw.de"
+allowed_domain = "mosbach.dhbw.de"
+
+[[sites]]
+name = "heilbronn"
+seed_url = "https://www.heilbronn.dhbw.de"
+allowed_domain = "heilbronn.dhbw.de"
+
+[[sites]]
+name = "ravensburg"
+seed_url = "https://www.ravensburg.dhbw.de/startseite"
+allowed_domain = "ravensburg.dhbw.de"
+
+[[sites]]
+name = "loerrach"
+seed_url = "https://dhbw-loerrach.de/home"
+allowed_domain = "dhbw-loerrach.de"
+
+[[sites]]
+name = "villingen_schwenningen"
+seed_url = "https://www.dhbw-vs.de"
+allowed_domain = "dhbw-vs.de"
+
+[[sites]]
+name = "cas"
+seed_url = "https://www.cas.dhbw.de"
+allowed_domain = "cas.dhbw.de"
+
+[crawl]
+use_sitemap = true
+max_pages = 0                              # per-site page budget (0 = unlimited)
+# Per-hostname page budget (0 = unlimited). Backstop against a single runaway
+# subdomain monopolizing a site's crawl, the way the buchen.dhbw-vs.de booking
+# trap once did. No legitimate campus host approaches this; a spider trap blows
+# straight past it and gets cut off. Known traps (buchen.*, moodle.*, ...) are
+# denylisted outright in src/scrape-engine/links.rs; this only catches unknown ones.
+max_pages_per_host = 50000
+request_delay_seconds = 1.0
+respect_robots = false
+workers_per_host = 6
+# What a re-run re-checks:
+#   "all"          re-check every already-present URL (conditional GET; a 304 is cheap)
+#   "changed-only" only URLs the sitemap <lastmod> scan flags as changed
+#   "new-only"     only queued URLs never fetched before; never re-download a stored page
+#   "force-full"   like "all", but ignore the stored ETag/Last-Modified so every URL is
+#                  re-downloaded in full. Expensive; for repairing a spoilt crawl.
+recheck = "new-only"
+# Re-queue URLs that failed with a TRANSIENT error (timeout/DNS/conn-refused, 408,
+# 429, or any 5xx) so the next run retries them. Permanently-gone/forbidden URLs are
+# left alone: 404/410 are already marked removed, and 400/401/403/... stay 'error'.
+# Set false to freeze all error rows and never auto-retry. Ignored under
+# recheck = "new-only" (that mode only fetches never-seen URLs).
+retry_transient_errors = true
+user_agent = ""
+
+[extract]
+workers = 12
+min_words = 50
+
+# Corpus dedup pass (`dhbw-scraper dedup`, and the tail of `run`).
+[dedup]
+# Rows per batch when backfilling documents.text_sha256. Keyset-paginated by id, so
+# only this many extracted texts are resident at once -- lower it on a memory-tight
+# box, raise it to trade memory for fewer round trips.
+batch_size = 500
+# VACUUM after retiring duplicates, handing the freed pages back to the filesystem.
+# Set false to skip the (blocking, whole-DB) rewrite; the space is then reclaimed by
+# a later VACUUM instead.
+vacuum = true
+
+[storage]
+db_file = "data/scraper.sqlite3"
+raw_dir = "data/raw"

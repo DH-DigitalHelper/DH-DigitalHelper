@@ -1,0 +1,86 @@
+# Cross-platform git hooks — the single source of truth for the Windows/uv
+# workflow (installed once via `uv run pre-commit install --install-hooks`).
+#
+# Stages:
+#   pre-commit : fast, no-compile hygiene + lint/format (ruff, rustfmt)
+#   commit-msg : Conventional Commits validation (feat: / fix: / chore: / …)
+#   pre-push   : the test suites (pytest always; cargo test + clippy when Rust changed)
+#
+# Install once with:  uv run pre-commit install --install-hooks
+# Bump pinned revs with:  uv run pre-commit autoupdate
+#
+# Windows note: the Rust pre-push hooks (cargo test / clippy) compile rusqlite's
+# bundled SQLite and need the MSVC env — push from the "x64 Native Tools" prompt.
+# CI runs them on Linux regardless, so a missed local Rust build is still caught.
+
+default_install_hook_types: [pre-commit, commit-msg, pre-push]
+default_stages: [pre-commit]
+
+repos:
+  # ── Generic hygiene (fast, no compile) ──────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      # Keep the vendored, minified d3 byte-identical to upstream (auditability).
+      - id: trailing-whitespace
+        exclude: ^src/scraper/vendor/
+      - id: end-of-file-fixer
+        exclude: ^src/scraper/vendor/
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+
+  # ── Python lint + format (ruff manages its own binary) ──────────────────────
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.6
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  # ── Conventional Commits validation (commit-msg stage) ──────────────────────
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v3.6.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+
+  # ── Rust + tests (local hooks; use the system cargo/uv toolchain) ───────────
+  - repo: local
+    hooks:
+      # Formatting does not compile, so this is MSVC-free and safe on every commit.
+      - id: rustfmt
+        name: rustfmt
+        entry: cargo fmt --
+        language: system
+        types: [rust]
+        pass_filenames: false
+
+      # Python tests run on every push (the native extension is already built by
+      # `uv sync`, so no MSVC/toolchain needed here).
+      - id: pytest
+        name: pytest
+        entry: uv run pytest
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      # Rust lint + tests run on push only when Rust files changed (they compile,
+      # so they need the MSVC env on Windows — see the header note).
+      - id: clippy
+        name: clippy
+        entry: cargo clippy --all-targets -- -D warnings
+        language: system
+        types: [rust]
+        pass_filenames: false
+        stages: [pre-push]
+
+      - id: cargo-test
+        name: cargo test
+        entry: cargo test
+        language: system
+        types: [rust]
+        pass_filenames: false
+        stages: [pre-push]
