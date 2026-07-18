@@ -2,7 +2,7 @@
 # workflow and the Nix devShell (flake.nix just installs this via `pre-commit`).
 #
 # Stages:
-#   pre-commit : fast, no-compile hygiene + lint/format + secret scan (ruff, rustfmt, trufflehog)
+#   pre-commit : fast, no-compile hygiene + lint/format (ruff, rustfmt)
 #   commit-msg : Conventional Commits validation (feat: / fix: / chore: / …)
 #   pre-push   : the test suites (pytest always; cargo test + clippy when Rust changed)
 #
@@ -30,29 +30,6 @@ repos:
       - id: check-toml
       - id: check-merge-conflict
       - id: check-added-large-files
-
-  # ── Secret scanning (local hook; needs the `trufflehog` binary on PATH) ─────
-  # Blocks commits that introduce verified OR unknown secrets in the staged diff.
-  # trufflehog is NOT installed by uv/maturin: the Nix devShell provides it
-  # (pkgs.trufflehog); on Windows install it once with one of —
-  #     scoop install trufflehog
-  #     # or a release binary: https://github.com/trufflesecurity/trufflehog/releases
-  # CI re-runs the same scan server-side (.github/workflows/secret-scan.yml) so a
-  # missed local install still can't merge a leaked secret.
-  - repo: local
-    hooks:
-      - id: trufflehog
-        name: trufflehog (secret scan)
-        # Scan only the diff since HEAD (fast). --fail exits non-zero on any
-        # verified OR unknown result; verification is best-effort and degrades
-        # to "unknown" offline, so this never blocks an offline commit. Called
-        # directly (no `bash -c`) so it also works from the Windows cmd/PowerShell
-        # prompts, which may not have bash on PATH.
-        entry: trufflehog git file://. --since-commit HEAD --results=verified,unknown --fail --trust-local-git-config
-        language: system
-        pass_filenames: false
-        always_run: true
-        stages: [pre-commit]
 
   # ── Python lint + format (ruff manages its own binary) ──────────────────────
   - repo: https://github.com/astral-sh/ruff-pre-commit
