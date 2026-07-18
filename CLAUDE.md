@@ -7,9 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 `dhbw-scraper` is **stage 1 of a RAG pipeline**: incrementally crawl the DHBW web
 presence (central portal + 9 campuses + CAS, see [`config.toml`](./config.toml)),
 extract clean text, and store everything in one local SQLite DB for downstream
-stages. [`README.md`](./README.md) is the authoritative, detailed spec for behavior
-(change detection, quality gate, CLI flags, schema) — read it for anything not
-covered here.
+stages.
 
 ## Architecture: Rust Phase 1, Python Phase 2
 
@@ -38,8 +36,7 @@ One DB (`data/scraper.sqlite3`, WAL mode, `BEGIN IMMEDIATE` for atomic multi-wor
 work claims). Five tables — `queue` (frontier + per-URL state), `crawl_log`
 (append-only fetch attempts), `raw_docs` (content-addressed byte cache + extraction
 result, keyed by `content_sha256`), `documents` (materialized corpus, one row per URL
-with a `revision`), and `links` (outbound edge graph). See the README "Storage" section
-for column-level detail.
+with a `revision`), and `links` (outbound edge graph).
 
 ## Build & toolchain (the main gotcha)
 
@@ -63,7 +60,7 @@ build) in that same MSVC shell — Python changes need no rebuild.
 uv run pytest                                   # all Python tests (Phase 2 + CLI + native e2e)
 uv run pytest tests/test_cli.py                 # one file
 uv run pytest -k dedup                          # one test / pattern
-cargo test                                      # Rust tests (needs python3.dll on PATH; see README "Windows")
+cargo test                                      # Rust tests (needs python3.dll on PATH)
 
 uv run pre-commit run --all-files                        # commit-stage: ruff lint+format, rustfmt, hygiene
 uv run pre-commit run --hook-stage pre-push --all-files  # push-stage: pytest (+ clippy/cargo test if Rust changed)
@@ -83,7 +80,7 @@ change; idempotent, never touches `updated_at`) · `backfill` (one-time: populat
 `lang`/`final_url`/`title` metadata across the existing corpus from stored text +
 `crawl_log` + the raw cache; idempotent, never touches `updated_at`) · `reset-site --site
 NAME` (the **only** destructive command; wipes a site's queue/crawl_log/documents/links,
-keeps the raw cache). See [`cli.py`](src/scraper/cli.py) and README "Usage".
+keeps the raw cache). See [`cli.py`](src/scraper/cli.py).
 
 **`config.toml` is the sole source of tuning values — no CLI flag overrides it.** The
 only flags are operational: global `--config PATH`; `--site NAME` on
@@ -96,8 +93,7 @@ cap.
 ## Conventions
 
 - **Conventional Commits** are enforced (commit-msg hook + CI). Types: `build`, `chore`,
-  `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`, `style`, `test`. See
-  [`CONTRIBUTING.md`](./CONTRIBUTING.md).
+  `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`, `style`, `test`.
 - CI (Linux) gates merges: ruff lint+format, `rustfmt --check`, clippy `-D warnings`,
   pytest, cargo test, and PR commit-subject validation.
 - `robots.txt` is **deliberately not consulted** (`crawl.respect_robots` is inert,

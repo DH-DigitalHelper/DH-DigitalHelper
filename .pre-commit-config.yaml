@@ -1,5 +1,5 @@
 # Cross-platform git hooks — the single source of truth for the Windows/uv
-# workflow (installed once via `pre-commit install`; see CONTRIBUTING.md).
+# workflow (installed once via `uv run pre-commit install --install-hooks`).
 #
 # Stages:
 #   pre-commit : fast, no-compile hygiene + lint/format (ruff, rustfmt)
