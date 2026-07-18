@@ -57,7 +57,7 @@ line-length = 88
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
-line-ending = "auto"          # per-file detection — friendly to the Windows + NixOS split
+line-ending = "auto"          # per-file detection — friendly to mixed CRLF/LF checkouts
 skip-magic-trailing-comma = false
 docstring-code-format = false
 

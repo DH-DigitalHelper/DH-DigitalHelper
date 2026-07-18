@@ -1,7 +1,7 @@
 # Contributing
 
 Thanks for working on the DHBW scraper. This repo enforces a small, cross-platform
-dev-tooling setup so the same checks run on Windows, macOS, Linux, and Nix.
+dev-tooling setup so the same checks run on Windows, macOS, and Linux.
 
 ## One-time setup
 
@@ -17,8 +17,7 @@ uv run pre-commit install --install-hooks
 ```
 
 ```sh
-# NixOS: `nix develop` installs the hooks for you via the flake's shellHook.
-# Otherwise, the same two commands as above:
+# macOS / Linux: the same two commands as the Windows block above.
 uv sync --extra dev
 uv run pre-commit install --install-hooks
 ```

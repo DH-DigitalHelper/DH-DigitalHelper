@@ -15,11 +15,6 @@ __pycache__/
 /target/
 # (Cargo.lock IS committed — this is a binary/app, not a library)
 
-# Nix / direnv
-.direnv/
-result
-result-*
-
 # Raw downloads: re-fetchable and can get large (PDFs). Gitignored by default.
 # To distribute the raw source alongside the processed data, delete the next line.
 data/raw/

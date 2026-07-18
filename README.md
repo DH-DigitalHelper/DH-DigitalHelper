@@ -74,14 +74,6 @@ SQLite database and `data/raw/<sha256>.<ext>` cache the Rust engine wrote.
 Building the extension needs a **Rust toolchain** and a **C compiler** (for `rusqlite`'s
 bundled SQLite); reqwest uses rustls, so no system OpenSSL is required.
 
-### NixOS
-
-```sh
-nix develop          # python3.14 + uv + rustc/cargo/maturin + git
-uv sync              # install Python deps (trafilatura, pymupdf4llm, maturin) into .venv
-uv run maturin develop --release   # build the Rust Phase-1 extension into .venv
-```
-
 ### Windows
 
 Install [rustup](https://rustup.rs) (the `x86_64-pc-windows-msvc` toolchain) and the
@@ -125,18 +117,9 @@ cargo test
 (`uv sync` and `maturin develop` don't need this — the host CPython provides the symbols
 there. Only the standalone `cargo test` binaries do.)
 
-If you use direnv on NixOS, `direnv allow` auto-enters the `nix develop` shell (which already
-has rustc/cargo/maturin) on `cd`.
-
 PDF extraction uses **PyMuPDF4LLM**, which is lightweight (no `torch`, no ML models). There
 is no model download — the extractor works offline right after install, with no first-PDF
 delay.
-
-> **Native-wheel fallback:** if a compiled dependency (e.g. `lxml`, pulled in by
-> `trafilatura`) misbehaves under `uv` on NixOS, switch the flake to a Nix-built interpreter
-> with the packages pre-built — `trafilatura` and `lxml` are both in nixpkgs
-> (`python312.withPackages (ps: [ ps.trafilatura ])`). `pymupdf` ships prebuilt
-> manylinux/Windows wheels, so it usually installs cleanly under `uv`.
 
 ### Contributing
 

@@ -57,9 +57,6 @@ A plain shell fails with `cl.exe not found`. After changing **Rust** code, rebui
 `uv run maturin develop --release` (or plain `maturin develop` for a faster debug
 build) in that same MSVC shell — Python changes need no rebuild.
 
-**NixOS**: `nix develop` provides python3.14 + uv + rustc/cargo/maturin (and installs
-git hooks); then `uv sync` and `uv run maturin develop --release`.
-
 ## Common commands
 
 ```powershell
