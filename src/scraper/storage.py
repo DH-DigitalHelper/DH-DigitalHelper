@@ -111,6 +111,46 @@ CREATE INDEX IF NOT EXISTS idx_documents_present ON documents(present);
 -- DB the documents table lacks text_sha256 until _migrate's ALTER adds it, so a
 -- CREATE INDEX in this batch (which runs before _migrate) would fail.
 
+-- Derived RAG corpus.  The document columns that are useful as retrieval filters
+-- are copied onto each chunk, while document_id keeps the canonical relationship.
+-- `chunk` can rebuild this table without changing the source documents.
+CREATE TABLE IF NOT EXISTS document_chunks (
+    id                   TEXT PRIMARY KEY,
+    document_id          TEXT NOT NULL,
+    chunk_index          INTEGER NOT NULL,
+    url                  TEXT NOT NULL,
+    title                TEXT,
+    site                 TEXT NOT NULL,
+    source_type          TEXT NOT NULL,
+    lang                 TEXT,
+    text                 TEXT NOT NULL,
+    markdown             TEXT NOT NULL,
+    heading_path         TEXT NOT NULL,
+    word_count           INTEGER NOT NULL,
+    char_count           INTEGER NOT NULL,
+    content_sha256       TEXT NOT NULL,
+    document_text_sha256 TEXT NOT NULL,
+    document_revision    INTEGER NOT NULL,
+    metadata             TEXT,
+    standort_id          INTEGER,
+    department_id        INTEGER,
+    study_program_id     INTEGER,
+    classify_meta        TEXT,
+    chunker_version      INTEGER NOT NULL,
+    target_words         INTEGER NOT NULL,
+    overlap_words        INTEGER NOT NULL,
+    created_at           TEXT NOT NULL,
+    UNIQUE (document_id, chunk_index),
+    FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_chunks_document ON document_chunks(document_id);
+CREATE INDEX IF NOT EXISTS idx_chunks_site ON document_chunks(site);
+CREATE INDEX IF NOT EXISTS idx_chunks_standort ON document_chunks(standort_id);
+CREATE INDEX IF NOT EXISTS idx_chunks_department ON document_chunks(department_id);
+CREATE INDEX IF NOT EXISTS idx_chunks_study_program
+    ON document_chunks(study_program_id);
+CREATE INDEX IF NOT EXISTS idx_chunks_content_sha256 ON document_chunks(content_sha256);
+
 -- URL dictionary: every distinct endpoint that appears in `links`, stored once.
 -- `links` references these ids (no declared FK, matching the rest of the schema,
 -- e.g. documents.content_sha256). Written by the Rust Phase-1 writer's interner and

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 RECHECK_MODES = ("all", "changed-only", "new-only", "force-full")
@@ -42,6 +42,13 @@ class DedupConfig:
 
 
 @dataclass(frozen=True)
+class ChunkConfig:
+    target_words: int = 500
+    overlap_words: int = 75
+    batch_size: int = 250
+
+
+@dataclass(frozen=True)
 class StorageConfig:
     db_file: Path
     raw_dir: Path
@@ -55,6 +62,7 @@ class Config:
     extract: ExtractConfig
     dedup: DedupConfig
     storage: StorageConfig
+    chunk: ChunkConfig = field(default_factory=ChunkConfig)
 
 
 def find_config(start: Path | None = None) -> Path:
@@ -94,6 +102,7 @@ def load_config(path: Path | None = None) -> Config:
     extract_raw = data["extract"]
     storage_raw = data["storage"]
     dedup_raw = data.get("dedup", {})
+    chunk_raw = data.get("chunk", {})
 
     recheck = str(crawl_raw.get("recheck", "all"))
     if recheck not in RECHECK_MODES:
@@ -139,6 +148,17 @@ def load_config(path: Path | None = None) -> Config:
                 dedup_raw, "dedup", "batch_size", default=500, minimum=1
             ),
             vacuum=bool(dedup_raw.get("vacuum", True)),
+        ),
+        chunk=ChunkConfig(
+            target_words=_bounded(
+                chunk_raw, "chunk", "target_words", default=500, minimum=50
+            ),
+            overlap_words=_bounded(
+                chunk_raw, "chunk", "overlap_words", default=75, minimum=0
+            ),
+            batch_size=_bounded(
+                chunk_raw, "chunk", "batch_size", default=250, minimum=1
+            ),
         ),
         storage=StorageConfig(
             db_file=resolve(storage_raw["db_file"]),

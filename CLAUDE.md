@@ -76,7 +76,9 @@ analysis via [`dashboard.py`](src/scraper/dashboard.py); includes an interactive
 per-site crawl-discovery tree drawn by a vendored, inlined d3) · `delta --since <ts>`
 (re-index delta for downstream) · `dedup` · `reclassify` (re-tag the
 Standort/Studienabteilung/Studiengang columns after a taxonomy or `CLASSIFY_VERSION`
-change; idempotent, never touches `updated_at`) · `backfill` (one-time: populate the dead
+change; idempotent, never touches `updated_at`) · `chunk` (structure-aware Markdown
+chunking via LangChain text splitters; incrementally synchronizes `document_chunks`) ·
+`backfill` (one-time: populate the dead
 `lang`/`final_url`/`title` metadata across the existing corpus from stored text +
 `crawl_log` + the raw cache; idempotent, never touches `updated_at`) · `reset-site --site
 NAME` (the **only** destructive command; wipes a site's queue/crawl_log/documents/links,

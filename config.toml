@@ -102,6 +102,15 @@ batch_size = 500
 # a later VACUUM instead.
 vacuum = true
 
+# Structure-aware RAG chunks derived from documents.markdown (`dhbw-scraper chunk`).
+[chunk]
+# Hard target for chunk bodies. Oversized paragraphs are sentence/word split.
+target_words = 500
+# Repeated tail context, but only inside the same Markdown heading section.
+overlap_words = 75
+# Documents written per SQLite transaction.
+batch_size = 250
+
 [storage]
 db_file = "data/scraper.sqlite3"
 raw_dir = "data/raw"

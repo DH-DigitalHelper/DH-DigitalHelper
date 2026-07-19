@@ -15,6 +15,7 @@ def test_parser_has_all_subcommands():
         ["reset-site", "--site", "x"],
         ["dedup"],
         ["backfill"],
+        ["chunk"],
         ["delta", "--since", "2026-01-01"],
         ["report"],
     ):

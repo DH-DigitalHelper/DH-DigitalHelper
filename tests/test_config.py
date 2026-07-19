@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from scraper.config import DedupConfig, load_config
+from scraper.config import ChunkConfig, DedupConfig, load_config
 
 
 def test_load_config_parses_sites_and_sections(tmp_path: Path):
@@ -49,6 +49,7 @@ raw_dir = "data/raw"
     assert cfg.extract.min_words == 40
     assert cfg.storage.db_file == (tmp_path / "data/db.sqlite3").resolve()
     assert cfg.storage.raw_dir == (tmp_path / "data/raw").resolve()
+    assert cfg.chunk == ChunkConfig(target_words=500, overlap_words=75, batch_size=250)
 
 
 def _write(tmp_path, recheck):

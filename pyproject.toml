@@ -4,6 +4,9 @@ version = "0.2.0"
 description = "Incremental dual-site scraper + extractor for DHBW content (RAG stage 1)"
 requires-python = ">=3.14"
 dependencies = [
+    # Focused splitter package only (not the full LangChain framework): honors
+    # Markdown hierarchy, then recursively splits paragraphs/sentences/words.
+    "langchain-text-splitters>=1.1.2,<2",
     "trafilatura>=2.1.0",
     # PyMuPDF4LLM converts PDF bytes -> Markdown. It is lightweight (no torch,
     # no ML models) and pulls in pymupdf transitively.

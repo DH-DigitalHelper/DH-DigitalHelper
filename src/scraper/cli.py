@@ -7,7 +7,7 @@ import json
 import time
 from pathlib import Path
 
-from . import crawl, extract, storage
+from . import chunk, crawl, extract, storage
 from .config import load_config
 
 
@@ -119,6 +119,21 @@ def _cmd_backfill(args) -> int:
     storage.init_db(conn)
     result = storage.run_backfill(
         conn, config.storage.raw_dir, batch_size=config.dedup.batch_size
+    )
+    print(json.dumps(result, indent=2))
+    conn.close()
+    return 0
+
+
+def _cmd_chunk(args) -> int:
+    config = _load(args)
+    conn = storage.connect(config.storage.db_file)
+    storage.init_db(conn)
+    result = chunk.run_chunking(
+        conn,
+        target_words=config.chunk.target_words,
+        overlap_words=config.chunk.overlap_words,
+        batch_size=config.chunk.batch_size,
     )
     print(json.dumps(result, indent=2))
     conn.close()
@@ -263,6 +278,13 @@ def build_parser() -> argparse.ArgumentParser:
         "while fetch/extract is running.",
     )
     bf.set_defaults(func=_cmd_backfill)
+
+    ch = sub.add_parser(
+        "chunk",
+        help="Synchronize structure-aware RAG chunks from present documents. "
+        "Preserves source metadata and is incremental/idempotent.",
+    )
+    ch.set_defaults(func=_cmd_chunk)
 
     d = sub.add_parser("delta", help="Emit re-index delta since a timestamp.")
     d.add_argument("--since", required=True)
