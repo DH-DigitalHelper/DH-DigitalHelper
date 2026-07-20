@@ -111,6 +111,14 @@ overlap_words = 75
 # Documents written per SQLite transaction.
 batch_size = 250
 
+# Embeddings prepared locally for a later ChromaDB upsert.
+[embedding]
+model = "jinaai/jina-embeddings-v2-base-de"
+device = "cpu"
+cpu_batch_size = 8
+gpu_batch_size = 16
+cache_dir = "data/models"
+
 [storage]
 db_file = "data/scraper.sqlite3"
 raw_dir = "data/raw"

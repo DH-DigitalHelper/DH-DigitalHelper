@@ -20,12 +20,23 @@ dependencies = [
 dhbw-scraper = "scraper.cli:main"
 
 [project.optional-dependencies]
+# Keep CPU and CUDA on the ONNX Runtime generation used by the FP32 smoke test.
+embedding-cpu = ["fastembed>=0.8,<1", "onnxruntime>=1.26,<1.27"]
+embedding-gpu = ["fastembed-gpu>=0.8,<1", "onnxruntime-gpu>=1.26,<1.27"]
 # pre-commit drives the git hooks (lint/format on commit, Conventional-Commit
 # validation, tests on push) declared in .pre-commit-config.yaml. `ruff` is pinned
 # here too so CI's `uv run ruff …` steps resolve the SAME version the
 # `ruff-pre-commit` hook manages (rev v0.8.6) — bump both in lockstep or the two
 # ruffs can format the corpus differently.
 dev = ["pytest>=9.0", "maturin>=1.7,<2", "pre-commit>=4", "ruff==0.15.22"]
+
+[tool.uv]
+conflicts = [
+    [
+        { extra = "embedding-cpu" },
+        { extra = "embedding-gpu" },
+    ],
+]
 
 [build-system]
 requires = ["maturin>=1.7,<2"]

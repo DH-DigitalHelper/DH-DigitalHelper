@@ -49,6 +49,15 @@ class ChunkConfig:
 
 
 @dataclass(frozen=True)
+class EmbeddingConfig:
+    model: str = "jinaai/jina-embeddings-v2-base-de"
+    cpu_batch_size: int = 8
+    gpu_batch_size: int = 16
+    cache_dir: Path = Path("data/models")
+    device: str = "cpu"
+
+
+@dataclass(frozen=True)
 class StorageConfig:
     db_file: Path
     raw_dir: Path
@@ -63,6 +72,7 @@ class Config:
     dedup: DedupConfig
     storage: StorageConfig
     chunk: ChunkConfig = field(default_factory=ChunkConfig)
+    embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
 
 
 def find_config(start: Path | None = None) -> Path:
@@ -103,6 +113,18 @@ def load_config(path: Path | None = None) -> Config:
     storage_raw = data["storage"]
     dedup_raw = data.get("dedup", {})
     chunk_raw = data.get("chunk", {})
+    embedding_raw = data.get("embedding", {})
+
+    embedding_model = str(
+        embedding_raw.get("model", "jinaai/jina-embeddings-v2-base-de")
+    ).strip()
+    if not embedding_model:
+        raise ValueError("embedding.model must not be empty")
+    embedding_device = str(embedding_raw.get("device", "cpu"))
+    if embedding_device not in ("cpu", "cuda"):
+        raise ValueError(
+            f"embedding.device must be 'cpu' or 'cuda'; got {embedding_device!r}"
+        )
 
     recheck = str(crawl_raw.get("recheck", "all"))
     if recheck not in RECHECK_MODES:
@@ -159,6 +181,25 @@ def load_config(path: Path | None = None) -> Config:
             batch_size=_bounded(
                 chunk_raw, "chunk", "batch_size", default=250, minimum=1
             ),
+        ),
+        embedding=EmbeddingConfig(
+            model=embedding_model,
+            cpu_batch_size=_bounded(
+                embedding_raw,
+                "embedding",
+                "cpu_batch_size",
+                default=8,
+                minimum=1,
+            ),
+            gpu_batch_size=_bounded(
+                embedding_raw,
+                "embedding",
+                "gpu_batch_size",
+                default=16,
+                minimum=1,
+            ),
+            cache_dir=resolve(embedding_raw.get("cache_dir", "data/models")),
+            device=embedding_device,
         ),
         storage=StorageConfig(
             db_file=resolve(storage_raw["db_file"]),

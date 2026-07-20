@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from scraper.config import ChunkConfig, DedupConfig, load_config
+from scraper.config import ChunkConfig, DedupConfig, EmbeddingConfig, load_config
 
 
 def test_load_config_parses_sites_and_sections(tmp_path: Path):
@@ -50,6 +50,13 @@ raw_dir = "data/raw"
     assert cfg.storage.db_file == (tmp_path / "data/db.sqlite3").resolve()
     assert cfg.storage.raw_dir == (tmp_path / "data/raw").resolve()
     assert cfg.chunk == ChunkConfig(target_words=500, overlap_words=75, batch_size=250)
+    assert cfg.embedding == EmbeddingConfig(
+        model="jinaai/jina-embeddings-v2-base-de",
+        cpu_batch_size=8,
+        gpu_batch_size=16,
+        cache_dir=(tmp_path / "data/models").resolve(),
+        device="cpu",
+    )
 
 
 def _write(tmp_path, recheck):
@@ -191,3 +198,52 @@ def test_load_config_rejects_out_of_range(tmp_path, section, body, key):
 def test_load_config_accepts_boundary_values(tmp_path, section, body):
     """0 is meaningful for the budgets (= unlimited), so the floors must not be 1."""
     load_config(_write_raw(tmp_path, **{section: body}))
+
+
+def test_load_config_parses_embedding_section(tmp_path):
+    path = _write_raw(tmp_path)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(
+            """
+[embedding]
+model = "custom/model"
+device = "cuda"
+cpu_batch_size = 3
+gpu_batch_size = 24
+cache_dir = "cache/models"
+"""
+        )
+
+    cfg = load_config(path)
+
+    assert cfg.embedding.model == "custom/model"
+    assert cfg.embedding.device == "cuda"
+    assert cfg.embedding.cpu_batch_size == 3
+    assert cfg.embedding.gpu_batch_size == 24
+    assert cfg.embedding.cache_dir == (tmp_path / "cache/models").resolve()
+
+
+def test_load_config_rejects_unknown_embedding_device(tmp_path):
+    path = _write_raw(tmp_path)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write('\n[embedding]\ndevice = "amd"\n')
+
+    with pytest.raises(ValueError, match="embedding.device"):
+        load_config(path)
+
+
+@pytest.mark.parametrize(
+    "body,key",
+    [
+        ("cpu_batch_size = 0", "embedding.cpu_batch_size"),
+        ("gpu_batch_size = 0", "embedding.gpu_batch_size"),
+        ('model = "   "', "embedding.model"),
+    ],
+)
+def test_load_config_rejects_invalid_embedding_values(tmp_path, body, key):
+    path = _write_raw(tmp_path)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(f"\n[embedding]\n{body}\n")
+
+    with pytest.raises(ValueError, match=re.escape(key)):
+        load_config(path)

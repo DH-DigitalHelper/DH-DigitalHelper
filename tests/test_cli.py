@@ -16,6 +16,7 @@ def test_parser_has_all_subcommands():
         ["dedup"],
         ["backfill"],
         ["chunk"],
+        ["embedding-smoke", "--limit", "10"],
         ["delta", "--since", "2026-01-01"],
         ["report"],
     ):
@@ -339,3 +340,70 @@ raw_dir = "raw"
     assert rc == 0
     out = capsys.readouterr().out
     assert "documents" in out
+
+
+def test_embedding_smoke_uses_config_and_operational_flags(
+    tmp_path, monkeypatch, capsys
+):
+    _write_config(tmp_path)
+    captured = {}
+
+    def fake_run_embedding_smoke(input_path, **kwargs):
+        captured.update(input=input_path, **kwargs)
+        return {
+            "status": "ok",
+            "tested_chunks": 3,
+            "dimension": 768,
+            "preview": {
+                "chunk_id": "chunk-1",
+                "text": "Beispieltext",
+                "embedding_first_10": [0.1, 0.2],
+            },
+        }
+
+    monkeypatch.setattr(cli.embedding, "run_embedding_smoke", fake_run_embedding_smoke)
+    rc = cli.main(
+        [
+            "--config",
+            str(tmp_path / "config.toml"),
+            "embedding-smoke",
+            "--device",
+            "cpu",
+            "--limit",
+            "10",
+        ]
+    )
+
+    assert rc == 0
+    assert captured["input"] == (tmp_path / "db.sqlite3").resolve()
+    assert captured["model_name"] == "jinaai/jina-embeddings-v2-base-de"
+    assert captured["device"] == "cpu"
+    assert captured["batch_size"] == 8
+    assert captured["limit"] == 10
+    output = capsys.readouterr().out
+    assert "Embedding preview:" in output
+    assert "chunk_id: chunk-1" in output
+    assert "text: Beispieltext" in output
+    assert "first 10 values: [0.1, 0.2]" in output
+    assert '"embeddings"' not in output
+
+
+def test_embedding_error_is_reported_without_traceback(tmp_path, monkeypatch, capsys):
+    _write_config(tmp_path)
+
+    def fail(*args, **kwargs):
+        raise cli.embedding.EmbeddingError("model unavailable")
+
+    monkeypatch.setattr(cli.embedding, "run_embedding_smoke", fail)
+    rc = cli.main(
+        [
+            "--config",
+            str(tmp_path / "config.toml"),
+            "embedding-smoke",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert captured.out == ""
+    assert captured.err == "embedding failed: model unavailable\n"
