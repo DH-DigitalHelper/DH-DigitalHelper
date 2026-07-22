@@ -70,3 +70,52 @@ def test_run_chunking_preserves_document_metadata_and_is_idempotent(tmp_path):
     assert row["url"] == "https://x/a"
     assert row["metadata"] == '{"author":"A"}'
     assert row["standort_id"] == 1 and row["department_id"] == 2
+
+
+def test_run_chunking_refreshes_copied_metadata_when_text_is_unchanged(tmp_path):
+    conn = storage.connect(tmp_path / "db.sqlite3")
+    storage.init_db(conn)
+    conn.execute(
+        """INSERT INTO documents (
+               id,url,site,source_type,content_sha256,title,text,markdown,lang,
+               word_count,metadata,text_sha256,present,revision,first_indexed_at,
+               updated_at
+           ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (
+            "doc-1",
+            "https://x/a",
+            "x",
+            "html",
+            "raw",
+            "Old title",
+            "alpha beta gamma",
+            "# Intro\n\nalpha beta gamma",
+            "de",
+            3,
+            '{"author":"Old"}',
+            storage.text_hash("alpha beta gamma"),
+            1,
+            1,
+            "2026-01-01",
+            "2026-01-01",
+        ),
+    )
+    conn.commit()
+    chunk.run_chunking(conn, target_words=50, overlap_words=5)
+    before = conn.execute("SELECT id, created_at FROM document_chunks").fetchone()
+
+    conn.execute(
+        "UPDATE documents SET metadata=? WHERE id=?",
+        ('{"author":"New"}', "doc-1"),
+    )
+    conn.commit()
+    refreshed = chunk.run_chunking(conn, target_words=50, overlap_words=5)
+    row = conn.execute("SELECT * FROM document_chunks").fetchone()
+
+    assert refreshed["documents"] == 0
+    assert refreshed["metadata_updated"] == 1
+    assert row["id"] == before["id"]
+    assert row["created_at"] == before["created_at"]
+    assert row["title"] == "Old title"
+    assert row["metadata"] == '{"author":"New"}'
+    conn.close()

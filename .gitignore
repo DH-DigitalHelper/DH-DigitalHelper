@@ -8,6 +8,9 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 
+#chroma
+data/chroma/
+
 # uv
 # (uv.lock IS committed — do not ignore it)
 

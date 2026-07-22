@@ -130,6 +130,8 @@ CREATE TABLE IF NOT EXISTS document_chunks (
     char_count           INTEGER NOT NULL,
     content_sha256       TEXT NOT NULL,
     document_text_sha256 TEXT NOT NULL,
+    document_content_sha256 TEXT NOT NULL,
+    document_metadata_sha256 TEXT NOT NULL,
     document_revision    INTEGER NOT NULL,
     metadata             TEXT,
     standort_id          INTEGER,
@@ -264,6 +266,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
             conn.execute(f"ALTER TABLE documents ADD COLUMN {col} INTEGER")
     if cols and "classify_meta" not in cols:
         conn.execute("ALTER TABLE documents ADD COLUMN classify_meta TEXT")
+    chunk_cols = {r["name"] for r in conn.execute("PRAGMA table_info(document_chunks)")}
+    for col in ("document_content_sha256", "document_metadata_sha256"):
+        if chunk_cols and col not in chunk_cols:
+            conn.execute(f"ALTER TABLE document_chunks ADD COLUMN {col} TEXT")
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_documents_standort ON documents(standort_id)"
     )

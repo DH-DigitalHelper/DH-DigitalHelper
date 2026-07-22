@@ -3,7 +3,13 @@ from pathlib import Path
 
 import pytest
 
-from scraper.config import ChunkConfig, DedupConfig, EmbeddingConfig, load_config
+from scraper.config import (
+    ChromaConfig,
+    ChunkConfig,
+    DedupConfig,
+    EmbeddingConfig,
+    load_config,
+)
 
 
 def test_load_config_parses_sites_and_sections(tmp_path: Path):
@@ -56,6 +62,26 @@ raw_dir = "data/raw"
         gpu_batch_size=16,
         cache_dir=(tmp_path / "data/models").resolve(),
         device="cpu",
+    )
+    assert cfg.chroma == ChromaConfig(path=(tmp_path / "data/chroma").resolve())
+
+
+def test_load_config_parses_chroma_section(tmp_path):
+    path = _write_raw(tmp_path)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(
+            '\n[chroma]\nmode="server"\nhost="chroma.internal"\nport=9000\n'
+            'path="vectors"\ncollection="campus"\n'
+        )
+
+    cfg = load_config(path)
+
+    assert cfg.chroma == ChromaConfig(
+        mode="server",
+        host="chroma.internal",
+        port=9000,
+        path=(tmp_path / "vectors").resolve(),
+        collection="campus",
     )
 
 

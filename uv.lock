@@ -4,6 +4,12 @@ requires-python = ">=3.14"
 conflicts = [[
     { package = "dhbw-scraper", extra = "embedding-cpu" },
     { package = "dhbw-scraper", extra = "embedding-gpu" },
+], [
+    { package = "dhbw-scraper", extra = "chroma" },
+    { package = "dhbw-scraper", extra = "chroma-client" },
+], [
+    { package = "dhbw-scraper", extra = "chroma" },
+    { package = "dhbw-scraper", extra = "embedding-gpu" },
 ]]
 
 [[package]]
@@ -189,7 +195,7 @@ name = "build"
 version = "1.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "os_name == 'nt' or (extra == 'extra-12-dhbw-scraper-embedding-cpu' and extra == 'extra-12-dhbw-scraper-embedding-gpu')" },
+    { name = "colorama", marker = "os_name == 'nt'" },
     { name = "packaging" },
     { name = "pyproject-hooks" },
 ]
@@ -265,8 +271,8 @@ dependencies = [
     { name = "kubernetes" },
     { name = "mmh3" },
     { name = "numpy" },
-    { name = "onnxruntime", version = "1.26.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-12-dhbw-scraper-embedding-cpu'" },
-    { name = "onnxruntime", version = "1.27.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-12-dhbw-scraper-embedding-gpu' or extra != 'extra-12-dhbw-scraper-embedding-cpu'" },
+    { name = "onnxruntime", version = "1.26.0", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-12-dhbw-scraper-chroma' and extra == 'extra-12-dhbw-scraper-chroma-client') or (extra == 'extra-12-dhbw-scraper-chroma' and extra == 'extra-12-dhbw-scraper-embedding-cpu') or (extra == 'extra-12-dhbw-scraper-chroma' and extra == 'extra-12-dhbw-scraper-embedding-gpu') or (extra == 'extra-12-dhbw-scraper-embedding-cpu' and extra == 'extra-12-dhbw-scraper-embedding-gpu')" },
+    { name = "onnxruntime", version = "1.27.0", source = { registry = "https://pypi.org/simple" }, marker = "(extra == 'extra-12-dhbw-scraper-chroma' and extra == 'extra-12-dhbw-scraper-chroma-client') or (extra == 'extra-12-dhbw-scraper-chroma' and extra != 'extra-12-dhbw-scraper-embedding-cpu') or (extra != 'extra-12-dhbw-scraper-chroma-client' and extra == 'extra-12-dhbw-scraper-embedding-cpu' and extra == 'extra-12-dhbw-scraper-embedding-gpu') or (extra != 'extra-12-dhbw-scraper-chroma' and extra == 'extra-12-dhbw-scraper-embedding-cpu' and extra == 'extra-12-dhbw-scraper-embedding-gpu')" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-otlp-proto-grpc" },
     { name = "opentelemetry-sdk" },
@@ -283,7 +289,7 @@ dependencies = [
     { name = "tqdm" },
     { name = "typer" },
     { name = "typing-extensions" },
-    { name = "uvicorn", extra = ["standard"] },
+    { name = "uvicorn", extra = ["standard"], marker = "extra == 'extra-12-dhbw-scraper-chroma' or (extra == 'extra-12-dhbw-scraper-embedding-cpu' and extra == 'extra-12-dhbw-scraper-embedding-gpu')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/92/d1/5e33b26985f0c7046a0be1cee2158ada1748ee700d2545057fde1468d74d/chromadb-1.5.9.tar.gz", hash = "sha256:5c20e62a455c28bacac927f26116a73fd8e1799e0d908be8e8a4f02197a54731", size = 2595635, upload-time = "2026-05-05T05:54:51.713Z" }
 wheels = [
@@ -295,11 +301,36 @@ wheels = [
 ]
 
 [[package]]
+name = "chromadb-client"
+version = "1.5.9"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpx" },
+    { name = "jsonschema" },
+    { name = "numpy" },
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-exporter-otlp-proto-grpc" },
+    { name = "opentelemetry-sdk" },
+    { name = "orjson" },
+    { name = "overrides" },
+    { name = "pybase64" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+    { name = "pyyaml" },
+    { name = "tenacity" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/73/3b/47c02df4d56883f1dee3548d03a52e75ab1d1c282030ffaf32031bb46569/chromadb_client-1.5.9.tar.gz", hash = "sha256:5e481d51ce6634fe54230b0411bf1ff257607ace222fc64c669e27874c12175b", size = 22112301, upload-time = "2026-05-05T05:36:19.069Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1b/0c/4ae7985586638bcaf5459f6cad5e81704317df1946419c8a16fb8f9c1fbc/chromadb_client-1.5.9-py3-none-any.whl", hash = "sha256:3200b9f79389974f9a35bbcdd0657289f5352da3a7d0d37c63194283e02d0605", size = 798976, upload-time = "2026-05-05T05:36:15.966Z" },
+]
+
+[[package]]
 name = "click"
 version = "8.4.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-12-dhbw-scraper-embedding-cpu' and extra == 'extra-12-dhbw-scraper-embedding-gpu')" },
+    { name = "colorama", marker = "(sys_platform == 'win32' and extra == 'extra-12-dhbw-scraper-chroma') or (sys_platform == 'win32' and extra == 'extra-12-dhbw-scraper-embedding-cpu') or (sys_platform == 'win32' and extra == 'extra-12-dhbw-scraper-embedding-gpu') or (extra == 'extra-12-dhbw-scraper-chroma' and extra == 'extra-12-dhbw-scraper-chroma-client') or (extra == 'extra-12-dhbw-scraper-chroma' and extra == 'extra-12-dhbw-scraper-embedding-gpu') or (extra == 'extra-12-dhbw-scraper-embedding-cpu' and extra == 'extra-12-dhbw-scraper-embedding-gpu')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/76/d4/81420972a676e8ffea40450d8c8c92943e7218a78fe9b64359836cc9876b/click-8.4.2.tar.gz", hash = "sha256:9a6cea6e60b17ebe0a44c5cc636d94f09bd66142c1cd7d8b4cd731c4917a15f6", size = 338000, upload-time = "2026-06-24T17:45:15.148Z" }
 wheels = [
@@ -356,8 +387,13 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-dev = [
+chroma = [
     { name = "chromadb" },
+]
+chroma-client = [
+    { name = "chromadb-client" },
+]
+dev = [
     { name = "maturin" },
     { name = "pre-commit" },
     { name = "pytest" },
@@ -374,7 +410,8 @@ embedding-gpu = [
 
 [package.metadata]
 requires-dist = [
-    { name = "chromadb", marker = "extra == 'dev'", specifier = ">=1.3,<2" },
+    { name = "chromadb", marker = "extra == 'chroma'", specifier = ">=1.3,<2" },
+    { name = "chromadb-client", marker = "extra == 'chroma-client'", specifier = ">=1.3,<2" },
     { name = "fastembed", marker = "extra == 'embedding-cpu'", specifier = ">=0.8,<1" },
     { name = "fastembed-gpu", marker = "extra == 'embedding-gpu'", specifier = ">=0.8,<1" },
     { name = "langchain-text-splitters", specifier = ">=1.1.2,<2" },
@@ -383,12 +420,12 @@ requires-dist = [
     { name = "onnxruntime-gpu", marker = "extra == 'embedding-gpu'", specifier = ">=1.26,<1.27" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4" },
     { name = "py3langid", specifier = ">=0.3" },
-    { name = "pymupdf4llm", specifier = ">=0.3.4" },
+    { name = "pymupdf4llm", specifier = ">=0.3.4,<1" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.15.22" },
     { name = "trafilatura", specifier = ">=2.1.0" },
 ]
-provides-extras = ["embedding-cpu", "embedding-gpu", "dev"]
+provides-extras = ["embedding-cpu", "embedding-gpu", "chroma", "chroma-client", "dev"]
 
 [[package]]
 name = "distlib"
@@ -666,7 +703,7 @@ dependencies = [
     { name = "click" },
     { name = "filelock" },
     { name = "fsspec" },
-    { name = "hf-xet", marker = "platform_machine == 'AMD64' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'arm64' or platform_machine == 'x86_64' or (extra == 'extra-12-dhbw-scraper-embedding-cpu' and extra == 'extra-12-dhbw-scraper-embedding-gpu')" },
+    { name = "hf-xet", marker = "(platform_machine == 'AMD64' and extra == 'extra-12-dhbw-scraper-chroma') or (platform_machine == 'AMD64' and extra == 'extra-12-dhbw-scraper-embedding-cpu') or (platform_machine == 'AMD64' and extra == 'extra-12-dhbw-scraper-embedding-gpu') or (platform_machine == 'aarch64' and extra == 'extra-12-dhbw-scraper-chroma') or (platform_machine == 'aarch64' and extra == 'extra-12-dhbw-scraper-embedding-cpu') or (platform_machine == 'aarch64' and extra == 'extra-12-dhbw-scraper-embedding-gpu') or (platform_machine == 'amd64' and extra == 'extra-12-dhbw-scraper-chroma') or (platform_machine == 'amd64' and extra == 'extra-12-dhbw-scraper-embedding-cpu') or (platform_machine == 'amd64' and extra == 'extra-12-dhbw-scraper-embedding-gpu') or (platform_machine == 'arm64' and extra == 'extra-12-dhbw-scraper-chroma') or (platform_machine == 'arm64' and extra == 'extra-12-dhbw-scraper-embedding-cpu') or (platform_machine == 'arm64' and extra == 'extra-12-dhbw-scraper-embedding-gpu') or (platform_machine == 'x86_64' and extra == 'extra-12-dhbw-scraper-chroma') or (platform_machine == 'x86_64' and extra == 'extra-12-dhbw-scraper-embedding-cpu') or (platform_machine == 'x86_64' and extra == 'extra-12-dhbw-scraper-embedding-gpu') or (extra == 'extra-12-dhbw-scraper-chroma' and extra == 'extra-12-dhbw-scraper-chroma-client') or (extra == 'extra-12-dhbw-scraper-chroma' and extra == 'extra-12-dhbw-scraper-embedding-gpu') or (extra == 'extra-12-dhbw-scraper-embedding-cpu' and extra == 'extra-12-dhbw-scraper-embedding-gpu')" },
     { name = "httpx" },
     { name = "packaging" },
     { name = "pyyaml" },
@@ -847,7 +884,7 @@ dependencies = [
     { name = "anyio" },
     { name = "distro" },
     { name = "httpx" },
-    { name = "orjson", marker = "platform_python_implementation != 'PyPy' or (extra == 'extra-12-dhbw-scraper-embedding-cpu' and extra == 'extra-12-dhbw-scraper-embedding-gpu')" },
+    { name = "orjson", marker = "platform_python_implementation != 'PyPy' or (extra == 'extra-12-dhbw-scraper-chroma' and extra == 'extra-12-dhbw-scraper-chroma-client') or (extra == 'extra-12-dhbw-scraper-chroma' and extra == 'extra-12-dhbw-scraper-embedding-gpu') or (extra == 'extra-12-dhbw-scraper-embedding-cpu' and extra == 'extra-12-dhbw-scraper-embedding-gpu')" },
     { name = "packaging" },
     { name = "pydantic" },
     { name = "requests" },
@@ -869,8 +906,8 @@ name = "loguru"
 version = "0.7.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32'" },
-    { name = "win32-setctime", marker = "sys_platform == 'win32'" },
+    { name = "colorama", marker = "(sys_platform != 'win32' and extra == 'extra-12-dhbw-scraper-chroma' and extra == 'extra-12-dhbw-scraper-embedding-gpu') or (sys_platform == 'win32' and extra != 'extra-12-dhbw-scraper-chroma-client' and extra == 'extra-12-dhbw-scraper-embedding-cpu') or (sys_platform == 'win32' and extra != 'extra-12-dhbw-scraper-chroma' and extra == 'extra-12-dhbw-scraper-embedding-cpu') or (sys_platform == 'win32' and extra != 'extra-12-dhbw-scraper-embedding-cpu' and extra == 'extra-12-dhbw-scraper-embedding-gpu') or (extra == 'extra-12-dhbw-scraper-chroma' and extra == 'extra-12-dhbw-scraper-chroma-client') or (extra != 'extra-12-dhbw-scraper-chroma' and extra == 'extra-12-dhbw-scraper-embedding-cpu' and extra == 'extra-12-dhbw-scraper-embedding-gpu') or (extra == 'extra-12-dhbw-scraper-chroma' and extra != 'extra-12-dhbw-scraper-embedding-cpu' and extra == 'extra-12-dhbw-scraper-embedding-gpu')" },
+    { name = "win32-setctime", marker = "(sys_platform != 'win32' and extra == 'extra-12-dhbw-scraper-chroma' and extra == 'extra-12-dhbw-scraper-embedding-gpu') or (sys_platform == 'win32' and extra != 'extra-12-dhbw-scraper-chroma-client' and extra == 'extra-12-dhbw-scraper-embedding-cpu') or (sys_platform == 'win32' and extra != 'extra-12-dhbw-scraper-chroma' and extra == 'extra-12-dhbw-scraper-embedding-cpu') or (sys_platform == 'win32' and extra != 'extra-12-dhbw-scraper-embedding-cpu' and extra == 'extra-12-dhbw-scraper-embedding-gpu') or (extra == 'extra-12-dhbw-scraper-chroma' and extra == 'extra-12-dhbw-scraper-chroma-client') or (extra != 'extra-12-dhbw-scraper-chroma' and extra == 'extra-12-dhbw-scraper-embedding-cpu' and extra == 'extra-12-dhbw-scraper-embedding-gpu') or (extra == 'extra-12-dhbw-scraper-chroma' and extra != 'extra-12-dhbw-scraper-embedding-cpu' and extra == 'extra-12-dhbw-scraper-embedding-gpu')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/3a/05/a1dae3dffd1116099471c643b8924f5aa6524411dc6c63fdae648c4f1aca/loguru-0.7.3.tar.gz", hash = "sha256:19480589e77d47b8d85b2c827ad95d49bf31b0dcde16593892eb51dd18706eb6", size = 63559, upload-time = "2024-12-06T11:20:56.608Z" }
 wheels = [
@@ -1071,15 +1108,6 @@ wheels = [
 ]
 
 [[package]]
-name = "networkx"
-version = "3.6.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/6a/51/63fe664f3908c97be9d2e4f1158eb633317598cfa6e1fc14af5383f17512/networkx-3.6.1.tar.gz", hash = "sha256:26b7c357accc0c8cde558ad486283728b65b6a95d85ee1cd66bafab4c8168509", size = 2517025, upload-time = "2025-12-08T17:02:39.908Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/9e/c9/b2622292ea83fbb4ec318f5b9ab867d0a28ab43c5717bb85b0a5f6b3b0a4/networkx-3.6.1-py3-none-any.whl", hash = "sha256:d47fbf302e7d9cbbb9e2555a0d267983d2aa476bac30e90dfbe5669bd57f3762", size = 2068504, upload-time = "2025-12-08T17:02:38.159Z" },
-]
-
-[[package]]
 name = "nodeenv"
 version = "1.10.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1131,10 +1159,10 @@ name = "onnxruntime"
 version = "1.26.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "flatbuffers", marker = "extra == 'extra-12-dhbw-scraper-embedding-cpu'" },
-    { name = "numpy", marker = "extra == 'extra-12-dhbw-scraper-embedding-cpu'" },
-    { name = "packaging", marker = "extra == 'extra-12-dhbw-scraper-embedding-cpu'" },
-    { name = "protobuf", marker = "extra == 'extra-12-dhbw-scraper-embedding-cpu'" },
+    { name = "flatbuffers", marker = "(extra == 'extra-12-dhbw-scraper-chroma' and extra == 'extra-12-dhbw-scraper-chroma-client') or (extra != 'extra-12-dhbw-scraper-chroma-client' and extra == 'extra-12-dhbw-scraper-embedding-cpu') or (extra != 'extra-12-dhbw-scraper-chroma' and extra == 'extra-12-dhbw-scraper-embedding-cpu') or (extra == 'extra-12-dhbw-scraper-chroma' and extra != 'extra-12-dhbw-scraper-embedding-cpu' and extra == 'extra-12-dhbw-scraper-embedding-gpu')" },
+    { name = "numpy", marker = "(extra == 'extra-12-dhbw-scraper-chroma' and extra == 'extra-12-dhbw-scraper-chroma-client') or (extra != 'extra-12-dhbw-scraper-chroma-client' and extra == 'extra-12-dhbw-scraper-embedding-cpu') or (extra != 'extra-12-dhbw-scraper-chroma' and extra == 'extra-12-dhbw-scraper-embedding-cpu') or (extra == 'extra-12-dhbw-scraper-chroma' and extra != 'extra-12-dhbw-scraper-embedding-cpu' and extra == 'extra-12-dhbw-scraper-embedding-gpu')" },
+    { name = "packaging", marker = "(extra == 'extra-12-dhbw-scraper-chroma' and extra == 'extra-12-dhbw-scraper-chroma-client') or (extra != 'extra-12-dhbw-scraper-chroma-client' and extra == 'extra-12-dhbw-scraper-embedding-cpu') or (extra != 'extra-12-dhbw-scraper-chroma' and extra == 'extra-12-dhbw-scraper-embedding-cpu') or (extra == 'extra-12-dhbw-scraper-chroma' and extra != 'extra-12-dhbw-scraper-embedding-cpu' and extra == 'extra-12-dhbw-scraper-embedding-gpu')" },
+    { name = "protobuf", marker = "(extra == 'extra-12-dhbw-scraper-chroma' and extra == 'extra-12-dhbw-scraper-chroma-client') or (extra != 'extra-12-dhbw-scraper-chroma-client' and extra == 'extra-12-dhbw-scraper-embedding-cpu') or (extra != 'extra-12-dhbw-scraper-chroma' and extra == 'extra-12-dhbw-scraper-embedding-cpu') or (extra == 'extra-12-dhbw-scraper-chroma' and extra != 'extra-12-dhbw-scraper-embedding-cpu' and extra == 'extra-12-dhbw-scraper-embedding-gpu')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/40/89/17546c1c20f6bfc3ae41c22152378a26edfea918af3129e2139dcd7c99f3/onnxruntime-1.26.0-cp314-cp314-macosx_14_0_arm64.whl", hash = "sha256:33a791f31432a3af1a96db5e54818b37aba5e5eefc2e6af5794c10a9118a9993", size = 18019724, upload-time = "2026-05-08T19:07:30.723Z" },
@@ -1151,10 +1179,10 @@ name = "onnxruntime"
 version = "1.27.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "flatbuffers", marker = "extra == 'extra-12-dhbw-scraper-embedding-gpu' or extra != 'extra-12-dhbw-scraper-embedding-cpu'" },
-    { name = "numpy", marker = "extra == 'extra-12-dhbw-scraper-embedding-gpu' or extra != 'extra-12-dhbw-scraper-embedding-cpu'" },
-    { name = "packaging", marker = "extra == 'extra-12-dhbw-scraper-embedding-gpu' or extra != 'extra-12-dhbw-scraper-embedding-cpu'" },
-    { name = "protobuf", marker = "extra == 'extra-12-dhbw-scraper-embedding-gpu' or extra != 'extra-12-dhbw-scraper-embedding-cpu'" },
+    { name = "flatbuffers", marker = "extra != 'extra-12-dhbw-scraper-embedding-cpu'" },
+    { name = "numpy", marker = "extra != 'extra-12-dhbw-scraper-embedding-cpu'" },
+    { name = "packaging", marker = "extra != 'extra-12-dhbw-scraper-embedding-cpu'" },
+    { name = "protobuf", marker = "extra != 'extra-12-dhbw-scraper-embedding-cpu'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/3a/37/48ab79c39b58a7c9f6f5aac1fa0ff2b993eb2643393d6ed9e839ddb6f347/onnxruntime-1.27.0-cp314-cp314-macosx_14_0_arm64.whl", hash = "sha256:0874edc171f470fc4dd2bbb60bc0989612ed1a8b89b365cda016630a93227f13", size = 18433941, upload-time = "2026-06-15T22:42:58.867Z" },
@@ -1212,7 +1240,7 @@ version = "1.44.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "googleapis-common-protos" },
-    { name = "grpcio" },
+    { name = "grpcio", marker = "extra == 'extra-12-dhbw-scraper-chroma' or extra == 'extra-12-dhbw-scraper-chroma-client' or (extra == 'extra-12-dhbw-scraper-embedding-cpu' and extra == 'extra-12-dhbw-scraper-embedding-gpu')" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-otlp-proto-common" },
     { name = "opentelemetry-proto" },
@@ -1624,37 +1652,16 @@ wheels = [
 ]
 
 [[package]]
-name = "pymupdf-layout"
-version = "1.28.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "networkx" },
-    { name = "numpy" },
-    { name = "onnxruntime", version = "1.26.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-12-dhbw-scraper-embedding-cpu'" },
-    { name = "onnxruntime", version = "1.27.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-12-dhbw-scraper-embedding-gpu' or extra != 'extra-12-dhbw-scraper-embedding-cpu'" },
-    { name = "pymupdf" },
-    { name = "pyyaml" },
-]
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/19/fe/eb3c960cbc6e5be5acffbd6811f281ba6e176a841b592858e25e28ac0a97/pymupdf_layout-1.28.0-cp310-abi3-macosx_10_9_x86_64.whl", hash = "sha256:dc4e2f4b48951633607020d80de0bed00b2450eafd56ecda224f611c19e5f9e8", size = 41567727, upload-time = "2026-06-29T09:05:35.532Z" },
-    { url = "https://files.pythonhosted.org/packages/60/14/9a330a7d77cbe05fa9e97d9f2aa11d627a556eec795eee08bcbeedc16ac6/pymupdf_layout-1.28.0-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:911aa80b3ddcca2ddbc1df5fc59f652935b392052251397e75963d3de9559dbc", size = 41566722, upload-time = "2026-06-29T09:06:01.73Z" },
-    { url = "https://files.pythonhosted.org/packages/0b/58/2607c539540ce261d05d2677c0d839b78a4191d328accc1d0e9385a06799/pymupdf_layout-1.28.0-cp310-abi3-manylinux_2_28_aarch64.whl", hash = "sha256:35b98e1ce9382709622e03c34b57d1b51a155ceb3d9122f11f8e9b2aa4f1ee55", size = 41576718, upload-time = "2026-06-29T09:06:29.258Z" },
-    { url = "https://files.pythonhosted.org/packages/56/3a/dc5ab8573300b0f1b7fb996aa33ce4683c27b190a8e8be6f18d80714183d/pymupdf_layout-1.28.0-cp310-abi3-manylinux_2_28_x86_64.whl", hash = "sha256:a6bd191301570a0863d6e04418324e823d0fd7f18b4fe1db2b9e53e715d2f8ff", size = 41578107, upload-time = "2026-06-29T09:06:54.224Z" },
-    { url = "https://files.pythonhosted.org/packages/b8/73/79af357b1cacb02ea9e054b5b368dee5a0ccd7168c6229e54e1a70e74c53/pymupdf_layout-1.28.0-cp310-abi3-win_amd64.whl", hash = "sha256:07195ec4ad6317dd70bf1d4eca44d9dd93231d8db3648ab9f4b771557a59ea48", size = 41577085, upload-time = "2026-06-29T09:07:20.443Z" },
-]
-
-[[package]]
 name = "pymupdf4llm"
-version = "1.28.0"
+version = "0.3.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pymupdf" },
-    { name = "pymupdf-layout" },
     { name = "tabulate" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/cb/15/36ff769451f5e62cbca89c3b59739e625565df7140778bd6dd11db32caea/pymupdf4llm-1.28.0.tar.gz", hash = "sha256:713595be867f7cb52893e57aa1b058d5721d017b2ba7b6a3d185a05e15978852", size = 2072657, upload-time = "2026-06-29T09:08:52.23Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a6/9b/97c4fad642f0147af3e884126d80635a1fae02c836fde9c22f0efc053254/pymupdf4llm-0.3.4.tar.gz", hash = "sha256:48d396a5fb3c14351493c7f1dd25b2a843efdbdc4526e489ee100643a2cebec1", size = 74956, upload-time = "2026-02-14T10:22:24.423Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e8/1a/8b997bbeeaf63286d7179fe4cdc29dcc328105f2558f01394370dc0fcaa9/pymupdf4llm-1.28.0-py3-none-any.whl", hash = "sha256:6e74e8666806cc6040d9159053130f0761d21ef17e2a9c938df8108f15160cb3", size = 164656, upload-time = "2026-06-29T09:05:11.914Z" },
+    { url = "https://files.pythonhosted.org/packages/2b/67/4394de2e5967d80a9b01ec323049163410b3553185c42dea0c346fa27a41/pymupdf4llm-0.3.4-py3-none-any.whl", hash = "sha256:0517492f82af978541162ade20fc54649cdca52acd478e33b97cb6171d69956f", size = 78669, upload-time = "2026-02-14T10:22:27.096Z" },
 ]
 
 [[package]]
@@ -1680,7 +1687,7 @@ name = "pytest"
 version = "9.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-12-dhbw-scraper-embedding-cpu' and extra == 'extra-12-dhbw-scraper-embedding-gpu')" },
+    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-12-dhbw-scraper-chroma' and extra == 'extra-12-dhbw-scraper-chroma-client') or (extra == 'extra-12-dhbw-scraper-chroma' and extra == 'extra-12-dhbw-scraper-embedding-gpu') or (extra == 'extra-12-dhbw-scraper-embedding-cpu' and extra == 'extra-12-dhbw-scraper-embedding-gpu')" },
     { name = "iniconfig" },
     { name = "packaging" },
     { name = "pluggy" },
@@ -2043,7 +2050,7 @@ name = "tqdm"
 version = "4.69.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-12-dhbw-scraper-embedding-cpu' and extra == 'extra-12-dhbw-scraper-embedding-gpu')" },
+    { name = "colorama", marker = "(sys_platform == 'win32' and extra == 'extra-12-dhbw-scraper-chroma') or (sys_platform == 'win32' and extra == 'extra-12-dhbw-scraper-embedding-cpu') or (sys_platform == 'win32' and extra == 'extra-12-dhbw-scraper-embedding-gpu') or (extra == 'extra-12-dhbw-scraper-chroma' and extra == 'extra-12-dhbw-scraper-chroma-client') or (extra == 'extra-12-dhbw-scraper-chroma' and extra == 'extra-12-dhbw-scraper-embedding-gpu') or (extra == 'extra-12-dhbw-scraper-embedding-cpu' and extra == 'extra-12-dhbw-scraper-embedding-gpu')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/8c/69/40407dfc835517f058b603dbf37a6df094d8582b015a51eddc988febbcb7/tqdm-4.69.0.tar.gz", hash = "sha256:700c5e85dcd5f009dd6222588a29180a193a748247a5d855b4d67db93d79a53b", size = 792569, upload-time = "2026-07-17T18:09:06.2Z" }
 wheels = [
@@ -2074,7 +2081,7 @@ version = "0.27.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "annotated-doc" },
-    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-12-dhbw-scraper-embedding-cpu' and extra == 'extra-12-dhbw-scraper-embedding-gpu')" },
+    { name = "colorama", marker = "sys_platform == 'win32'" },
     { name = "rich" },
     { name = "shellingham" },
 ]
@@ -2118,7 +2125,7 @@ name = "tzlocal"
 version = "5.4.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "tzdata", marker = "sys_platform == 'win32' or (extra == 'extra-12-dhbw-scraper-embedding-cpu' and extra == 'extra-12-dhbw-scraper-embedding-gpu')" },
+    { name = "tzdata", marker = "sys_platform == 'win32' or (extra == 'extra-12-dhbw-scraper-chroma' and extra == 'extra-12-dhbw-scraper-chroma-client') or (extra == 'extra-12-dhbw-scraper-chroma' and extra == 'extra-12-dhbw-scraper-embedding-gpu') or (extra == 'extra-12-dhbw-scraper-embedding-cpu' and extra == 'extra-12-dhbw-scraper-embedding-gpu')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/81/5b/879b2f932adfa7a053c360d50bc896c977fa6426109185f7c12ebdd0cb9d/tzlocal-5.4.4.tar.gz", hash = "sha256:8dbb8660838688a7b6ba4fed31d18dedf842afb4d47ca050d6d891c2c15f3be4", size = 31170, upload-time = "2026-06-29T08:03:40.026Z" }
 wheels = [
@@ -2189,7 +2196,7 @@ standard = [
     { name = "httptools" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
-    { name = "uvloop", marker = "(platform_python_implementation != 'PyPy' and sys_platform != 'cygwin' and sys_platform != 'win32') or (platform_python_implementation == 'PyPy' and extra == 'extra-12-dhbw-scraper-embedding-cpu' and extra == 'extra-12-dhbw-scraper-embedding-gpu') or (sys_platform == 'cygwin' and extra == 'extra-12-dhbw-scraper-embedding-cpu' and extra == 'extra-12-dhbw-scraper-embedding-gpu') or (sys_platform == 'win32' and extra == 'extra-12-dhbw-scraper-embedding-cpu' and extra == 'extra-12-dhbw-scraper-embedding-gpu')" },
+    { name = "uvloop", marker = "platform_python_implementation != 'PyPy' and sys_platform != 'cygwin' and sys_platform != 'win32'" },
     { name = "watchfiles" },
     { name = "websockets" },
 ]

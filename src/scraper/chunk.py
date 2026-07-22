@@ -15,7 +15,7 @@ from langchain_text_splitters import (
 
 from .storage import normalize_text, text_hash, write_txn
 
-CHUNKER_VERSION = 3
+CHUNKER_VERSION = 5
 _HEADING = re.compile(r"^(#{1,6})\s+(.+?)\s*#*\s*$")
 _WORDS = re.compile(r"\S+")
 _LINK = re.compile(r"!?\[([^]]*)\]\([^)]*\)")
@@ -141,9 +141,41 @@ def _fallback_chunks(
     ]
 
 
-def _chunk_id(document_id: str, document_hash: str, index: int) -> str:
-    raw = f"{document_id}:{document_hash}:{index}:{CHUNKER_VERSION}".encode()
+def _chunk_id(document_id: str, content_hash: str, index: int) -> str:
+    raw = f"{document_id}:{content_hash}:{index}:{CHUNKER_VERSION}".encode()
     return hashlib.sha256(raw).hexdigest()[:24]
+
+
+def _state_hash(values: list[object]) -> str:
+    raw = json.dumps(values, ensure_ascii=False, separators=(",", ":")).encode()
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _document_content_hash(row: sqlite3.Row, document_hash: str) -> str:
+    """Hash only fields that can alter rendered chunk text or boundaries."""
+    return _state_hash([document_hash, row["markdown"], row["title"]])
+
+
+def _document_metadata_hash(row: sqlite3.Row) -> str:
+    """Hash copied retrieval metadata without invalidating chunk content."""
+    return _state_hash(
+        [
+            row[key]
+            for key in (
+                "url",
+                "title",
+                "site",
+                "source_type",
+                "lang",
+                "revision",
+                "metadata",
+                "standort_id",
+                "department_id",
+                "study_program_id",
+                "classify_meta",
+            )
+        ]
+    )
 
 
 def run_chunking(
@@ -159,12 +191,16 @@ def run_chunking(
     existing = {
         row["document_id"]: (
             row["document_text_sha256"],
+            row["document_content_sha256"],
+            row["document_metadata_sha256"],
             row["chunker_version"],
             row["target_words"],
             row["overlap_words"],
         )
         for row in conn.execute(
             """SELECT document_id, MIN(document_text_sha256) document_text_sha256,
+                      MIN(document_content_sha256) document_content_sha256,
+                      MIN(document_metadata_sha256) document_metadata_sha256,
                       MIN(chunker_version) chunker_version,
                       MIN(target_words) target_words, MIN(overlap_words) overlap_words
                FROM document_chunks GROUP BY document_id"""
@@ -179,18 +215,28 @@ def run_chunking(
     ).rowcount
     conn.commit()
 
-    result = {"documents": 0, "unchanged": 0, "chunks": 0, "deleted": deleted}
+    result = {
+        "documents": 0,
+        "metadata_updated": 0,
+        "unchanged": 0,
+        "chunks": 0,
+        "deleted": deleted,
+    }
     last_id = ""
     now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     while True:
         states = conn.execute(
-            """SELECT id, text_sha256 FROM documents
+            """SELECT id, text_sha256, markdown, url, title, site, source_type,
+                      lang, revision, metadata, standort_id, department_id,
+                      study_program_id, classify_meta
+               FROM documents
                WHERE present = 1 AND id > ? ORDER BY id LIMIT ?""",
             (last_id, batch_size),
         ).fetchall()
         if not states:
             break
         changed_ids: list[str] = []
+        metadata_ids: list[str] = []
         for state in states:
             document_hash = state["text_sha256"]
             if document_hash is None:
@@ -198,28 +244,65 @@ def run_chunking(
                     "SELECT text FROM documents WHERE id = ?", (state["id"],)
                 ).fetchone()["text"]
                 document_hash = text_hash(text)
-            signature = (
+            content_signature = (
                 document_hash,
+                _document_content_hash(state, document_hash),
                 CHUNKER_VERSION,
                 target_words,
                 overlap_words,
             )
-            if existing.get(state["id"]) == signature:
-                result["unchanged"] += 1
-            else:
+            current = existing.get(state["id"])
+            if (
+                current is None
+                or (current[0], current[1], current[3], current[4], current[5])
+                != content_signature
+            ):
                 changed_ids.append(state["id"])
-        placeholders = ",".join("?" for _ in changed_ids)
+            elif current[2] != _document_metadata_hash(state):
+                metadata_ids.append(state["id"])
+            else:
+                result["unchanged"] += 1
+        action_ids = changed_ids + metadata_ids
+        placeholders = ",".join("?" for _ in action_ids)
         rows = (
             conn.execute(
                 f"SELECT * FROM documents WHERE id IN ({placeholders}) ORDER BY id",
-                changed_ids,
+                action_ids,
             ).fetchall()
-            if changed_ids
+            if action_ids
             else []
         )
         with write_txn(conn):
             for row in rows:
                 document_hash = row["text_sha256"] or text_hash(row["text"])
+                content_hash = _document_content_hash(row, document_hash)
+                metadata_hash = _document_metadata_hash(row)
+                if row["id"] in metadata_ids:
+                    conn.execute(
+                        """UPDATE document_chunks SET
+                               url=?, title=?, site=?, source_type=?, lang=?,
+                               document_revision=?, metadata=?, standort_id=?,
+                               department_id=?, study_program_id=?, classify_meta=?,
+                               document_metadata_sha256=?
+                           WHERE document_id=?""",
+                        (
+                            row["url"],
+                            row["title"],
+                            row["site"],
+                            row["source_type"],
+                            row["lang"],
+                            row["revision"],
+                            row["metadata"],
+                            row["standort_id"],
+                            row["department_id"],
+                            row["study_program_id"],
+                            row["classify_meta"],
+                            metadata_hash,
+                            row["id"],
+                        ),
+                    )
+                    result["metadata_updated"] += 1
+                    continue
                 conn.execute(
                     "DELETE FROM document_chunks WHERE document_id = ?", (row["id"],)
                 )
@@ -237,7 +320,7 @@ def run_chunking(
                 for index, (plain, markdown, headings) in enumerate(chunks):
                     payload.append(
                         (
-                            _chunk_id(row["id"], document_hash, index),
+                            _chunk_id(row["id"], content_hash, index),
                             row["id"],
                             index,
                             row["url"],
@@ -252,6 +335,8 @@ def run_chunking(
                             len(plain),
                             text_hash(plain),
                             document_hash,
+                            content_hash,
+                            metadata_hash,
                             row["revision"],
                             row["metadata"],
                             row["standort_id"],
@@ -268,11 +353,13 @@ def run_chunking(
                     """INSERT INTO document_chunks (
                            id, document_id, chunk_index, url, title, site, source_type,
                            lang, text, markdown, heading_path, word_count, char_count,
-                           content_sha256, document_text_sha256, document_revision,
+                           content_sha256, document_text_sha256,
+                           document_content_sha256, document_metadata_sha256,
+                           document_revision,
                            metadata, standort_id, department_id, study_program_id,
                            classify_meta, chunker_version, target_words, overlap_words,
                            created_at
-                       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                     payload,
                 )
                 result["documents"] += 1

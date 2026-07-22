@@ -8,9 +8,9 @@ dependencies = [
     # Markdown hierarchy, then recursively splits paragraphs/sentences/words.
     "langchain-text-splitters>=1.1.2,<2",
     "trafilatura>=2.1.0",
-    # PyMuPDF4LLM converts PDF bytes -> Markdown. It is lightweight (no torch,
-    # no ML models) and pulls in pymupdf transitively.
-    "pymupdf4llm>=0.3.4",
+    # Keep the legacy Markdown extractor. Version 1.x installs the ML-based
+    # pymupdf-layout stack unconditionally even though this project disables it.
+    "pymupdf4llm>=0.3.4,<1",
     # Deterministic, offline language identification (ISO-639-1) over already-
     # extracted text. Pure-Python + numpy; used by scraper.lang for both extractors.
     "py3langid>=0.3",
@@ -23,13 +23,17 @@ dhbw-scraper = "scraper.cli:main"
 # Keep CPU and CUDA on the ONNX Runtime generation used by the FP32 smoke test.
 embedding-cpu = ["fastembed>=0.8,<1", "onnxruntime>=1.26,<1.27"]
 embedding-gpu = ["fastembed-gpu>=0.8,<1", "onnxruntime-gpu>=1.26,<1.27"]
+chroma = ["chromadb>=1.3,<2"]
+# HTTP-only client for GPU installations. The full `chromadb` distribution pulls
+# in CPU onnxruntime, which conflicts with fastembed-gpu's onnxruntime-gpu files.
+# Run the Chroma server in a separate uvx/container environment in this setup.
+chroma-client = ["chromadb-client>=1.3,<2"]
 # pre-commit drives the git hooks (lint/format on commit, Conventional-Commit
 # validation, tests on push) declared in .pre-commit-config.yaml. `ruff` is pinned
 # here too so CI's `uv run ruff …` steps resolve the SAME version the
-# `ruff-pre-commit` hook manages (rev v0.8.6) — bump both in lockstep or the two
+# `ruff-pre-commit` hook manages (rev v0.15.22) — bump both in lockstep or the two
 # ruffs can format the corpus differently.
 dev = [
-    "chromadb>=1.3,<2",
     "pytest>=9.0",
     "maturin>=1.7,<2",
     "pre-commit>=4",
@@ -40,6 +44,14 @@ dev = [
 conflicts = [
     [
         { extra = "embedding-cpu" },
+        { extra = "embedding-gpu" },
+    ],
+    [
+        { extra = "chroma" },
+        { extra = "chroma-client" },
+    ],
+    [
+        { extra = "chroma" },
         { extra = "embedding-gpu" },
     ],
 ]

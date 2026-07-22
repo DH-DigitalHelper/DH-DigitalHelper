@@ -58,6 +58,15 @@ class EmbeddingConfig:
 
 
 @dataclass(frozen=True)
+class ChromaConfig:
+    mode: str = "persistent"
+    host: str = "localhost"
+    port: int = 8000
+    path: Path = Path("data/chroma")
+    collection: str = "dhbw_corpus"
+
+
+@dataclass(frozen=True)
 class StorageConfig:
     db_file: Path
     raw_dir: Path
@@ -73,6 +82,7 @@ class Config:
     storage: StorageConfig
     chunk: ChunkConfig = field(default_factory=ChunkConfig)
     embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
+    chroma: ChromaConfig = field(default_factory=ChromaConfig)
 
 
 def find_config(start: Path | None = None) -> Path:
@@ -114,6 +124,7 @@ def load_config(path: Path | None = None) -> Config:
     dedup_raw = data.get("dedup", {})
     chunk_raw = data.get("chunk", {})
     embedding_raw = data.get("embedding", {})
+    chroma_raw = data.get("chroma", {})
 
     embedding_model = str(
         embedding_raw.get("model", "jinaai/jina-embeddings-v2-base-de")
@@ -125,6 +136,18 @@ def load_config(path: Path | None = None) -> Config:
         raise ValueError(
             f"embedding.device must be 'cpu' or 'cuda'; got {embedding_device!r}"
         )
+    chroma_mode = str(chroma_raw.get("mode", "persistent"))
+    if chroma_mode not in ("server", "persistent", "memory"):
+        raise ValueError(
+            "chroma.mode must be 'server', 'persistent' or 'memory'; "
+            f"got {chroma_mode!r}"
+        )
+    chroma_host = str(chroma_raw.get("host", "localhost")).strip()
+    if not chroma_host:
+        raise ValueError("chroma.host must not be empty")
+    chroma_collection = str(chroma_raw.get("collection", "dhbw_corpus")).strip()
+    if not chroma_collection:
+        raise ValueError("chroma.collection must not be empty")
 
     recheck = str(crawl_raw.get("recheck", "all"))
     if recheck not in RECHECK_MODES:
@@ -200,6 +223,13 @@ def load_config(path: Path | None = None) -> Config:
             ),
             cache_dir=resolve(embedding_raw.get("cache_dir", "data/models")),
             device=embedding_device,
+        ),
+        chroma=ChromaConfig(
+            mode=chroma_mode,
+            host=chroma_host,
+            port=_bounded(chroma_raw, "chroma", "port", default=8000, minimum=1),
+            path=resolve(chroma_raw.get("path", "data/chroma")),
+            collection=chroma_collection,
         ),
         storage=StorageConfig(
             db_file=resolve(storage_raw["db_file"]),

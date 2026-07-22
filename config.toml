@@ -119,6 +119,15 @@ cpu_batch_size = 8
 gpu_batch_size = 16
 cache_dir = "data/models"
 
+# Dedicated vector collection managed by `dhbw-scraper index`. A full index run
+# owns this collection and removes IDs that no longer exist in SQLite.
+[chroma]
+mode = "persistent"                       # server | persistent | memory
+host = "localhost"                        # used only in server mode
+port = 8000                               # used only in server mode
+path = "data/chroma"                      # used only in persistent mode
+collection = "dhbw_corpus"
+
 [storage]
 db_file = "data/scraper.sqlite3"
 raw_dir = "data/raw"

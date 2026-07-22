@@ -1,6 +1,6 @@
 import pytest
 
-from scraper import cli
+from scraper import chromaDB, cli
 
 
 def test_parser_has_all_subcommands():
@@ -17,6 +17,7 @@ def test_parser_has_all_subcommands():
         ["backfill"],
         ["chunk"],
         ["embedding-smoke", "--limit", "10"],
+        ["index"],
         ["delta", "--since", "2026-01-01"],
         ["report"],
     ):
@@ -407,3 +408,61 @@ def test_embedding_error_is_reported_without_traceback(tmp_path, monkeypatch, ca
     assert rc == 1
     assert captured.out == ""
     assert captured.err == "embedding failed: model unavailable\n"
+
+
+def test_index_refreshes_chunks_and_synchronizes_configured_chroma(
+    tmp_path, monkeypatch, capsys
+):
+    _write_config(tmp_path)
+    captured = {}
+    monkeypatch.setattr(
+        cli.chunk,
+        "run_chunking",
+        lambda *args, **kwargs: {"documents": 1, "chunks": 2},
+    )
+    monkeypatch.setattr(
+        chromaDB,
+        "create_client",
+        lambda **kwargs: captured.setdefault("client", kwargs),
+    )
+    monkeypatch.setattr(
+        chromaDB,
+        "get_collection",
+        lambda client, name: captured.setdefault("collection", (client, name)),
+    )
+
+    def fake_index(collection, input_path, **kwargs):
+        captured.update(input=input_path, index_kwargs=kwargs)
+        return {"upserted": 2, "deleted": 1}
+
+    monkeypatch.setattr(chromaDB, "index_chunks", fake_index)
+
+    rc = cli.main(["--config", str(tmp_path / "config.toml"), "index"])
+
+    assert rc == 0
+    assert captured["client"]["mode"] == "persistent"
+    assert captured["collection"][1] == "dhbw_corpus"
+    assert captured["input"] == (tmp_path / "db.sqlite3").resolve()
+    assert captured["index_kwargs"]["device"] == "cpu"
+    assert '"deleted": 1' in capsys.readouterr().out
+
+
+def test_index_reports_chroma_error_without_traceback(tmp_path, monkeypatch, capsys):
+    _write_config(tmp_path)
+    monkeypatch.setattr(
+        cli.chunk,
+        "run_chunking",
+        lambda *args, **kwargs: {"documents": 0, "chunks": 0},
+    )
+    monkeypatch.setattr(
+        chromaDB,
+        "create_client",
+        lambda **kwargs: (_ for _ in ()).throw(
+            chromaDB.ChromaError("server unavailable")
+        ),
+    )
+
+    rc = cli.main(["--config", str(tmp_path / "config.toml"), "index"])
+
+    assert rc == 1
+    assert capsys.readouterr().err == "indexing failed: server unavailable\n"

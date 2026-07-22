@@ -33,7 +33,7 @@ repos:
 
   # ── Python lint + format (ruff manages its own binary) ──────────────────────
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.6
+    rev: v0.15.22
     hooks:
       - id: ruff
         args: [--fix]

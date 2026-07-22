@@ -167,6 +167,62 @@ def _cmd_embedding_smoke(args) -> int:
     return 0
 
 
+def _cmd_index(args) -> int:
+    """Refresh SQLite chunks, then fully synchronize the configured collection."""
+    try:
+        from . import chromaDB
+    except ImportError:
+        print(
+            "indexing failed: ChromaDB is not installed; "
+            "install `chroma` for local mode or `chroma-client` for server mode.",
+            file=sys.stderr,
+        )
+        return 1
+
+    config = _load(args)
+    conn = storage.connect(config.storage.db_file)
+    storage.init_db(conn)
+    try:
+        chunk_result = chunk.run_chunking(
+            conn,
+            target_words=config.chunk.target_words,
+            overlap_words=config.chunk.overlap_words,
+            batch_size=config.chunk.batch_size,
+        )
+    finally:
+        conn.close()
+
+    device = args.device or config.embedding.device
+    batch_size = (
+        config.embedding.gpu_batch_size
+        if device == "cuda"
+        else config.embedding.cpu_batch_size
+    )
+    try:
+        client = chromaDB.create_client(
+            mode=config.chroma.mode,
+            host=config.chroma.host,
+            port=config.chroma.port,
+            path=str(config.chroma.path),
+        )
+        collection = chromaDB.get_collection(client, config.chroma.collection)
+        index_result = chromaDB.index_chunks(
+            collection,
+            config.storage.db_file,
+            model_name=config.embedding.model,
+            device=device,
+            batch_size=batch_size,
+            cache_dir=config.embedding.cache_dir,
+        )
+    except embedding.EmbeddingError:
+        raise
+    except Exception as exc:
+        print(f"indexing failed: {exc}", file=sys.stderr)
+        return 1
+    print(json.dumps({"chunking": chunk_result, "chroma": index_result}, indent=2))
+    return 0
+
+
 def _cmd_report(args) -> int:
     """Write a static HTML analysis report of the corpus."""
     import sqlite3
@@ -338,6 +394,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Number of chunks to embed and discard (default: 5).",
     )
     smoke.set_defaults(func=_cmd_embedding_smoke)
+
+    index = sub.add_parser(
+        "index",
+        help="Refresh SQLite chunks and synchronize the configured Chroma collection.",
+    )
+    index.add_argument(
+        "--device",
+        choices=("cpu", "cuda"),
+        default=None,
+        help="Execution device (default: embedding.device from config.toml).",
+    )
+    index.set_defaults(func=_cmd_index)
 
     d = sub.add_parser("delta", help="Emit re-index delta since a timestamp.")
     d.add_argument("--since", required=True)

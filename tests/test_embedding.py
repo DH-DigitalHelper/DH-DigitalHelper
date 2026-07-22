@@ -1,5 +1,6 @@
 import math
 import sys
+import importlib.metadata
 from types import SimpleNamespace
 
 import pytest
@@ -31,6 +32,31 @@ class FakeEmbedder:
             vectors.append([first, *([0.0] * (dimension - 1))])
             self.embedded += 1
         return vectors[:-1] if self.missing else vectors
+
+
+class FakeCollection:
+    def __init__(self):
+        self.records = {}
+
+    def upsert(self, **batch):
+        for chunk_id, metadata in zip(batch["ids"], batch["metadatas"]):
+            self.records[chunk_id] = metadata
+
+    def get(self, *, include):
+        assert include == ["metadatas"]
+        ids = sorted(self.records)
+        return {"ids": ids, "metadatas": [self.records[item] for item in ids]}
+
+    def update(self, *, ids, metadatas):
+        for chunk_id, metadata in zip(ids, metadatas):
+            self.records[chunk_id] = metadata
+
+    def delete(self, *, ids):
+        for chunk_id in ids:
+            self.records.pop(chunk_id, None)
+
+    def count(self):
+        return len(self.records)
 
 
 def _source_db(path, count=3):
@@ -245,6 +271,18 @@ def test_cuda_provider_is_selected_when_available(monkeypatch):
 ############################################################################
 
 
+def _full_chromadb_installed():
+    try:
+        importlib.metadata.version("chromadb")
+    except importlib.metadata.PackageNotFoundError:
+        return False
+    return True
+
+
+@pytest.mark.skipif(
+    not _full_chromadb_installed(),
+    reason="the persistent integration test requires the full chroma extra",
+)
 def test_embedding_batches_can_be_stored_and_queried(tmp_path):
     source = tmp_path / "source.sqlite3"
     _source_db(source, count=3)
@@ -265,7 +303,6 @@ def test_embedding_batches_can_be_stored_and_queried(tmp_path):
         name="test_collection",
     )
 
-    stored = 0
     stored = chromaDB.index_chunks(
         collection,
         source,
@@ -277,7 +314,12 @@ def test_embedding_batches_can_be_stored_and_queried(tmp_path):
         embedder=fake,
     )
 
-    assert stored == 3
+    assert stored == {
+        "upserted": 3,
+        "metadata_updated": 0,
+        "unchanged": 0,
+        "deleted": 0,
+    }
     assert collection.count() == 3
 
     result = chromaDB.search(
@@ -288,3 +330,97 @@ def test_embedding_batches_can_be_stored_and_queried(tmp_path):
 
     assert len(result) == 1
     assert "text" in result[0]
+
+
+def test_chroma_sync_removes_ids_missing_from_sqlite(tmp_path):
+    source = tmp_path / "source.sqlite3"
+    _source_db(source, count=3)
+    collection = FakeCollection()
+
+    first = chromaDB.index_chunks(
+        collection,
+        source,
+        model_name=embedding.DEFAULT_MODEL,
+        device="cpu",
+        batch_size=2,
+        cache_dir=tmp_path / "models",
+        embedder=FakeEmbedder(),
+    )
+    conn = storage.connect(source)
+    conn.execute("UPDATE documents SET present=0 WHERE id='doc-0'")
+    conn.commit()
+    chunk.run_chunking(conn, target_words=50, overlap_words=5)
+    conn.close()
+    second = chromaDB.index_chunks(
+        collection,
+        source,
+        model_name=embedding.DEFAULT_MODEL,
+        device="cpu",
+        batch_size=2,
+        cache_dir=tmp_path / "models",
+        embedder=FakeEmbedder(),
+    )
+
+    assert first == {
+        "upserted": 3,
+        "metadata_updated": 0,
+        "unchanged": 0,
+        "deleted": 0,
+    }
+    assert second == {
+        "upserted": 0,
+        "metadata_updated": 0,
+        "unchanged": 2,
+        "deleted": 1,
+    }
+    assert collection.count() == 2
+
+
+def test_chroma_sync_updates_metadata_without_reembedding(tmp_path):
+    source = tmp_path / "source.sqlite3"
+    _source_db(source, count=2)
+    collection = FakeCollection()
+    first_embedder = FakeEmbedder()
+    chromaDB.index_chunks(
+        collection,
+        source,
+        model_name=embedding.DEFAULT_MODEL,
+        device="cpu",
+        batch_size=2,
+        cache_dir=tmp_path / "models",
+        embedder=first_embedder,
+    )
+
+    conn = storage.connect(source)
+    chunk_id = conn.execute(
+        "SELECT id FROM document_chunks WHERE document_id='doc-0'"
+    ).fetchone()[0]
+    conn.execute(
+        "UPDATE documents SET metadata=? WHERE id='doc-0'",
+        ('{"author":"Updated"}',),
+    )
+    conn.commit()
+    chunk_result = chunk.run_chunking(conn, target_words=50, overlap_words=5)
+    conn.close()
+    second_embedder = FakeEmbedder()
+
+    result = chromaDB.index_chunks(
+        collection,
+        source,
+        model_name=embedding.DEFAULT_MODEL,
+        device="cpu",
+        batch_size=2,
+        cache_dir=tmp_path / "models",
+        embedder=second_embedder,
+    )
+
+    assert chunk_result["documents"] == 0
+    assert chunk_result["metadata_updated"] == 1
+    assert result == {
+        "upserted": 0,
+        "metadata_updated": 1,
+        "unchanged": 1,
+        "deleted": 0,
+    }
+    assert second_embedder.calls == []
+    assert collection.records[chunk_id]["source_metadata"] == '{"author":"Updated"}'

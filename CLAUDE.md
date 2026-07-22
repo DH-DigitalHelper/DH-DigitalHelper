@@ -47,7 +47,7 @@ MSVC-enabled shell on Windows.
 **Windows** (primary dev platform here) — run everything from the **"x64 Native Tools
 Command Prompt for VS 2022"**, which has the MSVC env preloaded:
 ```powershell
-uv sync --extra dev            # installs deps AND builds the _engine extension
+uv sync --extra dev --extra chroma --extra embedding-cpu  # full CPU RAG setup
 uv run pytest                  # verify
 ```
 A plain shell fails with `cl.exe not found`. After changing **Rust** code, rebuild:
@@ -78,6 +78,8 @@ per-site crawl-discovery tree drawn by a vendored, inlined d3) · `delta --since
 Standort/Studienabteilung/Studiengang columns after a taxonomy or `CLASSIFY_VERSION`
 change; idempotent, never touches `updated_at`) · `chunk` (structure-aware Markdown
 chunking via LangChain text splitters; incrementally synchronizes `document_chunks`) ·
+`index` (refresh chunks, embed them, then synchronize the dedicated Chroma collection,
+including deletion of stale vector IDs; install `chroma` plus one embedding extra) ·
 `backfill` (one-time: populate the dead
 `lang`/`final_url`/`title` metadata across the existing corpus from stored text +
 `crawl_log` + the raw cache; idempotent, never touches `updated_at`) · `reset-site --site

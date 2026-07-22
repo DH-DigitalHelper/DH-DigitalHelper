@@ -36,7 +36,7 @@ jobs:
         run: uv python install 3.14
 
       - name: Sync deps (builds the Rust extension via maturin)
-        run: uv sync --extra dev
+        run: uv sync --extra dev --extra chroma
 
       - name: Cache pre-commit hook environments
         uses: actions/cache@v6

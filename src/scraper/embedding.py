@@ -24,7 +24,8 @@ SELECT c.id AS chunk_id, c.document_id, c.chunk_index, c.text, c.heading_path,
        dep.display_name AS department_display_name,
        c.study_program_id, sp.name AS study_program_name,
        sp.display_name AS study_program_display_name,
-       c.content_sha256, c.document_revision
+       c.content_sha256, c.document_metadata_sha256, c.document_revision,
+       c.metadata AS source_metadata, c.classify_meta
 FROM document_chunks c
 JOIN documents d ON d.id = c.document_id
 LEFT JOIN standorte s ON s.id = c.standort_id
@@ -63,15 +64,15 @@ class FastEmbedder:
             ) from exc
 
         cache_dir.mkdir(parents=True, exist_ok=True)
-        runtime_model_name = _runtime_model_name(model_name)
-        if runtime_model_name != model_name:
+        runtime_name = runtime_model_name(model_name)
+        if runtime_name != model_name:
             # The bundled FP16 graph fails on Windows, so use the upstream FP32 graph.
             if not any(
-                item["model"] == runtime_model_name
+                item["model"] == runtime_name
                 for item in TextEmbedding.list_supported_models()
             ):
                 TextEmbedding.add_custom_model(
-                    model=runtime_model_name,
+                    model=runtime_name,
                     pooling=PoolingType.MEAN,
                     normalization=True,
                     sources=ModelSource(hf=DEFAULT_MODEL),
@@ -82,7 +83,7 @@ class FastEmbedder:
                     size_in_gb=0.64,
                 )
         self._model = TextEmbedding(
-            model_name=runtime_model_name,
+            model_name=runtime_name,
             cache_dir=str(cache_dir),
             providers=providers,
         )
@@ -113,7 +114,7 @@ class ChromaBatch(TypedDict):
     metadatas: list[dict[str, MetadataValue]]
 
 
-def _runtime_model_name(model_name: str) -> str:
+def runtime_model_name(model_name: str) -> str:
     return DEFAULT_RUNTIME_MODEL if model_name == DEFAULT_MODEL else model_name
 
 
@@ -174,7 +175,7 @@ def _validate_vector(values: Sequence[float]) -> list[float]:
     return vector
 
 
-def _metadata_for_row(
+def metadata_for_row(
     row: sqlite3.Row,
     *,
     model_name: str,
@@ -196,6 +197,101 @@ def _metadata_for_row(
     return metadata
 
 
+def iter_chunk_row_batches(
+    input_path: Path, *, batch_size: int, limit: int | None = None
+) -> Iterable[list[sqlite3.Row]]:
+    """Stream stable SQLite chunk rows without invoking an embedding model."""
+    if batch_size < 1:
+        raise ValueError("embedding batch_size must be >= 1")
+    if limit is not None and limit < 1:
+        raise ValueError("embedding limit must be >= 1")
+
+    remaining = limit
+    last_id = ""
+    with closing(_connect_source(input_path)) as source:
+        try:
+            source.execute("BEGIN")
+            while remaining is None or remaining > 0:
+                fetch_size = batch_size
+                if remaining is not None:
+                    fetch_size = min(fetch_size, remaining)
+                rows = source.execute(SOURCE_QUERY, (last_id, fetch_size)).fetchall()
+                if not rows:
+                    break
+                yield rows
+                last_id = rows[-1]["chunk_id"]
+                if remaining is not None:
+                    remaining -= len(rows)
+        except sqlite3.Error as exc:
+            raise EmbeddingError(f"could not read embedding chunks: {exc}") from exc
+
+
+def embed_chroma_batch(
+    rows: Sequence[sqlite3.Row],
+    *,
+    model_name: str,
+    device: str,
+    batch_size: int,
+    cache_dir: Path,
+    embedder: Embedder | None = None,
+    previous_dimension: int | None = None,
+) -> tuple[ChromaBatch, Embedder, int]:
+    """Embed selected rows while preserving model and dimension validation."""
+    if not rows:
+        raise ValueError("cannot embed an empty row batch")
+    runtime_embedder = embedder or FastEmbedder(
+        model_name, device=device, cache_dir=cache_dir
+    )
+    try:
+        vectors = list(
+            runtime_embedder.embed([row["text"] for row in rows], batch_size=batch_size)
+        )
+    except EmbeddingError:
+        raise
+    except Exception as exc:
+        raise EmbeddingError(str(exc)) from exc
+    if len(vectors) != len(rows):
+        raise EmbeddingError(
+            f"model returned {len(vectors)} vectors for {len(rows)} chunks"
+        )
+
+    expected_dimension = MODEL_DIMENSIONS.get(model_name)
+    actual_dimension = previous_dimension
+    embeddings: list[list[float]] = []
+    for raw_vector in vectors:
+        vector = _validate_vector(raw_vector)
+        dimension = len(vector)
+        if expected_dimension is not None and dimension != expected_dimension:
+            raise EmbeddingError(
+                f"{model_name} must produce {expected_dimension} dimensions; "
+                f"got {dimension}"
+            )
+        if actual_dimension is not None and dimension != actual_dimension:
+            raise EmbeddingError(
+                f"vector dimension changed from {actual_dimension} to {dimension}"
+            )
+        actual_dimension = dimension
+        embeddings.append(vector)
+
+    assert actual_dimension is not None
+    runtime_name = runtime_model_name(model_name)
+    batch = ChromaBatch(
+        ids=[row["chunk_id"] for row in rows],
+        embeddings=embeddings,
+        documents=[row["text"] for row in rows],
+        metadatas=[
+            metadata_for_row(
+                row,
+                model_name=model_name,
+                runtime_model_name=runtime_name,
+                dimension=actual_dimension,
+            )
+            for row in rows
+        ],
+    )
+    return batch, runtime_embedder, actual_dimension
+
+
 def iter_chroma_batches(
     input_path: Path,
     *,
@@ -214,84 +310,19 @@ def iter_chroma_batches(
     if device not in ("cpu", "cuda"):
         raise ValueError("device must be 'cpu' or 'cuda'")
 
-    runtime_model_name = _runtime_model_name(model_name)
-    expected_dimension = MODEL_DIMENSIONS.get(model_name)
     actual_dimension: int | None = None
     runtime_embedder = embedder
-    remaining = limit
-    last_id = ""
-
-    with closing(_connect_source(input_path)) as source:
-        try:
-            # Hold one read snapshot for the whole stream while writers may continue.
-            source.execute("BEGIN")
-            while remaining is None or remaining > 0:
-                fetch_size = batch_size
-                if remaining is not None:
-                    fetch_size = min(fetch_size, remaining)
-                rows = source.execute(SOURCE_QUERY, (last_id, fetch_size)).fetchall()
-                if not rows:
-                    break
-
-                if runtime_embedder is None:
-                    runtime_embedder = FastEmbedder(
-                        model_name, device=device, cache_dir=cache_dir
-                    )
-                try:
-                    vectors = list(
-                        runtime_embedder.embed(
-                            [row["text"] for row in rows], batch_size=batch_size
-                        )
-                    )
-                except EmbeddingError:
-                    raise
-                except Exception as exc:
-                    raise EmbeddingError(str(exc)) from exc
-                if len(vectors) != len(rows):
-                    raise EmbeddingError(
-                        f"model returned {len(vectors)} vectors for {len(rows)} chunks"
-                    )
-
-                embeddings: list[list[float]] = []
-                for raw_vector in vectors:
-                    vector = _validate_vector(raw_vector)
-                    dimension = len(vector)
-                    if (
-                        expected_dimension is not None
-                        and dimension != expected_dimension
-                    ):
-                        raise EmbeddingError(
-                            f"{model_name} must produce {expected_dimension} "
-                            f"dimensions; got {dimension}"
-                        )
-                    if actual_dimension is not None and dimension != actual_dimension:
-                        raise EmbeddingError(
-                            f"vector dimension changed from {actual_dimension} "
-                            f"to {dimension}"
-                        )
-                    actual_dimension = dimension
-                    embeddings.append(vector)
-
-                assert actual_dimension is not None
-                yield ChromaBatch(
-                    ids=[row["chunk_id"] for row in rows],
-                    embeddings=embeddings,
-                    documents=[row["text"] for row in rows],
-                    metadatas=[
-                        _metadata_for_row(
-                            row,
-                            model_name=model_name,
-                            runtime_model_name=runtime_model_name,
-                            dimension=actual_dimension,
-                        )
-                        for row in rows
-                    ],
-                )
-                last_id = rows[-1]["chunk_id"]
-                if remaining is not None:
-                    remaining -= len(rows)
-        except sqlite3.Error as exc:
-            raise EmbeddingError(f"could not read embedding chunks: {exc}") from exc
+    for rows in iter_chunk_row_batches(input_path, batch_size=batch_size, limit=limit):
+        batch, runtime_embedder, actual_dimension = embed_chroma_batch(
+            rows,
+            model_name=model_name,
+            device=device,
+            batch_size=batch_size,
+            cache_dir=cache_dir,
+            embedder=runtime_embedder,
+            previous_dimension=actual_dimension,
+        )
+        yield batch
 
 
 def run_embedding_smoke(
@@ -353,7 +384,7 @@ def run_embedding_smoke(
         "status": "ok",
         "tested_chunks": tested,
         "model": model_name,
-        "runtime_model": _runtime_model_name(model_name),
+        "runtime_model": runtime_model_name(model_name),
         "device": device,
         "dimension": dimension,
         "batch_size": batch_size,

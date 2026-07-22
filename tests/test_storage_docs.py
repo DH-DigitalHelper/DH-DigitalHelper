@@ -310,9 +310,9 @@ def test_retired_duplicate_is_reported_as_a_deletion():
 
     d = st.delta(conn, since=NOW1)
     assert base in {u["url"] for u in d["upserts"]}
-    assert variant in {
-        x["url"] for x in d["deletions"]
-    }, "the retired duplicate must be reported so downstream drops the orphan"
+    assert variant in {x["url"] for x in d["deletions"]}, (
+        "the retired duplicate must be reported so downstream drops the orphan"
+    )
     assert st.stats(conn)["documents"] == 1
 
 
