@@ -4,7 +4,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from scraper import chunk, embedding, storage
+from scraper import (
+    chromaDB,
+    chunk,
+    embedding,
+    storage,
+)  # Chroma DB ist auch noch neu :)
 
 
 class FakeEmbedder:
@@ -235,3 +240,51 @@ def test_cuda_provider_is_selected_when_available(monkeypatch):
     )
 
     assert embedding._providers_for_device("cuda") == ["CUDAExecutionProvider"]
+
+
+############################################################################
+
+
+def test_embedding_batches_can_be_stored_and_queried(tmp_path):
+    source = tmp_path / "source.sqlite3"
+    _source_db(source, count=3)
+
+    fake = FakeEmbedder()
+    embedding.iter_chroma_batches(
+        source,
+        batch_size=2,
+        limit=3,
+        embedder=fake,
+    )
+
+    client = chromaDB.create_client(
+        mode="persistent", path=str(tmp_path / "chroma_data")
+    )
+    collection = chromaDB.get_collection(
+        client,
+        name="test_collection",
+    )
+
+    stored = 0
+    stored = chromaDB.index_chunks(
+        collection,
+        source,
+        model_name=embedding.DEFAULT_MODEL,
+        device="cpu",
+        batch_size=2,
+        cache_dir=tmp_path / "models",
+        limit=3,
+        embedder=fake,
+    )
+
+    assert stored == 3
+    assert collection.count() == 3
+
+    result = chromaDB.search(
+        collection,
+        query_embedding=[0.0] * 768,
+        top_k=1,
+    )
+
+    assert len(result) == 1
+    assert "text" in result[0]
