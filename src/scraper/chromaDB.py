@@ -1,7 +1,7 @@
 from pathlib import Path
 import chromadb
 from chromadb.api import ClientAPI
-from .embedding import iter_chroma_batches
+from .embedding import Embedder, iter_chroma_batches
 
 
 def create_client(
@@ -35,6 +35,7 @@ def index_chunks(
     batch_size: int,
     cache_dir: Path,
     limit: int | None = None,
+    embedder: Embedder | None = None,
 ) -> int:
     total = 0
 
@@ -45,6 +46,7 @@ def index_chunks(
         batch_size=batch_size,
         cache_dir=cache_dir,
         limit=limit,
+        embedder=embedder,
     ):
         collection.upsert(**batch)
         total += len(batch["ids"])
