@@ -8,6 +8,9 @@ __pycache__/
 .ruff_cache/
 .mypy_cache/
 
+#chroma
+data/chroma/
+
 # uv
 # (uv.lock IS committed — do not ignore it)
 
@@ -18,6 +21,7 @@ __pycache__/
 # Raw downloads: re-fetchable and can get large (PDFs). Gitignored by default.
 # To distribute the raw source alongside the processed data, delete the next line.
 data/raw/
+data/models/
 
 # SQLite database + WAL/SHM sidecar files (all state lives here; not committed).
 data/*.sqlite3

@@ -1,6 +1,6 @@
 import pytest
 
-from scraper import cli
+from scraper import chromaDB, cli
 
 
 def test_parser_has_all_subcommands():
@@ -15,6 +15,9 @@ def test_parser_has_all_subcommands():
         ["reset-site", "--site", "x"],
         ["dedup"],
         ["backfill"],
+        ["chunk"],
+        ["embedding-smoke", "--limit", "10"],
+        ["index"],
         ["delta", "--since", "2026-01-01"],
         ["report"],
     ):
@@ -338,3 +341,128 @@ raw_dir = "raw"
     assert rc == 0
     out = capsys.readouterr().out
     assert "documents" in out
+
+
+def test_embedding_smoke_uses_config_and_operational_flags(
+    tmp_path, monkeypatch, capsys
+):
+    _write_config(tmp_path)
+    captured = {}
+
+    def fake_run_embedding_smoke(input_path, **kwargs):
+        captured.update(input=input_path, **kwargs)
+        return {
+            "status": "ok",
+            "tested_chunks": 3,
+            "dimension": 768,
+            "preview": {
+                "chunk_id": "chunk-1",
+                "text": "Beispieltext",
+                "embedding_first_10": [0.1, 0.2],
+            },
+        }
+
+    monkeypatch.setattr(cli.embedding, "run_embedding_smoke", fake_run_embedding_smoke)
+    rc = cli.main(
+        [
+            "--config",
+            str(tmp_path / "config.toml"),
+            "embedding-smoke",
+            "--device",
+            "cpu",
+            "--limit",
+            "10",
+        ]
+    )
+
+    assert rc == 0
+    assert captured["input"] == (tmp_path / "db.sqlite3").resolve()
+    assert captured["model_name"] == "jinaai/jina-embeddings-v2-base-de"
+    assert captured["device"] == "cpu"
+    assert captured["batch_size"] == 8
+    assert captured["limit"] == 10
+    output = capsys.readouterr().out
+    assert "Embedding preview:" in output
+    assert "chunk_id: chunk-1" in output
+    assert "text: Beispieltext" in output
+    assert "first 10 values: [0.1, 0.2]" in output
+    assert '"embeddings"' not in output
+
+
+def test_embedding_error_is_reported_without_traceback(tmp_path, monkeypatch, capsys):
+    _write_config(tmp_path)
+
+    def fail(*args, **kwargs):
+        raise cli.embedding.EmbeddingError("model unavailable")
+
+    monkeypatch.setattr(cli.embedding, "run_embedding_smoke", fail)
+    rc = cli.main(
+        [
+            "--config",
+            str(tmp_path / "config.toml"),
+            "embedding-smoke",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert rc == 1
+    assert captured.out == ""
+    assert captured.err == "embedding failed: model unavailable\n"
+
+
+def test_index_refreshes_chunks_and_synchronizes_configured_chroma(
+    tmp_path, monkeypatch, capsys
+):
+    _write_config(tmp_path)
+    captured = {}
+    monkeypatch.setattr(
+        cli.chunk,
+        "run_chunking",
+        lambda *args, **kwargs: {"documents": 1, "chunks": 2},
+    )
+    monkeypatch.setattr(
+        chromaDB,
+        "create_client",
+        lambda **kwargs: captured.setdefault("client", kwargs),
+    )
+    monkeypatch.setattr(
+        chromaDB,
+        "get_collection",
+        lambda client, name: captured.setdefault("collection", (client, name)),
+    )
+
+    def fake_index(collection, input_path, **kwargs):
+        captured.update(input=input_path, index_kwargs=kwargs)
+        return {"upserted": 2, "deleted": 1}
+
+    monkeypatch.setattr(chromaDB, "index_chunks", fake_index)
+
+    rc = cli.main(["--config", str(tmp_path / "config.toml"), "index"])
+
+    assert rc == 0
+    assert captured["client"]["mode"] == "persistent"
+    assert captured["collection"][1] == "dhbw_corpus"
+    assert captured["input"] == (tmp_path / "db.sqlite3").resolve()
+    assert captured["index_kwargs"]["device"] == "cpu"
+    assert '"deleted": 1' in capsys.readouterr().out
+
+
+def test_index_reports_chroma_error_without_traceback(tmp_path, monkeypatch, capsys):
+    _write_config(tmp_path)
+    monkeypatch.setattr(
+        cli.chunk,
+        "run_chunking",
+        lambda *args, **kwargs: {"documents": 0, "chunks": 0},
+    )
+    monkeypatch.setattr(
+        chromaDB,
+        "create_client",
+        lambda **kwargs: (_ for _ in ()).throw(
+            chromaDB.ChromaError("server unavailable")
+        ),
+    )
+
+    rc = cli.main(["--config", str(tmp_path / "config.toml"), "index"])
+
+    assert rc == 1
+    assert capsys.readouterr().err == "indexing failed: server unavailable\n"

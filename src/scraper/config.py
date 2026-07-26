@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 RECHECK_MODES = ("all", "changed-only", "new-only", "force-full")
@@ -42,6 +42,31 @@ class DedupConfig:
 
 
 @dataclass(frozen=True)
+class ChunkConfig:
+    target_words: int = 500
+    overlap_words: int = 75
+    batch_size: int = 250
+
+
+@dataclass(frozen=True)
+class EmbeddingConfig:
+    model: str = "jinaai/jina-embeddings-v2-base-de"
+    cpu_batch_size: int = 8
+    gpu_batch_size: int = 16
+    cache_dir: Path = Path("data/models")
+    device: str = "cpu"
+
+
+@dataclass(frozen=True)
+class ChromaConfig:
+    mode: str = "persistent"
+    host: str = "localhost"
+    port: int = 8000
+    path: Path = Path("data/chroma")
+    collection: str = "dhbw_corpus"
+
+
+@dataclass(frozen=True)
 class StorageConfig:
     db_file: Path
     raw_dir: Path
@@ -55,6 +80,9 @@ class Config:
     extract: ExtractConfig
     dedup: DedupConfig
     storage: StorageConfig
+    chunk: ChunkConfig = field(default_factory=ChunkConfig)
+    embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
+    chroma: ChromaConfig = field(default_factory=ChromaConfig)
 
 
 def find_config(start: Path | None = None) -> Path:
@@ -94,6 +122,32 @@ def load_config(path: Path | None = None) -> Config:
     extract_raw = data["extract"]
     storage_raw = data["storage"]
     dedup_raw = data.get("dedup", {})
+    chunk_raw = data.get("chunk", {})
+    embedding_raw = data.get("embedding", {})
+    chroma_raw = data.get("chroma", {})
+
+    embedding_model = str(
+        embedding_raw.get("model", "jinaai/jina-embeddings-v2-base-de")
+    ).strip()
+    if not embedding_model:
+        raise ValueError("embedding.model must not be empty")
+    embedding_device = str(embedding_raw.get("device", "cpu"))
+    if embedding_device not in ("cpu", "cuda"):
+        raise ValueError(
+            f"embedding.device must be 'cpu' or 'cuda'; got {embedding_device!r}"
+        )
+    chroma_mode = str(chroma_raw.get("mode", "persistent"))
+    if chroma_mode not in ("server", "persistent", "memory"):
+        raise ValueError(
+            "chroma.mode must be 'server', 'persistent' or 'memory'; "
+            f"got {chroma_mode!r}"
+        )
+    chroma_host = str(chroma_raw.get("host", "localhost")).strip()
+    if not chroma_host:
+        raise ValueError("chroma.host must not be empty")
+    chroma_collection = str(chroma_raw.get("collection", "dhbw_corpus")).strip()
+    if not chroma_collection:
+        raise ValueError("chroma.collection must not be empty")
 
     recheck = str(crawl_raw.get("recheck", "all"))
     if recheck not in RECHECK_MODES:
@@ -139,6 +193,43 @@ def load_config(path: Path | None = None) -> Config:
                 dedup_raw, "dedup", "batch_size", default=500, minimum=1
             ),
             vacuum=bool(dedup_raw.get("vacuum", True)),
+        ),
+        chunk=ChunkConfig(
+            target_words=_bounded(
+                chunk_raw, "chunk", "target_words", default=500, minimum=50
+            ),
+            overlap_words=_bounded(
+                chunk_raw, "chunk", "overlap_words", default=75, minimum=0
+            ),
+            batch_size=_bounded(
+                chunk_raw, "chunk", "batch_size", default=250, minimum=1
+            ),
+        ),
+        embedding=EmbeddingConfig(
+            model=embedding_model,
+            cpu_batch_size=_bounded(
+                embedding_raw,
+                "embedding",
+                "cpu_batch_size",
+                default=8,
+                minimum=1,
+            ),
+            gpu_batch_size=_bounded(
+                embedding_raw,
+                "embedding",
+                "gpu_batch_size",
+                default=16,
+                minimum=1,
+            ),
+            cache_dir=resolve(embedding_raw.get("cache_dir", "data/models")),
+            device=embedding_device,
+        ),
+        chroma=ChromaConfig(
+            mode=chroma_mode,
+            host=chroma_host,
+            port=_bounded(chroma_raw, "chroma", "port", default=8000, minimum=1),
+            path=resolve(chroma_raw.get("path", "data/chroma")),
+            collection=chroma_collection,
         ),
         storage=StorageConfig(
             db_file=resolve(storage_raw["db_file"]),

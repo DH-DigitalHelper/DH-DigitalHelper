@@ -1,13 +1,14 @@
-"""Command-line entrypoint: fetch / extract / run / stats / dedup / reclassify / delta."""
+"""Command-line entrypoint for the scraper and downstream preparation steps."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import sys
 import time
 from pathlib import Path
 
-from . import crawl, extract, storage
+from . import chunk, crawl, embedding, extract, storage
 from .config import load_config
 
 
@@ -125,6 +126,103 @@ def _cmd_backfill(args) -> int:
     return 0
 
 
+def _cmd_chunk(args) -> int:
+    config = _load(args)
+    conn = storage.connect(config.storage.db_file)
+    storage.init_db(conn)
+    result = chunk.run_chunking(
+        conn,
+        target_words=config.chunk.target_words,
+        overlap_words=config.chunk.overlap_words,
+        batch_size=config.chunk.batch_size,
+    )
+    print(json.dumps(result, indent=2))
+    conn.close()
+    return 0
+
+
+def _cmd_embedding_smoke(args) -> int:
+    config = _load(args)
+    device = args.device or config.embedding.device
+    batch_size = (
+        config.embedding.gpu_batch_size
+        if device == "cuda"
+        else config.embedding.cpu_batch_size
+    )
+    result = embedding.run_embedding_smoke(
+        config.storage.db_file,
+        model_name=config.embedding.model,
+        device=device,
+        batch_size=batch_size,
+        cache_dir=config.embedding.cache_dir,
+        limit=args.limit,
+    )
+    preview = result.pop("preview")
+    print("Embedding preview:")
+    print(f"  chunk_id: {preview['chunk_id']}")
+    print(f"  text: {preview['text']}")
+    print(f"  first 10 values: {preview['embedding_first_10']}")
+    print()
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+    return 0
+
+
+def _cmd_index(args) -> int:
+    """Refresh SQLite chunks, then fully synchronize the configured collection."""
+    try:
+        from . import chromaDB
+    except ImportError:
+        print(
+            "indexing failed: ChromaDB is not installed; "
+            "install `chroma` for local mode or `chroma-client` for server mode.",
+            file=sys.stderr,
+        )
+        return 1
+
+    config = _load(args)
+    conn = storage.connect(config.storage.db_file)
+    storage.init_db(conn)
+    try:
+        chunk_result = chunk.run_chunking(
+            conn,
+            target_words=config.chunk.target_words,
+            overlap_words=config.chunk.overlap_words,
+            batch_size=config.chunk.batch_size,
+        )
+    finally:
+        conn.close()
+
+    device = args.device or config.embedding.device
+    batch_size = (
+        config.embedding.gpu_batch_size
+        if device == "cuda"
+        else config.embedding.cpu_batch_size
+    )
+    try:
+        client = chromaDB.create_client(
+            mode=config.chroma.mode,
+            host=config.chroma.host,
+            port=config.chroma.port,
+            path=str(config.chroma.path),
+        )
+        collection = chromaDB.get_collection(client, config.chroma.collection)
+        index_result = chromaDB.index_chunks(
+            collection,
+            config.storage.db_file,
+            model_name=config.embedding.model,
+            device=device,
+            batch_size=batch_size,
+            cache_dir=config.embedding.cache_dir,
+        )
+    except embedding.EmbeddingError:
+        raise
+    except Exception as exc:
+        print(f"indexing failed: {exc}", file=sys.stderr)
+        return 1
+    print(json.dumps({"chunking": chunk_result, "chroma": index_result}, indent=2))
+    return 0
+
+
 def _cmd_report(args) -> int:
     """Write a static HTML analysis report of the corpus."""
     import sqlite3
@@ -179,6 +277,13 @@ def _add_site_arg(p) -> None:
         help="Crawl only this site (config name or allowed_domain); repeatable. "
         "Scopes both sitemap refresh and crawling to the selected site(s).",
     )
+
+
+def _positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("must be >= 1")
+    return parsed
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -264,6 +369,44 @@ def build_parser() -> argparse.ArgumentParser:
     )
     bf.set_defaults(func=_cmd_backfill)
 
+    ch = sub.add_parser(
+        "chunk",
+        help="Synchronize structure-aware RAG chunks from present documents. "
+        "Preserves source metadata and is incremental/idempotent.",
+    )
+    ch.set_defaults(func=_cmd_chunk)
+
+    smoke = sub.add_parser(
+        "embedding-smoke",
+        help="Test FastEmbed on a small chunk sample without storing vectors.",
+    )
+    smoke.add_argument(
+        "--device",
+        choices=("cpu", "cuda"),
+        default=None,
+        help="Execution device (default: embedding.device from config.toml).",
+    )
+    smoke.add_argument(
+        "--limit",
+        type=_positive_int,
+        default=5,
+        metavar="N",
+        help="Number of chunks to embed and discard (default: 5).",
+    )
+    smoke.set_defaults(func=_cmd_embedding_smoke)
+
+    index = sub.add_parser(
+        "index",
+        help="Refresh SQLite chunks and synchronize the configured Chroma collection.",
+    )
+    index.add_argument(
+        "--device",
+        choices=("cpu", "cuda"),
+        default=None,
+        help="Execution device (default: embedding.device from config.toml).",
+    )
+    index.set_defaults(func=_cmd_index)
+
     d = sub.add_parser("delta", help="Emit re-index delta since a timestamp.")
     d.add_argument("--since", required=True)
     d.set_defaults(func=_cmd_delta)
@@ -274,7 +417,11 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv=None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    return args.func(args)
+    try:
+        return args.func(args)
+    except embedding.EmbeddingError as exc:
+        print(f"embedding failed: {exc}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

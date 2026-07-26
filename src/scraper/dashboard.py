@@ -449,7 +449,7 @@ def _findings(d: dict) -> list[dict]:
                     "title": f"{s['name']} is under-covered",
                     "detail": f"{s['docs']:,} documents vs a per-site median of {median:,}; "
                     f"queue shows {s['error']:,} errors "
-                    f"({s['error_rate']*100:.0f}% of fetch attempts).",
+                    f"({s['error_rate'] * 100:.0f}% of fetch attempts).",
                 }
             )
 
@@ -489,7 +489,7 @@ def _findings(d: dict) -> list[dict]:
                 {
                     "sev": "info",
                     "title": f"{s['name']} has elevated fetch errors",
-                    "detail": f"{s['error']:,} errored URLs ({s['error_rate']*100:.0f}% of attempts) "
+                    "detail": f"{s['error']:,} errored URLs ({s['error_rate'] * 100:.0f}% of attempts) "
                     f"-- mostly connection refused/timeout, worth one gentle retry.",
                 }
             )
@@ -540,8 +540,8 @@ def _discovery_section(disc: dict) -> str:
     default = disc.get("default", 0)
     opts = "".join(
         f'<option value="{i}"{" selected" if i == default else ""}>'
-        f'{_esc(s["name"])} · {s["total"]:,} pages'
-        f'{" · truncated" if s.get("truncated") else ""}</option>'
+        f"{_esc(s['name'])} · {s['total']:,} pages"
+        f"{' · truncated' if s.get('truncated') else ''}</option>"
         for i, s in enumerate(sites)
     )
     return (
@@ -680,8 +680,8 @@ def render_html(d: dict, *, graph_href: str = "discovery.html") -> str:
             kpi("Documents", f"{t['documents']:,}", "present, deduplicated"),
             kpi(
                 "Total words",
-                f"{t['words']/1e6:.1f} M",
-                f"HTML {html_t.get('words',0)/1e6:.1f}M · PDF {pdf_t.get('words',0)/1e6:.1f}M",
+                f"{t['words'] / 1e6:.1f} M",
+                f"HTML {html_t.get('words', 0) / 1e6:.1f}M · PDF {pdf_t.get('words', 0) / 1e6:.1f}M",
             ),
             kpi(
                 "Raw blobs",
@@ -690,17 +690,17 @@ def render_html(d: dict, *, graph_href: str = "discovery.html") -> str:
             ),
             kpi(
                 "Extraction pass",
-                f"{t['quality_ok']/max(1,t['raw_total'])*100:.1f}%",
+                f"{t['quality_ok'] / max(1, t['raw_total']) * 100:.1f}%",
                 f"{t['quality_bad']:,} rejected · {t['extract_errored']:,} errored",
             ),
             kpi(
                 "URLs crawled",
                 f"{t['queue_total']:,}",
-                f"{t['queue_state'].get('done',0):,} done · {t['queue_state'].get('error',0):,} error",
+                f"{t['queue_state'].get('done', 0):,} done · {t['queue_state'].get('error', 0):,} error",
             ),
             kpi(
                 "Text-dedup",
-                f"{(t['candidates']-t['documents'])/max(1,t['candidates'])*100:.0f}%",
+                f"{(t['candidates'] - t['documents']) / max(1, t['candidates']) * 100:.0f}%",
                 f"{t['candidates']:,} candidates → {t['documents']:,} unique",
             ),
         ]
@@ -733,14 +733,14 @@ def render_html(d: dict, *, graph_href: str = "discovery.html") -> str:
     hist_rows = "".join(
         f'<tr><td class="mono">{_esc(b["label"])}</td>'
         f'<td class="num">{b["n"]:,}</td>'
-        f'<td class="barcell"><div class="minibar wide"><span style="width:{b["n"]/max_h*100:.1f}%"></span></div></td></tr>'
+        f'<td class="barcell"><div class="minibar wide"><span style="width:{b["n"] / max_h * 100:.1f}%"></span></div></td></tr>'
         for b in d["wordcount"]["hist"]
     )
     p = d["wordcount"]["pct"]
     pct_line = (
-        f'min {d["wordcount"]["min"]} · p10 {p["10"]} · p25 {p["25"]} · '
-        f'median {p["50"]} · p75 {p["75"]} · p90 {p["90"]} · p99 {p["99"]:,} · '
-        f'max {d["wordcount"]["max"]:,}'
+        f"min {d['wordcount']['min']} · p10 {p['10']} · p25 {p['25']} · "
+        f"median {p['50']} · p75 {p['75']} · p90 {p['90']} · p99 {p['99']:,} · "
+        f"max {d['wordcount']['max']:,}"
     )
 
     def simple_table(title, rows_html, headers):
@@ -809,9 +809,9 @@ def render_html(d: dict, *, graph_href: str = "discovery.html") -> str:
     if t["documents"] and lk["distinct_src"] < 0.5 * t["documents"]:
         links_warn = (
             '<p class="warnbox">⚠ Only '
-            f'{lk["distinct_src"]:,} source pages recorded any links '
-            f'({lk["docs_no_out"]:,} of {t["documents"]:,} documents have none) — '
-            'the link graph is effectively unpopulated and should not be trusted yet.</p>'
+            f"{lk['distinct_src']:,} source pages recorded any links "
+            f"({lk['docs_no_out']:,} of {t['documents']:,} documents have none) — "
+            "the link graph is effectively unpopulated and should not be trusted yet.</p>"
         )
 
     disc = d["discovery"]
@@ -820,7 +820,7 @@ def render_html(d: dict, *, graph_href: str = "discovery.html") -> str:
     if n_sites:
         disc_link = (
             f'<p class="sub" style="margin:2px 0 0">{n_pages:,} crawled pages across '
-            f'{n_sites} campus {"tree" if n_sites == 1 else "trees"}. '
+            f"{n_sites} campus {'tree' if n_sites == 1 else 'trees'}. "
             f'<a class="treelink" href="{_esc(graph_href)}">'
             "Open the interactive discovery tree →</a> (full-screen, its own page).</p>"
         )
@@ -907,8 +907,8 @@ footer {{ margin-top:40px; color:var(--muted); font-size:12px; border-top:1px so
   <header>
     <div>
       <h1>DHBW corpus — scrape &amp; extract report</h1>
-      <div class="sub">Generated {_esc(m['generated_at'])} UTC · DB {_fmt_bytes(m['db_size_bytes'])}
-        (modified {_esc(m['db_mtime'])}) · gate <code>min_words={m['min_words']}</code></div>
+      <div class="sub">Generated {_esc(m["generated_at"])} UTC · DB {_fmt_bytes(m["db_size_bytes"])}
+        (modified {_esc(m["db_mtime"])}) · gate <code>min_words={m["min_words"]}</code></div>
     </div>
     <button class="toggle" onclick="var r=document.documentElement;r.dataset.theme=r.dataset.theme==='dark'?'light':'dark'">◐ theme</button>
   </header>
@@ -941,8 +941,8 @@ footer {{ margin-top:40px; color:var(--muted); font-size:12px; border-top:1px so
 
   <section><h2>Crawl discovery tree</h2>
     {links_warn}
-    <div class="sub">{lk['total']:,} link edges · {lk['in_domain']:,} in-domain · {lk['external']:,} external ·
-      {lk['distinct_src']:,} distinct sources · {lk['distinct_dst']:,} distinct targets</div>
+    <div class="sub">{lk["total"]:,} link edges · {lk["in_domain"]:,} in-domain · {lk["external"]:,} external ·
+      {lk["distinct_src"]:,} distinct sources · {lk["distinct_dst"]:,} distinct targets</div>
     {disc_link}
   </section>
   {simple_table("Top external link targets", ext_rows, ["Host", "Links"])}
@@ -950,9 +950,9 @@ footer {{ margin-top:40px; color:var(--muted); font-size:12px; border-top:1px so
   {simple_table("Per-host URL distribution (spider-trap view)", host_rows, ["Host", "URLs", "Done", "Error", "Pending"])}
 
   <footer>
-    Crawl window {_esc(fr['queue_first_seen']['min'])} → {_esc(fr['raw_first_seen']['max'])} UTC ·
-    documents updated {_esc(fr['documents_updated']['min'])} → {_esc(fr['documents_updated']['max'])} UTC.<br>
-    Read-only snapshot of <span class="mono">{_esc(m['db_path'])}</span>. Static file — regenerate to refresh.
+    Crawl window {_esc(fr["queue_first_seen"]["min"])} → {_esc(fr["raw_first_seen"]["max"])} UTC ·
+    documents updated {_esc(fr["documents_updated"]["min"])} → {_esc(fr["documents_updated"]["max"])} UTC.<br>
+    Read-only snapshot of <span class="mono">{_esc(m["db_path"])}</span>. Static file — regenerate to refresh.
   </footer>
 </div>
 <script id="report-data" type="application/json">{payload}</script>
@@ -965,7 +965,7 @@ def render_graph_html(d: dict, *, report_href: str = "analysis.html") -> str:
     section = _discovery_section(disc)
     payload = json.dumps({"discovery": disc}, ensure_ascii=False).replace("</", "<\\/")
     scripts = (
-        f'<script>{_vendored("d3.v7.min.js")}</script>\n<script>{_TREE_JS}</script>'
+        f"<script>{_vendored('d3.v7.min.js')}</script>\n<script>{_TREE_JS}</script>"
     )
     return f"""<title>DHBW crawl discovery tree</title>
 <style>
