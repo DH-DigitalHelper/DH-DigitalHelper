@@ -22,7 +22,7 @@ dhbw-scraper = "scraper.cli:main"
 # here too so CI's `uv run ruff …` steps resolve the SAME version the
 # `ruff-pre-commit` hook manages (rev v0.8.6) — bump both in lockstep or the two
 # ruffs can format the corpus differently.
-dev = ["pytest>=9.0", "maturin>=1.7,<2", "pre-commit>=4", "ruff==0.15.22"]
+dev = ["pytest>=9.0", "maturin>=1.7,<2", "pre-commit>=4.6.1", "ruff==0.16.0"]
 
 [build-system]
 requires = ["maturin>=1.7,<2"]
