@@ -138,6 +138,12 @@ def _providers_for_device(device: str) -> list[str]:
             "CUDA requires fastembed-gpu/onnxruntime-gpu; run "
             "`uv sync --extra embedding-gpu`."
         ) from exc
+    # onnxruntime-gpu ships no CUDA libraries; it dlopen's them at session build
+    # time. Preload the CUDA 12 + cuDNN 9 runtime from the nvidia-*-cu12 wheels
+    # first, or CUDAExecutionProvider fails to init (missing cublasLt64_12.dll)
+    # and FastEmbed silently falls back to CPU. Fails safe if the DLLs are absent.
+    if hasattr(ort, "preload_dlls"):
+        ort.preload_dlls()
     available = ort.get_available_providers()
     if "CUDAExecutionProvider" not in available:
         raise EmbeddingError(

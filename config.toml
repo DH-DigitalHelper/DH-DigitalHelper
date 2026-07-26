@@ -122,7 +122,7 @@ cache_dir = "data/models"
 # Dedicated vector collection managed by `dhbw-scraper index`. A full index run
 # owns this collection and removes IDs that no longer exist in SQLite.
 [chroma]
-mode = "persistent"                       # server | persistent | memory
+mode = "server"                           # server | persistent | memory
 host = "localhost"                        # used only in server mode
 port = 8000                               # used only in server mode
 path = "data/chroma"                      # used only in persistent mode
