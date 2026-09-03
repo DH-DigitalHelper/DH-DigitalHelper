@@ -21,14 +21,14 @@ dhbw-scraper = "scraper.cli:main"
 
 [project.optional-dependencies]
 # Keep CPU and CUDA on the ONNX Runtime generation used by the FP32 smoke test.
-embedding-cpu = ["fastembed>=0.8,<1", "onnxruntime>=1.26,<1.27"]
+embedding-cpu = ["fastembed>=0.8,<1", "onnxruntime>=1.26,<1.30"]
 # onnxruntime-gpu bundles no CUDA libraries. On Linux the manylinux driver stack
 # supplies them; on Windows there is no system CUDA, so pull the CUDA 12 + cuDNN 9
 # runtime as wheels (loaded via ort.preload_dlls() in embedding.py). Windows-only
 # markers keep Linux/CI resolution unchanged. The -cu12 suffix pins the CUDA 12 line.
 embedding-gpu = [
     "fastembed-gpu>=0.8,<1",
-    "onnxruntime-gpu>=1.26,<1.27",
+    "onnxruntime-gpu>=1.26,<1.30",
     "nvidia-cuda-runtime-cu12; sys_platform == 'win32'",
     "nvidia-cublas-cu12; sys_platform == 'win32'",
     "nvidia-cudnn-cu12>=9,<10; sys_platform == 'win32'",
@@ -50,7 +50,7 @@ dev = [
     "pytest>=9.0",
     "maturin>=1.7,<2",
     "pre-commit>=4.6.1",
-    "ruff==0.16.0",
+    "ruff==0.16.5",
 ]
 
 [tool.uv]
